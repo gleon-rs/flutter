@@ -1,32 +1,35 @@
 // Build hook that provides the `gleon-ffi` native library to Dart.
 //
-// Consumers need neither Rust nor a network connection: the package ships
-// prebuilt libraries in `native/` (see `tool/build_native.sh`) and this hook
-// only verifies the one for the requested target against the SHA-256 in
-// `native/manifest.json` before bundling it.
+// Consumers never need Rust. The library is resolved in this order:
 //
-// Overrides (user-defines in the consuming app's pubspec.yaml):
+// 1. user-define `ffi_path`: this exact file.
+// 2. user-define `gleon_repo`: cargo build from a gleon checkout (contributors).
+// 3. `native/<target>/` inside this package: a maintainer's local build
+//    (`dart bin/build_native.dart`) or, later, the pub.dev archive. A local
+//    build made for another `native/gleon_ref` pin is rejected as stale.
+// 4. The GitHub Release `v<package version>` of this repository: downloaded
+//    once, verified against the release's SHA256SUMS.txt and cached in the
+//    hooks runner's shared output directory (`.dart_tool/hooks_runner/shared`).
 //
 //   hooks:
 //     user_defines:
 //       gleon:
 //         ffi_path: path/to/libgleon_ffi.dylib # use this library as is
-//         gleon_repo: ../gleon                 # contributors: cargo build from a gleon checkout
+//         gleon_repo: ../gleon                 # build from a gleon checkout
+//         release_url: https://mirror/v1.2.3/  # download from a mirror instead
 //
-// Source builds are never a silent fallback: an unsupported target fails with
-// an actionable error instead.
+// Source builds are never a silent fallback: failures are actionable errors.
 
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:code_assets/code_assets.dart';
-import 'package:crypto/crypto.dart';
+import 'package:gleon/src/hook/download.dart';
+import 'package:gleon/src/hook/targets.dart';
 import 'package:hooks/hooks.dart';
 
 /// Must match the asset id used by the `@Native` bindings in `lib/src/native.dart`.
 const _assetName = 'src/native.dart';
 const _crate = 'gleon-ffi';
-const _libraryBaseName = 'gleon_ffi';
 
 void main(List<String> args) async {
   await build(args, (input, output) async {
@@ -34,8 +37,7 @@ void main(List<String> args) async {
       return;
     }
     final code = input.config.code;
-    final os = code.targetOS;
-    final arch = code.targetArchitecture;
+    final target = _target(code.targetOS, code.targetArchitecture);
 
     final Uri library;
     final override = input.userDefines.path('ffi_path');
@@ -54,11 +56,10 @@ void main(List<String> args) async {
         repoRoot: gleonRepo,
         input: input,
         output: output,
-        triple: _rustTriple(os, arch),
-        libraryFileName: os.dylibFileName(_libraryBaseName),
+        target: target,
       );
     } else {
-      library = _verifiedPrebuilt(input, output, os, arch);
+      library = await _prebuilt(input, output, target);
     }
 
     output.assets.code.add(
@@ -72,70 +73,91 @@ void main(List<String> args) async {
   });
 }
 
-/// Key of the requested target (not the host) in `native/manifest.json`.
-String? _targetKey(OS os, Architecture arch) => switch ((os, arch)) {
-  (OS.macOS, Architecture.arm64) => 'macos-arm64',
-  (OS.macOS, Architecture.x64) => 'macos-x64',
-  (OS.linux, Architecture.x64) => 'linux-x64',
-  _ => null,
-};
+/// The requested target (not the host).
+NativeTarget _target(OS os, Architecture arch) =>
+    NativeTarget.byKey('${os.name}-${arch.name}') ??
+    (throw UnsupportedError(
+      'gleon: no native library for $os/$arch. Supported hosts for '
+      '`flutter test`: ${NativeTarget.values.map((t) => t.key).join(', ')}. '
+      'Web and on-device tests are not supported.',
+    ));
 
-Uri _verifiedPrebuilt(
+Future<Uri> _prebuilt(
   BuildInput input,
   BuildOutputBuilder output,
-  OS os,
-  Architecture arch,
-) {
-  final manifestUri = input.packageRoot.resolve('native/manifest.json');
-  output.dependencies.add(manifestUri);
-  final manifest =
-      jsonDecode(File.fromUri(manifestUri).readAsStringSync())
-          as Map<String, Object?>;
-  final targets = manifest['targets']! as Map<String, Object?>;
-  final key = _targetKey(os, arch);
-  final entry = key == null ? null : targets[key] as Map<String, Object?>?;
-  if (entry == null) {
-    throw UnsupportedError(
-      'gleon: no prebuilt native library for $os/$arch (available: '
-      '${targets.keys.join(', ')}). Web, Windows and on-device tests are not '
-      'supported yet.',
-    );
+  NativeTarget target,
+) async {
+  // A new local build must re-run the hook, so depend on the directory.
+  final nativeDir = input.packageRoot.resolve('native/');
+  output.dependencies.add(nativeDir);
+  final bundled = File.fromUri(
+    nativeDir.resolve('${target.key}/${target.libFileName}'),
+  );
+  if (bundled.existsSync()) {
+    output.dependencies.add(bundled.uri);
+    _rejectStaleBuild(nativeDir, target, output);
+    return bundled.uri;
   }
 
-  final library = input.packageRoot.resolve('native/${entry['file']}');
-  output.dependencies.add(library);
-  final file = File.fromUri(library);
-  if (!file.existsSync()) {
-    throw StateError('gleon: prebuilt library missing: ${file.path}');
-  }
-  final actual = sha256.convert(file.readAsBytesSync()).toString();
-  if (actual != entry['sha256']) {
-    throw StateError(
-      'gleon: checksum mismatch for ${file.path} (expected ${entry['sha256']}, '
-      'got $actual). The package files are corrupted or were modified; '
-      're-fetch the package.',
+  final pubspec = input.packageRoot.resolve('pubspec.yaml');
+  output.dependencies.add(pubspec);
+  final releaseUrl = switch (input.userDefines['release_url']) {
+    final String url => Uri.parse(url.endsWith('/') ? url : '$url/'),
+    null => defaultReleaseUrl(
+      readPubspecVersion(File.fromUri(pubspec).readAsStringSync()) ??
+          (throw StateError('gleon: no `version` in ${pubspec.toFilePath()}')),
+    ),
+    final other => throw StateError(
+      'gleon: user-define `release_url` must be a string, got $other',
+    ),
+  };
+  try {
+    final library = await fetchReleaseLibrary(
+      releaseUrl: releaseUrl,
+      target: target,
+      cacheDir: Directory.fromUri(input.outputDirectoryShared),
     );
+    output.dependencies.add(library.uri);
+    return library.uri;
+  } on NativeDownloadException catch (error) {
+    // Hook errors are printed verbatim; keep the actionable message on top.
+    throw StateError(error.toString());
   }
-  return library;
 }
 
-/// Maps the requested target to a Rust target triple (source builds only).
-String _rustTriple(OS os, Architecture arch) => switch ((os, arch)) {
-  (OS.macOS, Architecture.arm64) => 'aarch64-apple-darwin',
-  (OS.macOS, Architecture.x64) => 'x86_64-apple-darwin',
-  (OS.linux, Architecture.x64) => 'x86_64-unknown-linux-gnu',
-  _ => throw UnsupportedError(
-    'gleon: source builds support macOS arm64/x64 and Linux x64, not $os/$arch.',
-  ),
-};
+/// A local build records the `native/gleon_ref` pin it was made for (see
+/// `bin/build_native.dart`); after the pin moves, that library would silently
+/// test an outdated engine. The pub.dev archive ships no pin, so no check.
+void _rejectStaleBuild(
+  Uri nativeDir,
+  NativeTarget target,
+  BuildOutputBuilder output,
+) {
+  final pin = File.fromUri(nativeDir.resolve(pinFileName));
+  if (!pin.existsSync()) return;
+  final stamp = File.fromUri(nativeDir.resolve('${target.key}/$pinFileName'));
+  output.dependencies
+    ..add(pin.uri)
+    ..add(stamp.uri);
+  final pinned = pin.readAsStringSync().trim();
+  final builtFor = stamp.existsSync() ? stamp.readAsStringSync().trim() : null;
+  if (builtFor != pinned) {
+    throw StateError(
+      'gleon: ${Directory.fromUri(nativeDir.resolve('${target.key}/')).path} '
+      'was built for gleon ${builtFor ?? '(unknown)'}, but native/$pinFileName '
+      'pins $pinned. Rebuild it with `dart bin/build_native.dart`, or delete '
+      'that directory to download the released library.',
+    );
+  }
+}
 
 Future<Uri> _buildFromSource({
   required Uri repoRoot,
   required BuildInput input,
   required BuildOutputBuilder output,
-  required String triple,
-  required String libraryFileName,
+  required NativeTarget target,
 }) async {
+  final triple = target.rustTriple;
   // `path()` resolves without a trailing slash; directories need one for `resolve`.
   final root = repoRoot.path.endsWith('/')
       ? repoRoot
@@ -149,17 +171,22 @@ Future<Uri> _buildFromSource({
 
   final targetDir = input.outputDirectoryShared.resolve('cargo/');
   final cargo = _findCargo();
-  final result = await Process.run(cargo, [
-    'build',
-    '--release',
-    '--locked',
-    '--package',
-    _crate,
-    '--target',
-    triple,
-    '--target-dir',
-    targetDir.toFilePath(),
-  ], workingDirectory: root.toFilePath());
+  final result = await Process.run(
+    cargo,
+    [
+      'build',
+      '--release',
+      '--locked',
+      '--package',
+      _crate,
+      '--target',
+      triple,
+      '--target-dir',
+      targetDir.toFilePath(),
+    ],
+    workingDirectory: root.toFilePath(),
+    environment: target.cargoEnvironment(Platform.environment),
+  );
   if (result.exitCode != 0) {
     throw ProcessException(
       cargo,
@@ -187,7 +214,7 @@ Future<Uri> _buildFromSource({
         .forEach((file) => output.dependencies.add(file.uri));
   }
 
-  final library = targetDir.resolve('$triple/release/$libraryFileName');
+  final library = targetDir.resolve('$triple/release/${target.libFileName}');
   if (!File.fromUri(library).existsSync()) {
     throw StateError(
       'gleon: cargo succeeded but ${library.toFilePath()} is missing.',

@@ -1,0 +1,21 @@
+name: gleon_example
+description: Counter app whose golden tests use gleon instead of flutter_test's matchesGoldenFile.
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.13.0
+  flutter: ^3.47.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  # gleon re-exports flutter_test, so tests import only package:gleon/gleon.dart.
+  gleon:
+    path: ../
+  lints: ^6.1.0
+
+flutter:
+  uses-material-design: true

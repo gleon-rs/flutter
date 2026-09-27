@@ -1,0 +1,6 @@
+# LF everywhere so `dart format` and golden files behave the same on Windows.
+* text=auto eol=lf
+*.png binary
+*.dylib binary
+*.so binary
+*.dll binary

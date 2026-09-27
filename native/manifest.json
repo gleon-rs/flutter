@@ -1,9 +1,0 @@
-{
-  "abi_version": 2,
-  "source_commit": "9016275-dirty",
-  "targets": {
-    "macos-arm64": { "file": "macos-arm64/libgleon_ffi.dylib", "sha256": "6fee8118e27f5a55b1febad860259a3e543df0c276029b65eb6a79b39e66a872" },
-    "macos-x64": { "file": "macos-x64/libgleon_ffi.dylib", "sha256": "ef0ba872e674b99ab559e314917aee3bccf76ca84701300aabc2fd695a3a6425" },
-    "linux-x64": { "file": "linux-x64/libgleon_ffi.so", "sha256": "3cf7fcd4d2e0f2e8deb9e65f2a3e2d90a43fb732798f306861b8f79c7f870ae6" }
-  }
-}

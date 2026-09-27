@@ -31,3 +31,10 @@ doc/api/
 test/failures/
 .antigravity/
 CLAUDE.local.md
+
+# Native libraries are never committed: CI attaches them to GitHub Releases and
+# the build hook downloads them. Local builds (`dart bin/build_native.dart`)
+# land here and take precedence. Only the engine pin is tracked.
+/native/*
+!/native/gleon_ref
+/dist/

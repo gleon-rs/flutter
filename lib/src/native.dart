@@ -1,6 +1,14 @@
 // Dart FFI bindings to the `gleon-ffi` native library (see `gleon-ffi/src/lib.rs`).
 //
 // The asset id must match `_assetName` in `hook/build.dart`.
+//
+// Every call is a leaf call: input bytes are passed zero-copy via
+// `Uint8List.address` (only allowed for leaf calls), and the result getters
+// return `{ptr, len}` slices by value, so no native allocations are needed on
+// this side. A leaf call keeps the isolate group from reaching a GC safepoint
+// until it returns. Typical goldens take milliseconds, but the engine runs
+// single-threaded here and large SSIM comparisons can take seconds; that is
+// acceptable because the calling test awaits the result anyway.
 @DefaultAsset('package:gleon/src/native.dart')
 library;
 
@@ -8,14 +16,20 @@ import 'dart:convert';
 import 'dart:ffi';
 import 'dart:typed_data';
 
-import 'package:ffi/ffi.dart';
-
 /// JSON contract version this Dart code understands (`ABI_VERSION` in `gleon-ffi`).
-const int expectedAbiVersion = 2;
+const int expectedAbiVersion = 3;
 
 final class _GleonResult extends Opaque {}
 
-@Native<Uint32 Function()>(symbol: 'gleon_ffi_abi_version')
+/// safer-ffi `c_slice::Ref<u8>` (`ptr` is null for "none").
+final class _Slice extends Struct {
+  external Pointer<Uint8> ptr;
+
+  @Size()
+  external int len;
+}
+
+@Native<Uint32 Function()>(symbol: 'gleon_ffi_abi_version', isLeaf: true)
 external int _abiVersion();
 
 @Native<
@@ -27,7 +41,7 @@ external int _abiVersion();
     Pointer<Uint8>,
     Size,
   )
->(symbol: 'gleon_compare')
+>(symbol: 'gleon_compare', isLeaf: true)
 external Pointer<_GleonResult> _compare(
   Pointer<Uint8> baseline,
   int baselineLength,
@@ -37,23 +51,22 @@ external Pointer<_GleonResult> _compare(
   int optionsLength,
 );
 
-@Native<Pointer<Uint8> Function(Pointer<_GleonResult>, Pointer<Size>)>(
+@Native<_Slice Function(Pointer<_GleonResult>)>(
   symbol: 'gleon_result_json',
+  isLeaf: true,
 )
-external Pointer<Uint8> _resultJson(
-  Pointer<_GleonResult> result,
-  Pointer<Size> length,
-);
+external _Slice _resultJson(Pointer<_GleonResult> result);
 
-@Native<Pointer<Uint8> Function(Pointer<_GleonResult>, Pointer<Size>)>(
+@Native<_Slice Function(Pointer<_GleonResult>)>(
   symbol: 'gleon_result_diff_png',
+  isLeaf: true,
 )
-external Pointer<Uint8> _resultDiffPng(
-  Pointer<_GleonResult> result,
-  Pointer<Size> length,
-);
+external _Slice _resultDiffPng(Pointer<_GleonResult> result);
 
-@Native<Void Function(Pointer<_GleonResult>)>(symbol: 'gleon_result_free')
+@Native<Void Function(Pointer<_GleonResult>)>(
+  symbol: 'gleon_result_free',
+  isLeaf: true,
+)
 external void _resultFree(Pointer<_GleonResult> result);
 
 /// Outcome of a native comparison.
@@ -153,46 +166,40 @@ void _ensureAbi() {
 }
 
 /// Compares PNG-encoded [baseline] and [candidate] with JSON-serializable [options]
-/// (`{mode, threshold?, min_similarity?, masks?}`).
+/// (`{mode, threshold?, min_similarity?, color_tolerance?, masks?}`).
 ///
-/// Buffers are copied into native memory for the duration of the call and freed afterwards.
+/// The buffers are read in place by the native code; nothing is copied in.
 NativeComparison compareNative({
-  required List<int> baseline,
-  required List<int> candidate,
+  required Uint8List baseline,
+  required Uint8List candidate,
   required Map<String, Object?> options,
 }) {
   _ensureAbi();
   final optionsBytes = utf8.encode(jsonEncode(options));
-  return using((arena) {
-    Pointer<Uint8> copy(List<int> bytes) {
-      final ptr = arena<Uint8>(bytes.isEmpty ? 1 : bytes.length);
-      ptr.asTypedList(bytes.length).setAll(0, bytes);
-      return ptr;
+  final result = _compare(
+    baseline.address,
+    baseline.length,
+    candidate.address,
+    candidate.length,
+    optionsBytes.address,
+    optionsBytes.length,
+  );
+  try {
+    final json = _resultJson(result);
+    if (json.ptr == nullptr) {
+      return const NativeError('native result without a report');
     }
-
-    final result = _compare(
-      copy(baseline),
-      baseline.length,
-      copy(candidate),
-      candidate.length,
-      copy(optionsBytes),
-      optionsBytes.length,
-    );
-    try {
-      final length = arena<Size>();
-      final jsonPtr = _resultJson(result, length);
-      final report =
-          jsonDecode(utf8.decode(jsonPtr.asTypedList(length.value)))
-              as Map<String, Object?>;
-      final diffPtr = _resultDiffPng(result, length);
-      final diffPng = diffPtr == nullptr
-          ? null
-          : Uint8List.fromList(diffPtr.asTypedList(length.value));
-      return _parse(report, diffPng);
-    } finally {
-      _resultFree(result);
-    }
-  });
+    final report = jsonDecode(
+      utf8.decode(json.ptr.asTypedList(json.len)),
+    ) as Map<String, Object?>;
+    final diff = _resultDiffPng(result);
+    final diffPng = diff.ptr == nullptr
+        ? null
+        : Uint8List.fromList(diff.ptr.asTypedList(diff.len));
+    return _parse(report, diffPng);
+  } finally {
+    _resultFree(result);
+  }
 }
 
 NativeComparison _parse(Map<String, Object?> report, Uint8List? diffPng) {

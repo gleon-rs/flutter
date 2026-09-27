@@ -139,9 +139,8 @@ void main() {
       tester,
     ) async {
       await tester.pumpWidget(_swatch(dot: _dot));
-      final message = await matchesGoldenFile(
-        _golden,
-      ).matchAsync(find.byKey(_swatchKey));
+      final message = await matchesGoldenFile(_golden)
+          .matchAsync(find.byKey(_swatchKey));
 
       expect(message, contains('1 of 6000px'));
       expect(message, contains('gleon exact'));
@@ -157,26 +156,23 @@ void main() {
 
     testWidgets('reports a dimension mismatch', (tester) async {
       await tester.pumpWidget(_swatch(size: const Size(100, 61)));
-      final message = await matchesGoldenFile(
-        _golden,
-      ).matchAsync(find.byKey(_swatchKey));
+      final message = await matchesGoldenFile(_golden)
+          .matchAsync(find.byKey(_swatchKey));
       expect(message, contains('100x60px'));
       expect(message, contains('100x61px'));
     });
 
     testWidgets('fails for a missing golden like Flutter does', (tester) async {
       await tester.pumpWidget(_swatch());
-      final message = await matchesGoldenFile(
-        'goldens/does_not_exist.png',
-      ).matchAsync(find.byKey(_swatchKey));
+      final message = await matchesGoldenFile('goldens/does_not_exist.png')
+          .matchAsync(find.byKey(_swatchKey));
       expect(message, contains('non-existent file'));
     });
 
     testWidgets('keeps Flutter matcher errors for bad finders', (tester) async {
       await tester.pumpWidget(_swatch());
-      final message = await matchesGoldenFile(
-        _golden,
-      ).matchAsync(find.byKey(const ValueKey('nope')));
+      final message = await matchesGoldenFile(_golden)
+          .matchAsync(find.byKey(const ValueKey('nope')));
       expect(message, contains('no widget was found'));
     });
   });
@@ -208,9 +204,8 @@ void main() {
 
     testWidgets('exact fails on sub-pixel rendering noise', (tester) async {
       await tester.pumpWidget(_blob(offset: 0.3));
-      final message = await matchesGoldenFile(
-        _blobGolden,
-      ).matchAsync(find.byKey(_blobKey));
+      final message = await matchesGoldenFile(_blobGolden)
+          .matchAsync(find.byKey(_blobKey));
       expect(message, contains('differ'));
     });
 
@@ -288,9 +283,9 @@ void main() {
       tester,
     ) async {
       final message = await tester.runAsync(
-        () => matchesGoldenFile(
-          _golden,
-        ).matchAsync(Uint8List.fromList(List.filled(64, 7))),
+        () =>
+            matchesGoldenFile(_golden)
+                .matchAsync(Uint8List.fromList(List.filled(64, 7))),
       );
       expect(message, contains('gleon could not compare'));
     });
@@ -357,9 +352,8 @@ void main() {
     addTearDown(() => goldenFileComparator = original);
     goldenFileComparator = _FakeComparator();
     await tester.pumpWidget(_swatch());
-    final message = await matchesGoldenFile(
-      _golden,
-    ).matchAsync(find.byKey(_swatchKey));
+    final message = await matchesGoldenFile(_golden)
+        .matchAsync(find.byKey(_swatchKey));
     expect(message, contains('needs the default LocalFileComparator'));
   });
 }

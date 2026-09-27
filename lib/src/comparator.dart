@@ -2,7 +2,6 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:path/path.dart' as path;
 
 import 'config.dart';
 import 'native.dart';
@@ -38,9 +37,8 @@ class GleonGoldenComparator extends GoldenFileComparator {
         'not supported yet.',
       );
     }
-    final goldenFile = File(
-      path.join(path.fromUri(local.basedir), path.fromUri(golden.path)),
-    );
+    // Same resolution as LocalFileComparator: the golden key relative to basedir.
+    final goldenFile = File.fromUri(local.basedir.resolve(golden.path));
     if (!goldenFile.existsSync()) {
       throw TestFailure(
         'Could not be compared against non-existent file: "$golden"',
@@ -118,15 +116,16 @@ class GleonGoldenComparator extends GoldenFileComparator {
   Future<String> _writeFailure(
     Uri basedir,
     Uri golden,
-    List<int> goldenBytes,
-    List<int> testBytes,
+    Uint8List goldenBytes,
+    Uint8List testBytes,
     Uint8List? diffPng,
   ) async {
-    final failuresDir = path.join(path.fromUri(basedir), 'failures');
+    final failuresDir = basedir.resolve('failures/');
     final fileName = golden.pathSegments.last;
-    final testName = path.basenameWithoutExtension(fileName);
+    final dot = fileName.lastIndexOf('.');
+    final testName = dot > 0 ? fileName.substring(0, dot) : fileName;
     Future<void> write(String suffix, List<int> bytes) async {
-      final file = File(path.join(failuresDir, '${testName}_$suffix.png'));
+      final file = File.fromUri(failuresDir.resolve('${testName}_$suffix.png'));
       await file.create(recursive: true);
       await file.writeAsBytes(bytes, flush: true);
     }
@@ -136,7 +135,8 @@ class GleonGoldenComparator extends GoldenFileComparator {
     if (diffPng != null) {
       await write('gleonDiff', diffPng);
     }
-    return '\nFailure feedback can be found at $failuresDir';
+    return '\nFailure feedback can be found at '
+        '${Directory.fromUri(failuresDir).path}';
   }
 }
 

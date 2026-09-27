@@ -4,8 +4,9 @@ Drop-in replacement for Flutter's `matchesGoldenFile` with **tolerance**, **SSIM
 **ignore regions**, powered by the gleon Rust comparison engine (the same engine as the
 [gleon CLI](https://github.com/gleon-rs/gleon)).
 
-> **Status: proof of concept (v0).** Host `flutter test` on macOS (arm64/x64) and Linux x64.
-> No Rust toolchain or network access is needed: the package ships prebuilt, checksum-verified native libraries.
+> **Status: proof of concept (v0).** Host `flutter test` on macOS arm64, Linux x64/arm64
+> (Ubuntu 26.04+) and Windows x64. No Rust toolchain is needed: prebuilt, checksum-verified native
+> libraries are downloaded once per project.
 
 ## Install
 
@@ -13,20 +14,27 @@ Drop-in replacement for Flutter's `matchesGoldenFile` with **tolerance**, **SSIM
 dev_dependencies:
   gleon:
     git:
-      url: https://github.com/gleon-rs/gleon_flutter.git
-      ref: <commit-or-branch>
+      url: https://github.com/gleon-rs/flutter.git
+      ref: v0.0.1 # a released tag: prebuilt libraries exist for tags only
 ```
 
-The Dart build hook picks the prebuilt library for the test host from `native/`, verifies its
-SHA-256 and bundles it. Overrides, if ever needed:
+On the first `flutter test`, the package's build hook downloads the native library for the test
+host from the GitHub Release of that version, verifies it against the release's `SHA256SUMS.txt`
+(releases are immutable) and caches it in `.dart_tool/hooks_runner/shared/`. Later runs, including
+offline ones, reuse the cache until `flutter clean`. `HTTPS_PROXY` is honored.
+
+Overrides (in the app's `pubspec.yaml`), e.g. for air-gapped machines:
 
 ```yaml
 hooks:
   user_defines:
     gleon:
-      ffi_path: path/to/libgleon_ffi.dylib # use a specific library
+      ffi_path: path/to/libgleon_ffi.dylib # use this library file as is
+      # release_url: https://mirror.example/gleon/v0.0.1/ # SHA256SUMS.txt + assets
       # gleon_repo: ../gleon               # contributors: build from a gleon checkout
 ```
+
+See [`example/`](example) for a counter app whose tests use gleon.
 
 ## Migrate
 
@@ -121,17 +129,22 @@ The defaults are calibrated on a corpus of benign rendering noise vs. regression
 - `ssim` can pass a low-contrast color change of a one-pixel line. Use `exact`/`pixel` where every
   pixel matters.
 - Only Flutter's default `LocalFileComparator` is supported as the underlying golden store.
-- Web (`--platform chrome`), Windows and on-device tests are not supported yet.
+- Web (`--platform chrome`) and on-device tests are not supported.
 
 ## Maintainers
 
 The native code (`gleon-engine`, `gleon-ffi`) lives in the
-[gleon repository](https://github.com/gleon-rs/gleon). After changing it, rebuild the prebuilt
-libraries from a gleon checkout (macOS host, `brew install zig cargo-zigbuild` for the Linux
-cross-link):
+[gleon repository](https://github.com/gleon-rs/gleon); `native/gleon_ref` pins the commit CI builds.
+Build the library for this machine into `native/<target>/` (the hook prefers it over downloading):
 
 ```sh
-GLEON_REPO=../gleon tool/build_native.sh
+dart bin/build_native.dart                 # host; --target all cross-builds on macOS
 ```
 
-`test/native_manifest_test.dart` fails if the manifest's ABI version or checksums are stale.
+Use plain `dart`, not `dart run`: `dart run` executes the build hook first. Cross builds need
+`cargo-zigbuild` (Linux) and `cargo-xwin` (Windows); CI builds every target natively.
+
+Releasing: bump `version` in `pubspec.yaml` and `CHANGELOG.md`, update `native/gleon_ref` if the
+engine changed, and push the tag `vX.Y.Z`. The release workflow builds and tests all targets on
+their own OS, attaches the libraries and `SHA256SUMS.txt` to an immutable GitHub Release, and then
+verifies the download path on every OS.
