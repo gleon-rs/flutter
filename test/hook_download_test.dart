@@ -5,16 +5,27 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gleon/src/hook/download.dart';
 import 'package:gleon/src/hook/targets.dart';
 
-/// Serves [files] (path → bytes) and counts requests per path.
+/// Serves [files] (path → bytes), answers [redirects] (path → location) and
+/// counts requests per path.
 class _ReleaseServer {
-  _ReleaseServer._(this._server, this.files);
+  _ReleaseServer._(this._server, this.files, this.redirects);
 
-  static Future<_ReleaseServer> start(Map<String, List<int>> files) async {
+  static Future<_ReleaseServer> start(
+    Map<String, List<int>> files, {
+    Map<String, String> redirects = const {},
+  }) async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    final release = _ReleaseServer._(server, files);
+    final release = _ReleaseServer._(server, files, redirects);
     server.listen((request) {
       final name = request.uri.pathSegments.last;
       release.hits[name] = (release.hits[name] ?? 0) + 1;
+      if (release.redirects[name] case final location?) {
+        request.response
+          ..statusCode = HttpStatus.found
+          ..headers.set(HttpHeaders.locationHeader, location)
+          ..close();
+        return;
+      }
       final body = release.files[name];
       request.response.statusCode = body == null
           ? HttpStatus.notFound
@@ -27,6 +38,7 @@ class _ReleaseServer {
 
   final HttpServer _server;
   final Map<String, List<int>> files;
+  final Map<String, String> redirects;
   final hits = <String, int>{};
 
   Uri get url => Uri.parse('http://127.0.0.1:${_server.port}/v1.0.0/');
@@ -150,10 +162,36 @@ void main() {
     expect(readPubspecVersion('name: x'), isNull);
   });
 
-  test('a non-http release_url points to ffi_path', () async {
+  test('only https, or plain http to localhost, is accepted', () async {
+    for (final url in ['file:///mirror/v1.0.0/', 'http://mirror.example/v1/']) {
+      await expectLater(
+        fetchReleaseLibrary(
+          releaseUrl: Uri.parse(url),
+          target: target,
+          cacheDir: cache,
+        ),
+        throwsA(
+          isA<NativeDownloadException>().having(
+            (e) => e.message,
+            'message',
+            allOf(contains('https'), contains('ffi_path')),
+          ),
+        ),
+        reason: url,
+      );
+    }
+  });
+
+  test('refuses a redirect to plain http', () async {
+    final server = await _ReleaseServer.start(
+      {checksumsFileName: '$hash  ${target.assetName}\n'.codeUnits},
+      redirects: {target.assetName: 'http://mirror.example/lib.so'},
+    );
+    addTearDown(server.close);
+
     await expectLater(
       fetchReleaseLibrary(
-        releaseUrl: Uri.parse('file:///mirror/v1.0.0/'),
+        releaseUrl: server.url,
         target: target,
         cacheDir: cache,
       ),
@@ -161,10 +199,29 @@ void main() {
         isA<NativeDownloadException>().having(
           (e) => e.message,
           'message',
-          contains('ffi_path'),
+          contains('insecure'),
         ),
       ),
     );
+  });
+
+  test('follows allowed redirects', () async {
+    final server = await _ReleaseServer.start(
+      {
+        checksumsFileName: '$hash  ${target.assetName}\n'.codeUnits,
+        'stored.so': library,
+      },
+      redirects: {target.assetName: 'stored.so'},
+    );
+    addTearDown(server.close);
+
+    final file = await fetchReleaseLibrary(
+      releaseUrl: server.url,
+      target: target,
+      cacheDir: cache,
+    );
+    expect(file.readAsBytesSync(), library);
+    expect(server.hits['stored.so'], 1);
   });
 
   test('windows builds link the C runtime statically in every setup', () {

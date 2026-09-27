@@ -342,6 +342,34 @@ void main() {
       );
     });
 
+    test('validates only the settings the resolved mode uses', () {
+      final original = gleonGoldenDefaults;
+      addTearDown(() => gleonGoldenDefaults = original);
+      gleonGoldenDefaults = const GleonGoldenConfig(
+        threshold: 1.5,
+        minSimilarity: 2,
+        colorTolerance: -1,
+      );
+      expect(() => matchesGoldenFile(_golden), returnsNormally);
+      expect(
+        () => matchesGoldenFile(_golden, mode: GoldenMode.pixel),
+        throwsArgumentError,
+      );
+      expect(
+        () => matchesGoldenFile(_golden, mode: GoldenMode.ssim),
+        throwsArgumentError,
+      );
+      expect(
+        () => matchesGoldenFile(
+          _golden,
+          mode: GoldenMode.ssim,
+          minSimilarity: 0.9,
+          colorTolerance: 8,
+        ),
+        returnsNormally,
+      );
+    });
+
     test('rejects unsupported key types like Flutter', () {
       expect(() => matchesGoldenFile(42), throwsArgumentError);
     });

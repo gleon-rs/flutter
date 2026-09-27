@@ -130,24 +130,28 @@ final class ResolvedGoldenOptions {
         'only applies to GoldenMode.ssim (mode is ${resolvedMode.name})',
       );
     }
+    // Only the settings the resolved mode uses are validated: suite defaults
+    // for another mode must not break this comparison.
+    final resolvedThreshold = threshold ?? defaults.threshold;
+    final resolvedMinSimilarity = minSimilarity ?? defaults.minSimilarity;
     final resolvedColorTolerance = colorTolerance ?? defaults.colorTolerance;
-    if (!resolvedColorTolerance.isFinite ||
-        resolvedColorTolerance < 0 ||
-        resolvedColorTolerance > 255) {
-      throw ArgumentError.value(
-        resolvedColorTolerance,
-        'colorTolerance',
-        'must be between 0 and 255',
-      );
+    switch (resolvedMode) {
+      case GoldenMode.exact:
+        break;
+      case GoldenMode.pixel:
+        _ratio(resolvedThreshold, 'threshold');
+      case GoldenMode.ssim:
+        _ratio(resolvedMinSimilarity, 'minSimilarity');
+        if (!resolvedColorTolerance.isFinite ||
+            resolvedColorTolerance < 0 ||
+            resolvedColorTolerance > 255) {
+          throw ArgumentError.value(
+            resolvedColorTolerance,
+            'colorTolerance',
+            'must be between 0 and 255',
+          );
+        }
     }
-    final resolvedThreshold = _ratio(
-      threshold ?? defaults.threshold,
-      'threshold',
-    );
-    final resolvedMinSimilarity = _ratio(
-      minSimilarity ?? defaults.minSimilarity,
-      'minSimilarity',
-    );
     final regions = ignoreRegions ?? defaults.ignoreRegions;
     for (final region in regions) {
       if (!region.isFinite ||
@@ -217,11 +221,10 @@ final class ResolvedGoldenOptions {
   };
 }
 
-double _ratio(double value, String name) {
+void _ratio(double value, String name) {
   if (value.isNaN || value < 0 || value > 1) {
     throw ArgumentError.value(value, name, 'must be between 0.0 and 1.0');
   }
-  return value;
 }
 
 String _percent(double ratio) => '${(ratio * 100).toStringAsFixed(2)}%';

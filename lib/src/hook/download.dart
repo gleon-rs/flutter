@@ -64,10 +64,11 @@ Future<File> fetchReleaseLibrary({
   required NativeTarget target,
   required Directory cacheDir,
 }) async {
-  if (releaseUrl.scheme != 'https' && releaseUrl.scheme != 'http') {
+  if (!_isAllowedUrl(releaseUrl)) {
     throw NativeDownloadException(
-      'release_url must be an http(s) URL, got "$releaseUrl". For a library '
-      'file on disk, set the `ffi_path` user-define instead.',
+      'release_url must be an https URL (plain http only for localhost), got '
+      '"$releaseUrl". For a library file on disk, set the `ffi_path` '
+      'user-define instead.',
     );
   }
   final client = HttpClient()
@@ -142,15 +143,20 @@ Future<_Checksums> _checksums(
   return (hashes: hashes, file: file, fromCache: false);
 }
 
-/// GETs [url] (following redirects), retrying transient failures.
+/// Only https, or plain http to this machine (local mirrors and tests): the
+/// checksum list travels the same way as the libraries, so an insecure hop
+/// would let an attacker replace both.
+bool _isAllowedUrl(Uri url) =>
+    url.scheme == 'https' ||
+    (url.scheme == 'http' &&
+        const {'localhost', '127.0.0.1', '::1'}.contains(url.host));
+
+/// GETs [url], retrying transient failures.
 Future<List<int>> _download(HttpClient client, Uri url) async {
   const attempts = 3;
   for (var attempt = 1; ; attempt++) {
     try {
-      final request = await client.getUrl(url);
-      final response = await request.close().timeout(
-        const Duration(seconds: 60),
-      );
+      final response = await _get(client, url);
       final bytes = await response
           .fold<BytesBuilder>(BytesBuilder(copy: false), (b, d) => b..add(d))
           .timeout(const Duration(minutes: 3));
@@ -183,6 +189,35 @@ Future<List<int>> _download(HttpClient client, Uri url) async {
       }
     }
     await Future<void>.delayed(Duration(seconds: attempt));
+  }
+}
+
+/// Sends a GET to [url] and follows redirects itself, checking every target
+/// with [_isAllowedUrl] so a redirect can never downgrade to plain http.
+Future<HttpClientResponse> _get(HttpClient client, Uri url) async {
+  const maxRedirects = 5;
+  var current = url;
+  for (var redirects = 0; ; redirects++) {
+    final request = await client.getUrl(current)
+      ..followRedirects = false;
+    final response = await request.close().timeout(const Duration(seconds: 60));
+    if (!response.isRedirect) return response;
+    await response.drain<void>();
+    final location = response.headers.value(HttpHeaders.locationHeader);
+    if (location == null || redirects == maxRedirects) {
+      throw NativeDownloadException(
+        'downloading $url failed: ${location == null ? 'redirect without a '
+                  'location' : 'more than $maxRedirects redirects'}.',
+      );
+    }
+    final next = current.resolve(location);
+    if (!_isAllowedUrl(next)) {
+      throw NativeDownloadException(
+        '$url redirected to $next; refusing to download over an insecure '
+        'connection.',
+      );
+    }
+    current = next;
   }
 }
 
