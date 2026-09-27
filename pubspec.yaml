@@ -1,0 +1,24 @@
+name: gleon
+description: Golden testing with tolerance, SSIM and ignore regions, powered by Rust
+version: 0.0.1
+publish_to: none
+repository: https://github.com/gleon-rs/flutter
+
+environment:
+  sdk: ^3.13.0
+  flutter: ^3.47.0
+
+# Runtime dependencies are only what the build hook and the re-exported
+# flutter_test need; the hook runs in the consumer's package graph.
+dependencies:
+  code_assets: ^2.1.0
+  crypto: ^3.0.7
+  flutter:
+    sdk: flutter
+  flutter_test:
+    sdk: flutter
+  hooks: ^2.2.0
+
+dev_dependencies:
+  lints: ^6.1.0
+  path: ^1.9.1

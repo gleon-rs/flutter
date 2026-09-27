@@ -1,0 +1,87 @@
+name: Set up Flutter and the native library
+description: >-
+  Installs Flutter and, unless disabled, builds gleon-ffi for the runner from the gleon commit
+  pinned in native/gleon_ref into native/<target>/, where the build hook picks it up.
+  Expects this repository checked out at ./flutter.
+
+inputs:
+  flutter-version:
+    description: >-
+      Exact Flutter release. Pinned so formatter/analyzer updates never change CI results on their
+      own and every OS of a release uses the same SDK; bump it deliberately.
+    default: "3.47.5"
+  target:
+    description: Native target key of this runner (macos-arm64, linux-x64, linux-arm64, windows-x64).
+    required: true
+  build:
+    description: Build the native library ('false' leaves the hook to download it from the release).
+    default: "true"
+  cache:
+    description: Reuse a library built from the same gleon commit and build script.
+    default: "true"
+  dist:
+    description: >-
+      Optional directory that also receives the library under its release asset name
+      (use with cache 'false').
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    # Flutter publishes no Linux arm64 archives; a git checkout bootstraps the arm64 Dart SDK.
+    - name: Set up Flutter
+      if: ${{ !(runner.os == 'Linux' && runner.arch == 'ARM64') }}
+      uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+      with:
+        flutter-version: ${{ inputs.flutter-version }}
+        channel: stable
+        cache: true
+    - name: Set up Flutter (git, Linux arm64)
+      if: ${{ runner.os == 'Linux' && runner.arch == 'ARM64' }}
+      shell: bash
+      run: |
+        git clone --depth 1 --branch "${{ inputs.flutter-version }}" https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
+        echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+        "$RUNNER_TEMP/flutter/bin/flutter" --version
+
+    - name: Read the pinned gleon commit
+      if: ${{ inputs.build == 'true' }}
+      id: pin
+      shell: bash
+      run: echo "gleon_ref=$(tr -d '[:space:]' < flutter/native/gleon_ref)" >> "$GITHUB_OUTPUT"
+    - name: Restore the native library
+      if: ${{ inputs.build == 'true' && inputs.cache == 'true' }}
+      id: cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: flutter/native/${{ inputs.target }}
+        key: gleon-ffi-${{ inputs.target }}-${{ steps.pin.outputs.gleon_ref }}-${{ hashFiles('flutter/bin/build_native.dart', 'flutter/lib/src/hook/targets.dart') }}
+    - name: Check out gleon
+      if: ${{ inputs.build == 'true' && steps.cache.outputs.cache-hit != 'true' }}
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        repository: gleon-rs/gleon
+        ref: ${{ steps.pin.outputs.gleon_ref }}
+        path: gleon
+        persist-credentials: false
+    - name: Install the pinned Rust toolchain
+      if: ${{ inputs.build == 'true' && steps.cache.outputs.cache-hit != 'true' }}
+      shell: bash
+      working-directory: gleon
+      run: |
+        if ! command -v rustup >/dev/null; then
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.cargo/bin:$PATH"
+        fi
+        rustup toolchain install
+        rustc --version
+    - name: Build gleon-ffi
+      if: ${{ inputs.build == 'true' && steps.cache.outputs.cache-hit != 'true' }}
+      shell: bash
+      working-directory: flutter
+      # Plain `dart`, not `dart run`: the latter would run the build hook, which needs this library.
+      run: |
+        flutter pub get
+        dart bin/build_native.dart --gleon-repo ../gleon --target "${{ inputs.target }}" \
+          ${{ inputs.dist != '' && format('--dist "{0}"', inputs.dist) || '' }}

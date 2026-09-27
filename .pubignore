@@ -1,0 +1,29 @@
+# Used by `dart pub publish` instead of .gitignore (keep in sync with it).
+# Unlike .gitignore, native/ is NOT ignored: prebuilt libraries placed there by
+# the release workflow ship inside the pub.dev archive, so pub.dev users never
+# download from GitHub.
+
+.dart_tool/
+.packages
+build/
+pubspec.lock
+doc/api/
+.env*
+*.dart.js
+*.info.json
+*.js
+*.js_
+*.js.deps
+*.js.map
+.flutter-plugins
+.flutter-plugins-dependencies
+test/failures/
+example/test/failures/
+.antigravity/
+CLAUDE.local.md
+
+# Maintainer-only
+/bin/
+/dist/
+/.github/
+/native/gleon_ref
