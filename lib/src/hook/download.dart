@@ -59,10 +59,13 @@ const _overridesHint =
 
 /// Returns the verified library for [target] from the release at [releaseUrl],
 /// downloading it into [cacheDir] only if no verified copy is cached yet.
+///
+/// [redirectTimeout] bounds reading the body of a redirect response.
 Future<File> fetchReleaseLibrary({
   required Uri releaseUrl,
   required NativeTarget target,
   required Directory cacheDir,
+  Duration redirectTimeout = const Duration(seconds: 30),
 }) async {
   if (!_isAllowedUrl(releaseUrl)) {
     throw NativeDownloadException(
@@ -76,13 +79,15 @@ Future<File> fetchReleaseLibrary({
     ..connectionTimeout = const Duration(seconds: 30)
     ..userAgent = 'gleon-flutter-build-hook';
   try {
-    final checksums = await _checksums(client, releaseUrl, cacheDir);
+    Future<List<int>> download(Uri url) =>
+        _download(client, url, redirectTimeout);
+    final checksums = await _checksums(download, releaseUrl, cacheDir);
     var expected = checksums.hashes[target.assetName];
     if (expected == null && checksums.fromCache) {
       // A cached list can only be stale for a custom, mutable `release_url`.
       await checksums.file.delete();
       expected = (await _checksums(
-        client,
+        download,
         releaseUrl,
         cacheDir,
       )).hashes[target.assetName];
@@ -100,7 +105,7 @@ Future<File> fetchReleaseLibrary({
     if (library.existsSync() && await _sha256(library) == expected) {
       return library;
     }
-    final bytes = await _download(client, releaseUrl.resolve(target.assetName));
+    final bytes = await download(releaseUrl.resolve(target.assetName));
     final actual = sha256.convert(bytes).toString();
     if (actual != expected) {
       throw NativeDownloadException(
@@ -118,7 +123,7 @@ Future<File> fetchReleaseLibrary({
 typedef _Checksums = ({Map<String, String> hashes, File file, bool fromCache});
 
 Future<_Checksums> _checksums(
-  HttpClient client,
+  Future<List<int>> Function(Uri url) download,
   Uri releaseUrl,
   Directory cacheDir,
 ) async {
@@ -134,7 +139,7 @@ Future<_Checksums> _checksums(
       fromCache: true,
     );
   }
-  final bytes = await _download(client, url);
+  final bytes = await download(url);
   final hashes = parseChecksums(utf8.decode(bytes, allowMalformed: true));
   if (hashes.isEmpty) {
     throw NativeDownloadException('$url is not a valid checksum list.');
@@ -152,11 +157,15 @@ bool _isAllowedUrl(Uri url) =>
         const {'localhost', '127.0.0.1', '::1'}.contains(url.host));
 
 /// GETs [url], retrying transient failures.
-Future<List<int>> _download(HttpClient client, Uri url) async {
+Future<List<int>> _download(
+  HttpClient client,
+  Uri url,
+  Duration redirectTimeout,
+) async {
   const attempts = 3;
   for (var attempt = 1; ; attempt++) {
     try {
-      final response = await _get(client, url);
+      final response = await _get(client, url, redirectTimeout);
       final bytes = await response
           .fold<BytesBuilder>(BytesBuilder(copy: false), (b, d) => b..add(d))
           .timeout(const Duration(minutes: 3));
@@ -194,7 +203,11 @@ Future<List<int>> _download(HttpClient client, Uri url) async {
 
 /// Sends a GET to [url] and follows redirects itself, checking every target
 /// with [_isAllowedUrl] so a redirect can never downgrade to plain http.
-Future<HttpClientResponse> _get(HttpClient client, Uri url) async {
+Future<HttpClientResponse> _get(
+  HttpClient client,
+  Uri url,
+  Duration redirectTimeout,
+) async {
   const maxRedirects = 5;
   var current = url;
   for (var redirects = 0; ; redirects++) {
@@ -202,7 +215,17 @@ Future<HttpClientResponse> _get(HttpClient client, Uri url) async {
       ..followRedirects = false;
     final response = await request.close().timeout(const Duration(seconds: 60));
     if (!response.isRedirect) return response;
-    await response.drain<void>();
+    try {
+      await response.drain<void>().timeout(redirectTimeout);
+    } on TimeoutException {
+      // Drop the stalled connection; the retry loop in `_download` reports it.
+      try {
+        (await response.detachSocket()).destroy();
+      } on Exception {
+        // Already closed.
+      }
+      rethrow;
+    }
     final location = response.headers.value(HttpHeaders.locationHeader);
     if (location == null || redirects == maxRedirects) {
       throw NativeDownloadException(

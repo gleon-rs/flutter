@@ -5,20 +5,36 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gleon/src/hook/download.dart';
 import 'package:gleon/src/hook/targets.dart';
 
-/// Serves [files] (path → bytes), answers [redirects] (path → location) and
-/// counts requests per path.
+/// Serves [files] (path → bytes), answers [redirects] (path → location),
+/// sends redirects whose body never arrives for [stalledRedirects] and counts
+/// requests per path.
 class _ReleaseServer {
-  _ReleaseServer._(this._server, this.files, this.redirects);
+  _ReleaseServer._(this._server, this.files, this.redirects, this.stalled);
 
   static Future<_ReleaseServer> start(
     Map<String, List<int>> files, {
     Map<String, String> redirects = const {},
+    Set<String> stalledRedirects = const {},
   }) async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    final release = _ReleaseServer._(server, files, redirects);
+    final release = _ReleaseServer._(
+      server,
+      files,
+      redirects,
+      stalledRedirects,
+    );
     server.listen((request) {
       final name = request.uri.pathSegments.last;
       release.hits[name] = (release.hits[name] ?? 0) + 1;
+      if (release.stalled.contains(name)) {
+        request.response
+          ..statusCode = HttpStatus.found
+          ..headers.set(HttpHeaders.locationHeader, 'elsewhere')
+          ..contentLength = 1024
+          ..add([0]);
+        request.response.flush().ignore();
+        return;
+      }
       if (release.redirects[name] case final location?) {
         request.response
           ..statusCode = HttpStatus.found
@@ -39,6 +55,7 @@ class _ReleaseServer {
   final HttpServer _server;
   final Map<String, List<int>> files;
   final Map<String, String> redirects;
+  final Set<String> stalled;
   final hits = <String, int>{};
 
   Uri get url => Uri.parse('http://127.0.0.1:${_server.port}/v1.0.0/');
@@ -203,6 +220,32 @@ void main() {
         ),
       ),
     );
+  });
+
+  test('a redirect whose body stalls fails instead of hanging', () async {
+    final server = await _ReleaseServer.start(
+      {checksumsFileName: '$hash  ${target.assetName}\n'.codeUnits},
+      stalledRedirects: {target.assetName},
+    );
+    addTearDown(server.close);
+
+    await expectLater(
+      fetchReleaseLibrary(
+        releaseUrl: server.url,
+        target: target,
+        cacheDir: cache,
+        redirectTimeout: const Duration(milliseconds: 100),
+      ),
+      throwsA(
+        isA<NativeDownloadException>().having(
+          (e) => e.message,
+          'message',
+          contains('TimeoutException'),
+        ),
+      ),
+    );
+    // Every attempt timed out and was retried.
+    expect(server.hits[target.assetName], 3);
   });
 
   test('follows allowed redirects', () async {
