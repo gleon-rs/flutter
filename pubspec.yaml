@@ -1,12 +1,19 @@
 name: gleon
-description: Golden testing with tolerance, SSIM and ignore regions, powered by Rust
-version: 0.0.1
-publish_to: none
+description: Drop-in matchesGoldenFile for Flutter tests with pixel and SSIM tolerance and ignore regions, powered by a Rust engine.
+version: 0.1.0
 repository: https://github.com/gleon-rs/flutter
+issue_tracker: https://github.com/gleon-rs/flutter/issues
+
+topics:
+  - golden-test
+  - golden-tests
+  - visual-regression
+  - ssim
+  - pixel
 
 environment:
   sdk: ^3.13.0
-  flutter: ^3.47.0
+  flutter: '>=3.47.0'
 
 # Runtime dependencies are only what the build hook and the re-exported
 # flutter_test need; the hook runs in the consumer's package graph.
@@ -18,7 +25,12 @@ dependencies:
   flutter_test:
     sdk: flutter
   hooks: ^2.2.0
+  meta: ^1.18.0
+  # flutter_test pins an exact 0.7.x; `TestHandle` (test names for metrics)
+  # comes from here, so the range only has to include that pin.
+  test_api: ^0.7.0
 
 dev_dependencies:
-  lints: ^6.1.0
-  path: ^1.9.1
+  dart_code_metrics_presets: ^2.33.0
+  flutter_lints: ^6.0.0
+  json_schema: ^5.2.2
