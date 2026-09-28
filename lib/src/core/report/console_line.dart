@@ -66,7 +66,7 @@ abstract final class ConsoleLine {
     final PixelMetrics(:diffPixels, :diffRatio, :headroom) = metrics;
 
     return 'pixel ${(diffRatio * 100).toStringAsFixed(2)}% ($diffPixels px, '
-        '≤${GoldenTolerance.exactDecimal(maxDiffRatio, 2, scale: 100)}%, '
+        '≤${GoldenTolerance.exactDecimal(maxDiffRatio, 2, shift: 2)}%, '
         '${_signed(headroom * 100, 2)}%)';
   }
 }

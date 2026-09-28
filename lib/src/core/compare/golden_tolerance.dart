@@ -1,6 +1,8 @@
 // Descriptions use "≤", "≥" and "±": they read better than ASCII in failures.
 // ignore_for_file: avoid-non-ascii-symbols
 
+import 'dart:math' as math;
+
 import 'package:meta/meta.dart';
 
 /// How much a test image may deviate from its golden.
@@ -65,7 +67,7 @@ sealed class GoldenTolerance {
   String toString() => switch (this) {
     ExactTolerance() => 'exact',
     PixelTolerance(:final maxDiffRatio) =>
-      'pixel \u2264 ${exactDecimal(maxDiffRatio, 2, scale: 100)}%',
+      'pixel \u2264 ${exactDecimal(maxDiffRatio, 2, shift: 2)}%',
     SsimTolerance(:final colorTolerance, :final minSimilarity) =>
       'ssim \u2265 ${exactDecimal(minSimilarity, 3)}, '
           'color \u00b1${exactDecimal(colorTolerance, 0)}',
@@ -90,25 +92,49 @@ sealed class GoldenTolerance {
     _ => null,
   };
 
-  /// A threshold [value] times [scale] (100 for a percentage) with [digits]
-  /// decimals, or with more when fewer would misstate it: a message must never
-  /// show a different threshold than the one used. Shared with the console
-  /// line.
+  /// A threshold [value] with its decimal point moved [shift] places right
+  /// (2 for a percentage) and [digits] decimals, or with more when fewer would
+  /// misstate it: a message must never show a different threshold than the
+  /// one used. Shared with the console line.
+  ///
+  /// The value itself is rounded and must parse back exactly; the point is
+  /// then moved as text, since `value * 100` is not exact (`0.07 * 100` is
+  /// `7.000000000000001`).
   @internal
-  static String exactDecimal(double value, int digits, {int scale = 1}) {
-    for (int decimals = digits; decimals <= _maxDecimals; decimals += 1) {
-      final fixed = (value * scale).toStringAsFixed(decimals);
-      // Relative: `* scale` then `/ scale` may be off by a rounding error.
-      if ((double.parse(fixed) / scale - value).abs() <= value.abs() * 1e-12) {
-        return fixed;
+  static String exactDecimal(double value, int digits, {int shift = 0}) {
+    if (value >= 0) {
+      for (
+        int decimals = digits + shift;
+        decimals <= _maxDecimals;
+        decimals += 1
+      ) {
+        final fixed = value.toStringAsFixed(decimals);
+        if (double.parse(fixed) == value) return _movePoint(fixed, shift);
       }
     }
 
-    return '${value * scale}';
+    // NaN, negative, or too small for fixed notation.
+    return '${value * math.pow(10, shift)}';
   }
 
   /// The most decimals `toStringAsFixed` accepts.
   static const _maxDecimals = 20;
+
+  /// [fixed] (`0.0700`, at least [shift] decimals) with its point moved
+  /// [shift] places right (`7.00`).
+  static String _movePoint(String fixed, int shift) {
+    final parts = RegExp('^(\\d+)\\.(\\d{$shift})(\\d*)\$')
+        .firstMatch(fixed)
+        ?.groups([1, 2, 3]);
+    if (parts case [final whole?, final moved?, final rest?]) {
+      // BigInt drops the leading zeros (`007` is `7`) at any length.
+      final digits = BigInt.parse('$whole$moved');
+
+      return rest.isEmpty ? '$digits' : '$digits.$rest';
+    }
+
+    return fixed; // No decimals to move (`8`).
+  }
 
   static void _checkRatio(double value, String name) {
     if (value.isNaN || value < 0 || value > 1) {

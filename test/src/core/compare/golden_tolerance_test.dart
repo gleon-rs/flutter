@@ -64,6 +64,20 @@ void main() {
       reason: 'rounding must never misstate the threshold',
     );
     expect(
+      '${const GoldenTolerance.ssim(minSimilarity: 0.999_999_999_999_5)}',
+      startsWith('ssim ≥ 0.9999999999995,'),
+      reason: 'not 1.000, however close',
+    );
+    expect(
+      '${const GoldenTolerance.pixel(maxDiffRatio: 0.07)}',
+      'pixel ≤ 7.00%',
+      reason: 'the percentage is not computed in floating point',
+    );
+    expect(
+      '${const GoldenTolerance.pixel(maxDiffRatio: 1)}',
+      'pixel ≤ 100.00%',
+    );
+    expect(
       '${const GoldenTolerance.pixel(maxDiffRatio: 0.00001)}',
       'pixel ≤ 0.001%',
     );
