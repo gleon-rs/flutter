@@ -29,14 +29,16 @@ abstract final class ConsoleLine {
         SsimTolerance(:final colorTolerance, :final minSimilarity),
       ) =>
         'ssim ${minSsim.toStringAsFixed(3)} '
-            '(≥${minSimilarity.toStringAsFixed(3)}, '
+            '(≥${GoldenTolerance.exactDecimal(minSimilarity, 3)}, '
             '${_signed(similarityHeadroom, 3)})  '
             'color ${peakExcess.toStringAsFixed(1)} '
-            '(≤${_trimmed(colorTolerance)}, ${_signed(colorHeadroom, 1)})',
-      (PixelMetrics(:final diffPixels, :final diffRatio, :final headroom), _) =>
-        'pixel ${_percent(diffRatio)} ($diffPixels px, '
-            '≤${_percent(diffRatio + headroom)}, '
-            '${_signed(headroom * 100, 2)}%)',
+            '(≤${GoldenTolerance.exactDecimal(colorTolerance, 0)}, '
+            '${_signed(colorHeadroom, 1)})',
+      (final PixelMetrics pixel, PixelTolerance(:final maxDiffRatio)) => _pixel(
+        pixel,
+        maxDiffRatio,
+      ),
+      (final PixelMetrics pixel, ExactTolerance()) => _pixel(pixel, 0),
       _ => _withoutMetrics(outcome, message),
     };
 
@@ -58,10 +60,13 @@ abstract final class ConsoleLine {
       ? value.toStringAsFixed(digits)
       : '+${value.toStringAsFixed(digits)}';
 
-  static String _percent(double ratio) =>
-      '${(ratio * 100).toStringAsFixed(2)}%';
+  /// The measured share against [maxDiffRatio], the threshold of the
+  /// tolerance itself.
+  static String _pixel(PixelMetrics metrics, double maxDiffRatio) {
+    final PixelMetrics(:diffPixels, :diffRatio, :headroom) = metrics;
 
-  static String _trimmed(double value) => value == value.roundToDouble()
-      ? value.toStringAsFixed(0)
-      : value.toString();
+    return 'pixel ${(diffRatio * 100).toStringAsFixed(2)}% ($diffPixels px, '
+        '≤${GoldenTolerance.exactDecimal(maxDiffRatio, 2, scale: 100)}%, '
+        '${_signed(headroom * 100, 2)}%)';
+  }
 }

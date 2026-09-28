@@ -63,6 +63,15 @@ void main() {
       'ssim ≥ 0.9995, color ±7.5',
       reason: 'rounding must never misstate the threshold',
     );
+    expect(
+      '${const GoldenTolerance.pixel(maxDiffRatio: 0.00001)}',
+      'pixel ≤ 0.001%',
+    );
+    expect(
+      '${const GoldenTolerance.pixel(maxDiffRatio: .nan)}',
+      'pixel ≤ NaN%',
+      reason: 'a value no decimals can state is shown as is',
+    );
   });
 
   test('values compare by content', () {

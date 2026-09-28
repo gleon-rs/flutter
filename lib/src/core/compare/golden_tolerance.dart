@@ -65,10 +65,10 @@ sealed class GoldenTolerance {
   String toString() => switch (this) {
     ExactTolerance() => 'exact',
     PixelTolerance(:final maxDiffRatio) =>
-      'pixel \u2264 ${(maxDiffRatio * 100).toStringAsFixed(2)}%',
+      'pixel \u2264 ${exactDecimal(maxDiffRatio, 2, scale: 100)}%',
     SsimTolerance(:final colorTolerance, :final minSimilarity) =>
-      'ssim \u2265 ${_exact(minSimilarity, 3)}, '
-          'color \u00b1${_exact(colorTolerance, 0)}',
+      'ssim \u2265 ${exactDecimal(minSimilarity, 3)}, '
+          'color \u00b1${exactDecimal(colorTolerance, 0)}',
   };
 
   /// Parses a `gleon-model` `Tolerance` (as resolved from `.gleon/gleon.yaml`)
@@ -90,13 +90,25 @@ sealed class GoldenTolerance {
     _ => null,
   };
 
-  /// [value] with [digits] decimals, or in full when rounding would misstate
-  /// it (a message must never show a different threshold than the one used).
-  static String _exact(double value, int digits) {
-    final fixed = value.toStringAsFixed(digits);
+  /// A threshold [value] times [scale] (100 for a percentage) with [digits]
+  /// decimals, or with more when fewer would misstate it: a message must never
+  /// show a different threshold than the one used. Shared with the console
+  /// line.
+  @internal
+  static String exactDecimal(double value, int digits, {int scale = 1}) {
+    for (int decimals = digits; decimals <= _maxDecimals; decimals += 1) {
+      final fixed = (value * scale).toStringAsFixed(decimals);
+      // Relative: `* scale` then `/ scale` may be off by a rounding error.
+      if ((double.parse(fixed) / scale - value).abs() <= value.abs() * 1e-12) {
+        return fixed;
+      }
+    }
 
-    return double.parse(fixed) == value ? fixed : value.toString();
+    return '${value * scale}';
   }
+
+  /// The most decimals `toStringAsFixed` accepts.
+  static const _maxDecimals = 20;
 
   static void _checkRatio(double value, String name) {
     if (value.isNaN || value < 0 || value > 1) {

@@ -25,7 +25,7 @@ abstract final class SourceBuild {
   /// The Rust crate that produces the library.
   static const crate = 'gleon-ffi';
 
-  /// Workspace files whose change must re-run the build.
+  /// Workspace files whose change must re-run the build (when present).
   static const _workspaceFiles = [
     'Cargo.toml',
     'Cargo.lock',
@@ -141,7 +141,10 @@ abstract final class SourceBuild {
   /// reaches through `path` dependencies, so a new crate is tracked without
   /// changing this list.
   static List<Uri> inputs(Uri root) => [
-    for (final file in _workspaceFiles) root.resolve(file),
+    for (final file in _workspaceFiles)
+      if (File.fromUri(root.resolve(file)) case final workspaceFile
+          when workspaceFile.existsSync())
+        workspaceFile.uri,
     for (final member in _localCrates(root))
       if (File.fromUri(root.resolve('$member/Cargo.toml')) case final manifest
           when manifest.existsSync()) ...[

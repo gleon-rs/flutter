@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gleon/src/core/compare/golden_tolerance.dart';
 import 'package:gleon/src/core/native/native_metrics.dart';
 import 'package:gleon/src/core/report/case_outcome.dart';
 import 'package:gleon/src/core/report/console_line.dart';
@@ -77,5 +78,46 @@ void main() {
     );
 
     expect(line, contains('color 1.0 (≤7.5, +6.5)'));
+  });
+
+  test('thresholds come from the tolerance, never rounded', () {
+    String line(GoldenTolerance tolerance, NativeMetrics metrics) =>
+        ConsoleLine.format(
+          goldenPath: 'a.png',
+          outcome: .match,
+          tolerance: tolerance,
+          totalMilliseconds: 1,
+          metrics: metrics,
+        );
+    const pixel = PixelMetrics(
+      totalPixels: 100_000,
+      diffPixels: 0,
+      diffRatio: 0,
+      headroom: 0.00001,
+    );
+
+    expect(
+      line(
+        const .ssim(minSimilarity: 0.9995),
+        const SsimMetrics(
+          minSsim: 1,
+          meanSsim: 1,
+          peakExcess: 0,
+          changedPixels: 0,
+          failingPixels: 0,
+          similarityHeadroom: 0.0005,
+          colorHeadroom: 8,
+        ),
+      ),
+      contains('(≥0.9995, +0.001)'),
+    );
+    expect(
+      line(const .pixel(maxDiffRatio: 0.00001), pixel),
+      contains('pixel 0.00% (0 px, ≤0.001%, +0.00%)'),
+    );
+    expect(
+      line(const .exact(), pixel),
+      contains('pixel 0.00% (0 px, ≤0.00%, +0.00%)'),
+    );
   });
 }

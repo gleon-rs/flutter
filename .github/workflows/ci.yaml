@@ -1,4 +1,4 @@
-# Pull requests: package and example checks on every supported host, plus quality gates (DCM, pana,
+# Pull requests: package and example checks on every supported host, plus quality gates (pana,
 # publish dry run) on Linux x64. Pushes to main (merged pull requests) rerun only the
 # Linux x64 tests: everything else was validated on the pull request's last commit, and the push
 # run still uploads main's coverage baseline and metrics.
@@ -80,13 +80,15 @@ jobs:
           flutter analyze --fatal-infos
           flutter test
 
+      # Also after a failure: mismatches are the most useful calibration data. Missing reports are
+      # an error only when everything passed, so they never add a second error to a failed run.
       - name: Upload metrics
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: metrics-${{ matrix.target }}
           path: flutter/example/.gleon/runs/latest/cases/
-          if-no-files-found: error
+          if-no-files-found: ${{ job.status == 'success' && 'error' || 'warn' }}
 
       - name: Upload coverage
         if: ${{ matrix.target == 'linux-x64' }}
@@ -115,9 +117,6 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
-      # dcm-action reports through a check run and a pull request comment.
-      checks: write
-      pull-requests: write
     env:
       # Pinned like Flutter itself, so a tool release never changes results on its own.
       PANA_VERSION: "0.23.19"

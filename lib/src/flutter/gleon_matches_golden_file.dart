@@ -52,13 +52,16 @@ class GleonMatchesGoldenFile extends flutter_test.MatchesGoldenFile {
     final turn = done.future;
     _take(turn);
     final original = flutter_test.goldenFileComparator;
-    flutter_test.goldenFileComparator = GleonGoldenComparator(
-      original,
-      tolerance: tolerance,
-      masks: masks,
-      session: session,
-    );
     try {
+      // Inside the `try`: finding the workspace may throw, and the turn must
+      // still be released.
+      flutter_test.goldenFileComparator = GleonGoldenComparator(
+        original,
+        tolerance: tolerance,
+        masks: masks,
+        session: session,
+      );
+
       return await super.matchAsync(item);
     } finally {
       flutter_test.goldenFileComparator = original;

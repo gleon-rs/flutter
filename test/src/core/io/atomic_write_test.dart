@@ -23,7 +23,13 @@ void main() {
     await AtomicWrite.bytes(file, const [4, 5]);
 
     expect(file.readAsBytesSync(), [4, 5]);
-    expect(file.parent.listSync().map((entity) => entity.path), [file.path]);
+    // Only the file itself (compared by name: Windows lists `\` separators).
+    expect(
+      file.parent.listSync().map(
+        (entity) => entity.uri.pathSegments.lastOrNull,
+      ),
+      ['data.bin'],
+    );
   });
 
   test('concurrent writers never leave a partial file', () async {

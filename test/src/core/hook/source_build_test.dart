@@ -16,7 +16,11 @@ void main() {
   /// a trailing separator, like user-defines resolve it.
   String fakeCheckout() {
     final root = '${tempPath()}/gleon';
+    // No rust-toolchain.toml: optional workspace files are tracked only when
+    // present.
     final files = {
+      'Cargo.lock': '# lock',
+      'Cargo.toml': '[workspace]',
       '${SourceBuild.crate}/Cargo.toml':
           'gleon-engine = { path = "../gleon-engine" }\n'
           'gleon-model = { path = "../gleon-model", features = ["x"] }\n',
@@ -120,8 +124,8 @@ void main() {
     expect(
       inputs,
       containsAll([
+        root.resolve('Cargo.toml'),
         root.resolve('Cargo.lock'),
-        root.resolve('rust-toolchain.toml'),
         root.resolve('gleon-ffi/src/lib.rs'),
         root.resolve('gleon-model/Cargo.toml'),
         root.resolve('gleon-model/src/rules.rs'),
@@ -129,6 +133,7 @@ void main() {
       ]),
     );
     expect(inputs, isNot(contains(root.resolve('gleon-core/src/lib.rs'))));
+    expect(inputs, isNot(contains(root.resolve('rust-toolchain.toml'))));
     expect(inputs.toSet(), hasLength(inputs.length), reason: 'no duplicates');
   });
 
