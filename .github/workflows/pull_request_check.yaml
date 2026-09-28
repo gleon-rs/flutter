@@ -1,0 +1,108 @@
+# Pull request hygiene: branch name and title conventions, assignee, reviewer, and
+# auto-approval of Dependabot and owner pull requests (branch protection still requires the
+# checks to pass).
+name: Pull Request Check
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize, ready_for_review, edited]
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  branch-name:
+    name: Branch name
+    runs-on: ubuntu-26.04
+    timeout-minutes: 4
+    permissions: {}
+    steps:
+      - name: Check the branch naming convention
+        uses: lekterable/branchlint-action@cb295893552feff32a809be9c8a6a2535bbf7713 # 2.1.0
+        with:
+          allowed: /^(feat|feature|fix|bug|test|tests|refactor|perf|docs|doc|chore|style|ci|build|deps|dependabot)\/[a-zA-Z0-9_.\/-]+$/
+          errorMessage: >-
+            Branch names use Latin letters, digits and ".", "/", "-", "_" only and start with
+            feat/, feature/, fix/, bug/, test/, tests/, refactor/, perf/, docs/, doc/, chore/,
+            style/, ci/, build/ or deps/.
+
+  pr-title:
+    name: Semantic title
+    runs-on: ubuntu-26.04
+    timeout-minutes: 4
+    permissions:
+      pull-requests: read
+    steps:
+      - name: Lint the pull request title
+        uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
+        with:
+          requireScope: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Fork pull requests get a read-only token: the jobs below only run for branches of this
+  # repository.
+  assign:
+    name: Assignee
+    if: >-
+      github.event.action == 'opened' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 4
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Assign the owner
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            await github.rest.issues.addAssignees({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              assignees: ["tsinis"],
+            });
+
+  reviewer:
+    name: Reviewer
+    if: >-
+      github.event.action == 'opened' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login != 'tsinis'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 4
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Request the owner's review
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            await github.rest.pulls.requestReviewers({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              reviewers: ["tsinis"],
+            });
+
+  auto-approve:
+    name: Auto-approve
+    if: >-
+      !github.event.pull_request.draft &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (github.event.pull_request.user.login == 'dependabot[bot]' ||
+       github.event.pull_request.user.login == 'tsinis')
+    runs-on: ubuntu-26.04
+    timeout-minutes: 4
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Approve Dependabot and owner pull requests
+        uses: hmarr/auto-approve-action@f0939ea97e9205ef24d872e76833fa908a770363 # v4.0.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}

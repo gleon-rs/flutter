@@ -1,4 +1,8 @@
-name: CI
+# Pull requests: package and example checks on every supported host, plus quality gates (DCM, pana,
+# publish dry run) on Linux x64. Pushes to main (merged pull requests) rerun only the
+# Linux x64 tests: everything else was validated on the pull request's last commit, and the push
+# run still uploads main's coverage baseline and metrics.
+name: Flutter Check
 
 on:
   push:
@@ -9,23 +13,21 @@ on:
 permissions: {}
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   test:
     name: Test ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
+    # A cache miss builds gleon-ffi from source first (Windows is the slowest).
+    timeout-minutes: 45
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { os: macos-15, target: macos-arm64 }
-          - { os: ubuntu-26.04, target: linux-x64 }
-          - { os: ubuntu-26.04-arm, target: linux-arm64 }
-          - { os: windows-2025, target: windows-x64 }
+        include: ${{ fromJSON(github.event_name == 'push' && '[{"os":"ubuntu-26.04","target":"linux-x64"}]' || '[{"os":"macos-15","target":"macos-arm64"},{"os":"ubuntu-26.04","target":"linux-x64"},{"os":"ubuntu-26.04-arm","target":"linux-arm64"},{"os":"windows-2025","target":"windows-x64"}]') }}
     defaults:
       run:
         shell: bash
@@ -42,26 +44,115 @@ jobs:
         with:
           target: ${{ matrix.target }}
 
+      - name: Read the gleon pin
+        id: pin
+        run: echo "gleon_ref=$(tr -d '[:space:]' < native/gleon_ref)" >> "$GITHUB_OUTPUT"
+
+      # Case reports are validated against the committed JSON Schema of the pinned engine
+      # (`../gleon/gleon-model/schema/case.v1.json`); the tests skip that without the checkout.
+      - name: Check out the gleon schemas
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: gleon-rs/gleon
+          ref: ${{ steps.pin.outputs.gleon_ref }}
+          path: gleon
+          sparse-checkout: gleon-model/schema
+          persist-credentials: false
+
       - name: Package
+        env:
+          COVERAGE: ${{ matrix.target == 'linux-x64' && '--coverage' || '' }}
         run: |
           flutter pub get
           dart format --output=none --set-exit-if-changed .
-          flutter analyze
-          flutter test
+          flutter analyze --fatal-infos
+          flutter test $COVERAGE
 
       - name: Example app
         working-directory: flutter/example
+        env:
+          # Records a case report per golden (see example/.gleon/gleon.yaml): the cross-OS
+          # corpus for calibrating tolerances and text-aware comparison.
+          GLEON_METRICS: "1"
         run: |
           flutter pub get
-          flutter analyze
+          dart format --output=none --set-exit-if-changed .
+          flutter analyze --fatal-infos
           flutter test
+
+      - name: Upload metrics
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: metrics-${{ matrix.target }}
+          path: flutter/example/.gleon/runs/latest/cases/
+          if-no-files-found: error
+
+      - name: Upload coverage
+        if: ${{ matrix.target == 'linux-x64' }}
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: flutter/coverage/lcov.info
+          flags: flutter
+          name: flutter
+          override_branch: ${{ github.base_ref }}
+          verbose: true
 
       - name: Upload golden failures
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: golden-failures-${{ matrix.target }}
-          path: |
-            flutter/test/failures/
-            flutter/example/test/failures/
+          path: flutter/example/test/failures/
           if-no-files-found: ignore
+
+  quality:
+    name: Quality gates
+    # Validated on the pull request; a merge to main does not change the result.
+    if: ${{ github.event_name != 'push' }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      # dcm-action reports through a check run and a pull request comment.
+      checks: write
+      pull-requests: write
+    env:
+      # Pinned like Flutter itself, so a tool release never changes results on its own.
+      PANA_VERSION: "0.23.19"
+      # Points pana may lose (out of 160); locally 150/160. The 10 lost points are the
+      # repository check: pana clones the default branch, which still has `publish_to: none`.
+      # TODO(owner): set to "0" once that is merged and the first CI run confirms 160.
+      PANA_MAX_LOST_POINTS: "10"
+    defaults:
+      run:
+        shell: bash
+        working-directory: flutter
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: flutter
+          persist-credentials: false
+
+      # Nothing here runs the build hook, so the native library is not needed.
+      - name: Set up Flutter
+        uses: ./flutter/.github/actions/setup
+        with:
+          target: linux-x64
+          build: "false"
+
+      - name: Install dependencies
+        run: |
+          flutter pub get
+          (cd example && flutter pub get)
+
+      - name: Publish dry run
+        run: dart pub publish --dry-run
+
+      - name: pana
+        run: |
+          dart pub global activate pana "$PANA_VERSION"
+          dart pub global run pana . --no-warning --flutter-sdk "$FLUTTER_ROOT" \
+            --exit-code-threshold "$PANA_MAX_LOST_POINTS"

@@ -1,4 +1,6 @@
-include: package:lints/recommended.yaml
+# The package's configuration, relaxed like sealed_world's examples: an app
+# is not a library, so API docs are not required.
+include: ../analysis_options.yaml
 
 analyzer:
   exclude:
@@ -6,3 +8,13 @@ analyzer:
     - linux/**
     - macos/**
     - windows/**
+
+dart_code_metrics:
+  rules:
+    - prefer-localized-semantic-labels: false # The example is not localized.
+
+linter:
+  rules:
+    # Keeps the SDK's Material library: the goldens were recorded with it.
+    migrate_design_widgets: false
+    public_member_api_docs: false # An app, not a library.

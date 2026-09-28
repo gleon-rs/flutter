@@ -1,0 +1,23 @@
+# gleon workspace config: the same file the gleon CLI reads (`gleon init`).
+# The gleon Flutter package applies these rules to `matchesGoldenFile` calls
+# that pass no `tolerance`.
+required_version: ">=0.1.0"
+
+screenshots:
+  - include: "test/goldens/**/*.png"
+    mode: ssim
+    diff:
+      # The goldens are recorded on macOS. Other operating systems rasterize
+      # text differently (measured on Linux x64: min local SSIM 0.754, color
+      # excess 32.5 on the text line), so the tolerance is loosened well past
+      # that for now; an 11px change of the progress bar still fails.
+      # Temporary until text-aware comparison lands (per-platform goldens are
+      # the alternative); CI records metrics on every OS to replace these
+      # guesses with measurements.
+      min_similarity: 0.6
+      color_tolerance: 64
+
+# Per-golden case reports in .gleon/runs/latest/cases/; CI turns them on with
+# GLEON_METRICS=1.
+metrics:
+  enabled: false

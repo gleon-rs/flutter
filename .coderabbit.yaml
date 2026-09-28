@@ -1,0 +1,187 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+
+language: "en"
+tone_instructions: "Senior-level review. Prioritize FFI safety, low-level correctness and a Flutter-free core. Be concise, factual and direct."
+early_access: true
+
+reviews:
+  profile: "assertive"
+  high_level_summary: true
+  collapse_walkthrough: true
+  changed_files_summary: true
+  sequence_diagrams: false
+  poem: false
+  in_progress_fortune: false
+  estimate_code_review_effort: true
+  suggested_labels: true
+  auto_apply_labels: true
+  suggested_reviewers: false
+  enable_prompt_for_ai_agents: true
+
+  auto_review:
+    enabled: true
+    auto_incremental_review: true
+    drafts: false
+    ignore_title_keywords:
+      - "WIP"
+      - "DO NOT MERGE"
+      - "LLM IGNORE"
+
+  # Same labels as .github/dependabot.yml.
+  labeling_instructions:
+    - label: "enhancement"
+      instructions: "New user-facing functionality or capability."
+    - label: "fix"
+      instructions: "Bug fix: corrects incorrect behavior or a regression."
+    - label: "documentation"
+      instructions: "Documentation-only changes (README, CHANGELOG, doc comments)."
+    - label: "refactor"
+      instructions: "Code restructuring with no change in external behavior."
+    - label: "test"
+      instructions: "Adding or updating tests only, no production code changes."
+    - label: "ci"
+      instructions: "Changes to GitHub Actions workflows, the setup action or build pipelines."
+    - label: "chore"
+      instructions: "Routine maintenance: tooling config, formatting, lints."
+    - label: "perf"
+      instructions: "Performance improvement with no functional change."
+    - label: "dependencies"
+      instructions: "Dependency or SDK constraint changes (pubspec.yaml, native/gleon_ref)."
+    - label: "dart"
+      instructions: "Touches Dart code (lib/, hook/, bin/, test/, example/)."
+    - label: "github-actions"
+      instructions: "Touches .github/workflows or .github/actions."
+
+  path_filters:
+    - "!**/*.lock"
+    - "!build/**"
+    - "!**/.dart_tool/**"
+    - "!**/*.png"
+    - "!example/{linux,macos,windows}/**"
+
+  path_instructions:
+    - path: "hook/**"
+      instructions: >
+        The build hook runs in every consumer's package graph, so treat it like security- and
+        availability-critical code.
+
+        - Consumers must never need Rust: `ffi_path` and `gleon_repo` are explicit opt-ins, and
+          a source build is never a silent fallback.
+        - Every file whose change must re-run the hook is added to `output.dependencies`.
+        - Downloaded libraries are verified against the release's SHA256SUMS.txt before use;
+          only https (plain http to localhost) is allowed, also across redirects.
+        - Errors are actionable (what failed and what to do) and printed verbatim by the
+          hooks runner.
+        - The asset id must equal the `@DefaultAsset` of `lib/src/core/native/gleon_ffi.dart`.
+        - Keep it thin: logic belongs in `lib/src/core/hook/` where it is unit-tested.
+
+    - path: "lib/src/core/native/**"
+      instructions: >
+        FFI boundary to `gleon-ffi` (safer-ffi, JSON over byte slices). The most
+        safety-critical Dart code in the package.
+
+        - Signatures must match the Rust exports exactly (`Size` for `usize`, slices returned
+          by value as `{ptr, len}`), and `NativeEngine.expectedAbiVersion` must match
+          `ABI_VERSION` in gleon-ffi.
+        - Every `gleon_compare` result is freed exactly once in `finally`; slices borrowed
+          from it are copied out before the free, never used after it.
+        - `isLeaf: true` is deliberate: it allows zero-copy `Uint8List.address` inputs, and the
+          GC pause during a comparison is acceptable for tests (see the library doc of
+          `gleon_ffi.dart`). Do not suggest `Isolate.run`, `malloc` or finalizers without a
+          measured problem.
+        - Reports are parsed with patterns into sealed types; anything off-contract becomes
+          an error, never a pass; no `as` casts.
+
+    - path: "lib/src/core/**"
+      instructions: >
+        Plain-Dart core: it must never import Flutter (`dart:ui`, `package:flutter`,
+        `package:flutter_test`), so it stays usable from the build hook, `dart test` and other
+        SDKs. Flutter types are converted in `lib/src/flutter/`.
+
+    - path: "lib/src/flutter/**"
+      instructions: >
+        Flutter layer of a drop-in `matchesGoldenFile`: default behavior, messages and golden
+        paths must stay identical to flutter_test's; passing tests write nothing.
+
+    - path: "bin/**"
+      instructions: >
+        Maintainer scripts, run with plain `dart bin/<script>.dart` (not `dart run`, which runs
+        the build hook first). Only `dart:*`, `package:crypto` and this package may be imported
+        (pub's strict-dependencies check); no shell scripts.
+
+    - path: ".github/**"
+      instructions: >
+        GitHub Actions. Every action is pinned by full commit SHA with a `# vX.Y.Z` comment;
+        `permissions: {}` at the top and least privilege per job; every job has
+        `timeout-minutes`, every workflow `concurrency`. Linux runners are `ubuntu-26.04` or
+        `ubuntu-26.04-arm` only. Tool versions (Flutter, DCM, pana) are pinned and bumped
+        deliberately.
+
+  pre_merge_checks:
+    title:
+      mode: "warning"
+      requirements: >
+        PR title MUST follow Conventional Commits: `type(optional-scope): description`.
+        Allowed types: feat, fix, docs, refactor, test, ci, chore, perf, build, style, revert.
+        Lowercase after the colon, max ~72 characters.
+    description:
+      mode: "warning"
+    docstrings:
+      mode: "off"
+
+  finishing_touches:
+    docstrings:
+      enabled: false
+    unit_tests:
+      enabled: false
+    simplify:
+      enabled: true
+
+  slop_detection:
+    enabled: true
+
+  tools:
+    actionlint:
+      enabled: true
+    yamllint:
+      enabled: true
+    markdownlint:
+      enabled: true
+    gitleaks:
+      enabled: true
+    shellcheck:
+      enabled: true
+
+chat:
+  art: false
+  auto_reply: true
+
+knowledge_base:
+  web_search:
+    enabled: true
+  learnings:
+    scope: "local"
+  issues:
+    scope: "local"
+  pull_requests:
+    scope: "local"
+
+code_generation:
+  docstrings:
+    language: "en-US"
+    path_instructions:
+      - path: "lib/**/*.dart"
+        instructions: >
+          Use `///` dartdoc comments. For FFI bindings, document the memory contract (who
+          allocates, who frees) and name the Rust function. For public API, include a short
+          example using dot shorthands where it helps.
+  unit_tests:
+    path_instructions:
+      - path: "lib/src/core/**/*.dart"
+        instructions: >
+          Mirror lib/ under test/src/ (DCM match-lib-folder-structure). No native library or
+          network access: use local servers and temp directories.
+      - path: "lib/src/flutter/**/*.dart"
+        instructions: >
+          Golden tests live in test/matches_golden_file/ and use the GoldenSandbox helper so
+          parallel test files never race on failure artifacts.

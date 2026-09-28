@@ -28,7 +28,10 @@ doc/api/
 .flutter-plugins
 .flutter-plugins-dependencies
 
-test/failures/
+# Golden failure artifacts (package tests write them into a temp sandbox).
+test/**/failures/
+example/test/failures/
+coverage/
 .antigravity/
 CLAUDE.local.md
 

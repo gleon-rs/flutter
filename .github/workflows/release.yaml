@@ -14,11 +14,14 @@ permissions: {}
 
 concurrency:
   group: release-${{ github.ref }}
+  # Never cancel a half-published release.
+  cancel-in-progress: false
 
 jobs:
   check:
     name: Check version
     runs-on: ubuntu-26.04
+    timeout-minutes: 5
     permissions:
       contents: read
     steps:
@@ -38,6 +41,8 @@ jobs:
     name: Build ${{ matrix.target }}
     needs: check
     runs-on: ${{ matrix.os }}
+    # Always a fresh gleon-ffi build (no cache), then the tests.
+    timeout-minutes: 60
     permissions:
       contents: read
       id-token: write
@@ -69,7 +74,7 @@ jobs:
 
       - name: Test with the fresh library
         run: |
-          flutter analyze
+          flutter analyze --fatal-infos
           flutter test
           cd example
           flutter pub get
@@ -92,6 +97,7 @@ jobs:
     name: Publish GitHub Release
     needs: build
     runs-on: ubuntu-26.04
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
@@ -120,6 +126,7 @@ jobs:
     name: Verify download ${{ matrix.target }}
     needs: release
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     permissions:
       contents: read
     strategy:

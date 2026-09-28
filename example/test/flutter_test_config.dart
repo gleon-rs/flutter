@@ -1,21 +1,59 @@
-import 'dart:async';
-
+import 'package:flutter/material.dart';
+// The only change from a stock Flutter test is this import (instead of
+// flutter_test): gleon re-exports flutter_test and replaces matchesGoldenFile.
+// The tolerance comes from the rule in `.gleon/gleon.yaml`.
 import 'package:gleon/gleon.dart';
+import 'package:gleon_example/main.dart';
 
-/// Suite-wide gleon defaults: tolerate rendering noise between machines
-/// (anti-aliasing, sub-pixel geometry) while still catching real changes.
-///
-/// The goldens are recorded on macOS. Other operating systems rasterize text
-/// differently (measured on Linux x64: min local SSIM 0.754, color excess 32.5
-/// on the text line), so the tolerances are loosened well past that for now.
-/// An 11px change of the progress bar still fails with these settings.
-/// Temporary until text-aware comparison lands; per-platform goldens are the
-/// alternative.
-Future<void> testExecutable(FutureOr<void> Function() testMain) async {
-  gleonGoldenDefaults = const GleonGoldenConfig(
-    mode: GoldenMode.ssim,
-    minSimilarity: 0.6,
-    colorTolerance: 64,
-  );
-  await testMain();
+/// A small phone-sized surface keeps the golden PNGs small.
+void _usePhoneSurface() {
+  final view =
+      TestWidgetsFlutterBinding.instance.platformDispatcher.implicitView;
+  if (view == null) return;
+  view
+    ..physicalSize = const Size(360, 640)
+    ..devicePixelRatio = 1;
+  addTearDown(view.reset);
+}
+
+void main() {
+  setUp(_usePhoneSurface);
+
+  testWidgets('increments the counter', (tester) async {
+    await tester.pumpWidget(const Main());
+    expect(find.text('0'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('increment')));
+    await tester.pump();
+
+    expect(find.text('1'), findsOneWidget);
+  });
+
+  testWidgets('matches the initial golden', (tester) async {
+    await tester.pumpWidget(const Main());
+
+    await expectLater(
+      find.byType(Main),
+      matchesGoldenFile('goldens/counter_initial.png'),
+    );
+  });
+
+  testWidgets('matches the golden after three taps', (tester) async {
+    await tester.pumpWidget(const Main());
+    for (int i = 0; i < 3; i += 1) {
+      await tester.tap(find.byKey(const ValueKey('increment')));
+    }
+    await tester.pumpAndSettle();
+
+    await expectLater(
+      find.byType(Main),
+      // Shows ignoreRegions (golden PNG pixels): the FAB corner is excluded,
+      // and the dot shorthand for an inline tolerance.
+      matchesGoldenFile(
+        'goldens/counter_three_taps.png',
+        tolerance: const .ssim(minSimilarity: 0.6, colorTolerance: 64),
+        ignoreRegions: [const Rect.fromLTWH(280, 560, 80, 80)],
+      ),
+    );
+  });
 }

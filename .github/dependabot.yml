@@ -1,10 +1,48 @@
+# Weekly updates on Sunday morning (Vienna). Labels match .coderabbit.yaml; a 7-day
+# cooldown skips releases that get yanked or patched right away.
 version: 2
 updates:
   - package-ecosystem: github-actions
-    directories: ["/", "/.github/actions/setup"]
+    directories:
+      - "/"
+      - "/.github/actions/setup"
     schedule:
       interval: weekly
+      day: sunday
+      time: "09:00"
+      timezone: Europe/Vienna
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: chore
+      include: scope
+    labels:
+      - dependencies
+      - github-actions
+    open-pull-requests-limit: 10
+    groups:
+      github-actions:
+        patterns: ["*"]
+
   - package-ecosystem: pub
-    directories: ["/", "/example"]
+    directories:
+      - "/"
+      - "/example"
+    versioning-strategy: increase
     schedule:
       interval: weekly
+      day: sunday
+      time: "09:00"
+      timezone: Europe/Vienna
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: chore
+      include: scope
+    labels:
+      - dependencies
+      - dart
+    open-pull-requests-limit: 5
+    groups:
+      pub-minor-and-patch:
+        update-types: [minor, patch]

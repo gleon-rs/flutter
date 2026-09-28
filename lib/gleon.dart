@@ -10,7 +10,6 @@ library;
 
 export 'package:flutter_test/flutter_test.dart' hide matchesGoldenFile;
 
-export 'src/comparator.dart' show GleonGoldenComparator;
-export 'src/config.dart'
-    show GleonGoldenConfig, GoldenMode, gleonGoldenDefaults;
-export 'src/matcher.dart' show GleonMatchesGoldenFile, matchesGoldenFile;
+export 'src/core/compare/golden_tolerance.dart'
+    show ExactTolerance, GoldenTolerance, PixelTolerance, SsimTolerance;
+export 'src/flutter/match_golden_file.dart' show matchesGoldenFile;
