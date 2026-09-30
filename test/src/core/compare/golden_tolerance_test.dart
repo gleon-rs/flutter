@@ -11,45 +11,6 @@ void main() {
     expect(const SsimTolerance().colorTolerance, 8);
   });
 
-  test('every variant speaks the gleon-model Tolerance format', () {
-    expect(const GoldenTolerance.exact().toNativeJson(), {'kind': 'exact'});
-    expect(const GoldenTolerance.pixel(maxDiffRatio: 0.2).toNativeJson(), {
-      'kind': 'pixel',
-      'max_diff_ratio': 0.2,
-    });
-    expect(
-      const GoldenTolerance.ssim(
-        minSimilarity: 0.9,
-        colorTolerance: 4,
-      ).toNativeJson(),
-      {'color_tolerance': 4.0, 'kind': 'ssim', 'min_similarity': 0.9},
-    );
-  });
-
-  test('resolved tolerances round-trip', () {
-    for (final tolerance in const <GoldenTolerance>[
-      .exact(),
-      .pixel(maxDiffRatio: 0.2),
-      .ssim(minSimilarity: 0.6, colorTolerance: 64),
-    ]) {
-      expect(
-        GoldenTolerance.fromNativeJson(tolerance.toNativeJson()),
-        tolerance,
-      );
-    }
-    expect(
-      GoldenTolerance.fromNativeJson(const {
-        'color_tolerance': 64,
-        'kind': 'ssim',
-        'min_similarity': 1,
-      }),
-      const GoldenTolerance.ssim(minSimilarity: 1, colorTolerance: 64),
-      reason: 'integral JSON numbers are accepted',
-    );
-    expect(GoldenTolerance.fromNativeJson(const {'kind': 'fuzzy'}), isNull);
-    expect(GoldenTolerance.fromNativeJson(const {'kind': 'pixel'}), isNull);
-  });
-
   test('descriptions name the thresholds', () {
     expect('${const GoldenTolerance.exact()}', 'exact');
     expect('${const GoldenTolerance.pixel()}', 'pixel ≤ 1.00%');
@@ -58,20 +19,16 @@ void main() {
       minSimilarity: 0.9995,
       colorTolerance: 7.5,
     );
+    expect('$precise', 'ssim ≥ 0.9995, color ±7.5');
     expect(
-      '$precise',
-      'ssim ≥ 0.9995, color ±7.5',
-      reason: 'rounding must never misstate the threshold',
-    );
-    expect(
-      '${const GoldenTolerance.ssim(minSimilarity: 0.999_999_999_999_5)}',
-      startsWith('ssim ≥ 0.9999999999995,'),
-      reason: 'not 1.000, however close',
+      '${const GoldenTolerance.ssim(minSimilarity: 0.99995)}',
+      startsWith('ssim ≥ 1.000,'),
+      reason: 'four decimals are what a developer acts on',
     );
     expect(
       '${const GoldenTolerance.pixel(maxDiffRatio: 0.07)}',
       'pixel ≤ 7.00%',
-      reason: 'the percentage is not computed in floating point',
+      reason: 'rounding hides the floating point error of 0.07 * 100',
     );
     expect(
       '${const GoldenTolerance.pixel(maxDiffRatio: 1)}',
@@ -82,9 +39,18 @@ void main() {
       'pixel ≤ 0.001%',
     );
     expect(
+      '${const GoldenTolerance.pixel(maxDiffRatio: 1e-9)}',
+      'pixel ≤ <0.0001%',
+      reason: 'a positive threshold never reads as zero',
+    );
+    expect(
+      // ignore: prefer_int_literals, only a double literal is negative zero.
+      '${const GoldenTolerance.pixel(maxDiffRatio: -0.0)}',
+      'pixel ≤ 0.00%',
+    );
+    expect(
       '${const GoldenTolerance.pixel(maxDiffRatio: .nan)}',
       'pixel ≤ NaN%',
-      reason: 'a value no decimals can state is shown as is',
     );
   });
 

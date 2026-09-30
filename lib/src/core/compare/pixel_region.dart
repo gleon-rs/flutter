@@ -4,6 +4,7 @@ import 'package:meta/meta.dart';
 ///
 /// Used both for masks sent to the engine and for regions it reports.
 @immutable
+@pragma('vm:deeply-immutable')
 final class PixelRegion {
   /// Creates a region.
   const PixelRegion({
@@ -27,27 +28,6 @@ final class PixelRegion {
 
   @override
   int get hashCode => Object.hash(x, y, width, height);
-
-  /// Parses an engine `Region` (`{x, y, width, height}`) with patterns, or
-  /// returns null for another shape.
-  static PixelRegion? fromNativeJson(Object? json) => switch (json) {
-    {
-      'height': final int height,
-      'width': final int width,
-      'x': final int x,
-      'y': final int y,
-    } =>
-      .new(x: x, y: y, width: width, height: height),
-    _ => null,
-  };
-
-  /// The engine `Region` JSON.
-  Map<String, int> toNativeJson() => {
-    'height': height,
-    'width': width,
-    'x': x,
-    'y': y,
-  };
 
   @override
   bool operator ==(Object other) =>
