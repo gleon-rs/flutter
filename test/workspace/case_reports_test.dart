@@ -198,7 +198,12 @@ void main() {
     final lines = await _capturePrints(match);
     final report = sandbox.readCase('test/goldens/new/swatch');
 
-    expect(results.singleOrNull, contains('non-existent file'));
+    // Word for word the failure of Flutter's own comparator.
+    expect(
+      results.singleOrNull,
+      'Could not be compared against non-existent file: '
+      '"goldens/new/swatch.png"',
+    );
     expect(report, containsPair('outcome', 'missing'));
     expect(report['golden'], {'path': 'test/goldens/new/swatch.png'});
     expect(report['candidate'], containsPair('sha256', _isSha256()));
