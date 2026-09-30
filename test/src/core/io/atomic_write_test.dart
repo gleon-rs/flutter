@@ -80,4 +80,27 @@ void main() {
       expect(await AtomicWrite.isKept(fileIn('missing.dll')), isFalse);
     },
   );
+
+  test(
+    'an unreadable file is not kept, so the rename error surfaces',
+    () async {
+      final file = fileIn('locked.dll')..writeAsBytesSync(const [7]);
+      Process.runSync('chmod', ['000', file.path]);
+      addTearDown(() => Process.runSync('chmod', ['644', file.path]));
+      final hash = sha256.convert(const [7]).toString();
+      bool isReadable;
+      try {
+        await AtomicWrite.sha256Of(file);
+        isReadable = true;
+      } on FileSystemException {
+        isReadable = false;
+      }
+
+      expect(
+        await AtomicWrite.isKept(file, expectedSha256: hash),
+        isReadable, // Root reads it anyway.
+      );
+    },
+    skip: Platform.isWindows ? 'no chmod on Windows' : null,
+  );
 }

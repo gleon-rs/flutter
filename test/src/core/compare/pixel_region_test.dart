@@ -14,10 +14,4 @@ void main() {
     );
     expect('$region', '(1, 2) 3x4px');
   });
-
-  test('round-trips the engine Region JSON', () {
-    expect(PixelRegion.fromNativeJson(region.toNativeJson()), region);
-    expect(PixelRegion.fromNativeJson(const {'x': 1}), isNull);
-    expect(PixelRegion.fromNativeJson(null), isNull);
-  });
 }

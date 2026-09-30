@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart' as flutter_test;
 import '../core/compare/golden_tolerance.dart';
 import '../core/compare/pixel_region.dart';
 import '../core/config/gleon_session.dart';
-import 'case_recorder.dart';
+import 'flutter_session.dart';
 import 'gleon_golden_comparator.dart';
 
 /// The matcher created by `matchesGoldenFile`.
@@ -31,12 +31,13 @@ class GleonMatchesGoldenFile extends flutter_test.MatchesGoldenFile {
   /// Regions excluded from the comparison, in whole pixels of the golden.
   final List<PixelRegion> masks;
 
-  /// Workspace and environment; [GleonSession.process] when null (tests
+  /// Workspace and environment; [FlutterSession.process] when null (tests
   /// inject their own).
   final GleonSession? session;
 
-  /// The turn of the match currently holding `goldenFileComparator`, if any.
-  static Future<void>? _inFlight;
+  /// The turn of the match currently holding `goldenFileComparator`, if any;
+  /// it completes when the match releases it.
+  static Completer<void>? _inFlight;
 
   @override
   Future<String?> matchAsync(Object? item) async {
@@ -46,10 +47,9 @@ class GleonMatchesGoldenFile extends flutter_test.MatchesGoldenFile {
     // overlap waits: awaiting a future of an earlier test would schedule the
     // continuation in that test's finished (fake async) zone.
     while (_inFlight != null) {
-      await _inFlight;
+      await _inFlight?.future;
     }
-    final done = Completer<void>();
-    final turn = done.future;
+    final turn = Completer<void>();
     _take(turn);
     final original = flutter_test.goldenFileComparator;
     try {
@@ -66,23 +66,24 @@ class GleonMatchesGoldenFile extends flutter_test.MatchesGoldenFile {
     } finally {
       flutter_test.goldenFileComparator = original;
       _release(turn);
-      done.complete();
     }
   }
 
-  /// Takes the [turn]. A match abandoned by a timed-out test never completes,
-  /// so the turn is also released when that test ends, never blocking later
-  /// tests.
-  static void _take(Future<void> turn) {
+  /// Takes the [turn]. A match abandoned by a timed-out test never reaches
+  /// its `finally`, so the turn is also released when that test ends: later
+  /// tests never block, and matches already waiting for it wake up.
+  static void _take(Completer<void> turn) {
     _inFlight = turn;
     // Outside a test (`addTearDown` would throw) nothing can abandon it.
-    if (CaseRecorder.currentTestName != null) {
+    if (FlutterSession.currentTestName != null) {
       flutter_test.addTearDown(() => _release(turn));
     }
   }
 
-  static void _release(Future<void> turn) {
+  /// Releases [turn] (once; a later call is a no-op) and wakes its waiters.
+  static void _release(Completer<void> turn) {
     if (identical(_inFlight, turn)) _inFlight = null;
+    if (!turn.isCompleted) turn.complete();
   }
 
   @override

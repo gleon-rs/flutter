@@ -66,16 +66,28 @@ void main() {
       .fromLTWH(0, -1, 5, 5),
       .fromLTWH(0, 0, 0, 5),
       .fromLTRB(0, 0, .infinity, 5),
+      // Would wrap around to 705032704 as an unsigned 32-bit pixel.
+      .fromLTWH(5_000_000_000, 0, 5, 5),
+      .fromLTWH(0, 4_294_967_295, 1, 1),
     ]) {
       expect(
         () => matchesGoldenFile(Swatch.golden, ignoreRegions: [region]),
         _throwsInvalid(
           'ignoreRegions',
-          'must be finite, non-empty and have non-negative coordinates',
+          'must be finite, non-empty and have coordinates between 0 and '
+              '4294967295',
         ),
         reason: '$region',
       );
     }
+    expect(
+      () => matchesGoldenFile(
+        Swatch.golden,
+        ignoreRegions: const [.fromLTWH(4_294_967_294, 0, 1, 1)],
+      ),
+      returnsNormally,
+      reason: 'the last pixel of the range',
+    );
   });
 
   test('rejects unsupported key types like Flutter', () {

@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:gleon/gleon.dart';
 import 'package:gleon/src/core/config/gleon_session.dart';
+import 'package:gleon/src/flutter/gleon_golden_comparator.dart';
 
 import '../helpers/blob.dart';
 import '../helpers/swatch.dart';
@@ -133,8 +134,8 @@ void main() {
       lines.singleOrNull,
       matches(
         RegExp(
-          r'^gleon ✓ test/goldens/blob\.png  ssim \d\.\d{3} \(≥0\.800, '
-          r'\+\d\.\d{3}\)  color \d+\.\d \(≤8, [+-]\d+\.\d\)  \d+ ms$',
+          r'^gleon ✓ test/goldens/blob\.png  ssim \d\.\d{3,4} \(≥0\.800, '
+          r'\+\d\.\d{3,4}\)  color \d+\.\d \(≤8, [+-]\d+\.\d\)  \d+ ms$',
         ),
       ),
     );
@@ -183,6 +184,98 @@ void main() {
     expect(report, containsPair('outcome', 'updated'));
     expect(report.containsKey('metrics'), isFalse);
     expect(report['golden'], containsPair('path', 'test/goldens/new.png'));
+  });
+
+  testWidgets('missing: a new golden is recorded without a golden hash', (
+    tester,
+  ) async {
+    final sandbox = WorkspaceSandbox.create(_yaml);
+    await tester.pumpWidget(const Swatch());
+    final results = <String?>[];
+    Future<void> match() async => results.add(
+      await sandbox.matcher('goldens/new/swatch.png').matchAsync(Swatch.finder),
+    );
+    final lines = await _capturePrints(match);
+    final report = sandbox.readCase('test/goldens/new/swatch');
+
+    expect(results.singleOrNull, contains('non-existent file'));
+    expect(report, containsPair('outcome', 'missing'));
+    expect(report['golden'], {'path': 'test/goldens/new/swatch.png'});
+    expect(report['candidate'], containsPair('sha256', _isSha256()));
+    expect(
+      lines.singleOrNull,
+      startsWith('gleon ? test/goldens/new/swatch.png  missing  '),
+    );
+  });
+
+  test('error: a corrupt candidate is recorded as an image error', () async {
+    final sandbox = WorkspaceSandbox.create(_yaml);
+    final failure = await sandbox
+        .matcher(Swatch.golden)
+        .matchAsync(Uint8List.fromList(List.filled(64, 7)));
+    final report = sandbox.readCase('test/goldens/swatch');
+
+    expect(failure, contains('gleon could not compare: candidate image'));
+    expect(failure, isNot(contains(GleonGoldenComparator.bugHint)));
+    expect(report, containsPair('outcome', 'error'));
+    expect(report, containsPair('message', startsWith('candidate image')));
+  });
+
+  testWidgets('masks beyond the image warn', (tester) async {
+    final sandbox = WorkspaceSandbox.create(_yaml);
+    // Masks apply only to differing images: the dot inside the mask differs.
+    await tester.pumpWidget(const Swatch(dot: Offset(96, 5)));
+    final lines = await _capturePrints(
+      () => expectLater(
+        Swatch.finder,
+        sandbox.matcher(
+          Swatch.golden,
+          ignoreRegions: const [Rect.fromLTWH(95, 0, 10, 10)],
+        ),
+      ),
+    );
+
+    expect(
+      lines.firstOrNull,
+      'gleon: 1 mask of golden "goldens/swatch.png" reaches beyond the image '
+      'and was clipped to it.',
+    );
+  });
+
+  testWidgets('several warnings print one line each', (tester) async {
+    final sandbox = WorkspaceSandbox.create(_yaml);
+    await tester.pumpWidget(const Swatch(dot: Offset(96, 5)));
+    final lines = await _capturePrints(
+      () => expectLater(
+        Swatch.finder,
+        sandbox.matcher(
+          Swatch.golden,
+          ignoreRegions: const [Rect.fromLTWH(95, 0, 10, 10)],
+          session: sessionWithoutWorkspace(metricsEnv: '1'),
+        ),
+      ),
+    );
+
+    expect(lines, hasLength(2));
+    expect(lines.firstOrNull, startsWith('gleon: 1 mask of golden'));
+    expect(lines.lastOrNull, startsWith('gleon: GLEON_METRICS is set but'));
+  });
+
+  testWidgets('an unwritable case report only warns', (tester) async {
+    final sandbox = WorkspaceSandbox.create(_yaml);
+    // A file where the cases directory should be.
+    File('${sandbox.root.path}/.gleon/runs/latest/cases')
+      ..parent.createSync(recursive: true)
+      ..createSync();
+    await tester.pumpWidget(const Swatch());
+    final lines = await _capturePrints(
+      () => expectLater(Swatch.finder, sandbox.matcher(Swatch.golden)),
+    );
+
+    expect(
+      lines.singleOrNull,
+      startsWith('gleon: cannot write the case report'),
+    );
   });
 
   // Finder inputs run the comparator inside Flutter's `binding.runAsync`
@@ -273,29 +366,46 @@ void main() {
       expect(sandbox.recordedFiles, isEmpty);
     });
 
-    testWidgets('an invalid value fails like a bad config', (tester) async {
+    testWidgets('an invalid value fails, with or without a workspace', (
+      tester,
+    ) async {
       final sandbox = WorkspaceSandbox.create(_yaml);
       await tester.pumpWidget(const Swatch());
-      final message = await sandbox
-          .matcher(Swatch.golden, session: sandbox.session(metricsEnv: 'yes'))
-          .matchAsync(Swatch.finder);
+      for (final session in [
+        sandbox.session(metricsEnv: 'yes'),
+        sessionWithoutWorkspace(metricsEnv: 'yes'),
+      ]) {
+        final message = await sandbox
+            .matcher(Swatch.golden, session: session)
+            .matchAsync(Swatch.finder);
 
-      expect(message, contains('GLEON_METRICS must be 1, 0, true or false'));
+        expect(message, contains('GLEON_METRICS must be 1, 0, true or false'));
+      }
     });
 
-    test('without a workspace warns once, only when requested', () {
-      final session = GleonSession(workspace: null, metricsEnv: '1');
+    testWidgets('without a workspace warns once, only when requested', (
+      tester,
+    ) async {
+      final sandbox = WorkspaceSandbox.create(_yaml);
+      await tester.pumpWidget(const Swatch());
+      Future<List<String>> run(GleonSession session) => _capturePrints(
+        () => expectLater(
+          Swatch.finder,
+          sandbox.matcher(Swatch.golden, session: session),
+        ),
+      );
+      final session = sessionWithoutWorkspace(metricsEnv: '1');
 
-      expect(session.takeMissingWorkspaceWarning(), contains('gleon init'));
-      expect(session.takeMissingWorkspaceWarning(), isNull);
-      for (final value in ['0', 'false', ' ', null]) {
+      final lines = await run(session);
+
+      expect(lines, hasLength(1));
+      expect(lines.singleOrNull, contains('gleon init'));
+      expect(await run(session), isEmpty, reason: 'once per session');
+      for (final value in ['0', 'false', ' ', GleonSession.unsetMetricsEnv]) {
         expect(
-          GleonSession(
-            workspace: null,
-            metricsEnv: value,
-          ).takeMissingWorkspaceWarning(),
-          isNull,
-          reason: 'GLEON_METRICS=${value ?? '(unset)'}',
+          await run(sessionWithoutWorkspace(metricsEnv: value)),
+          isEmpty,
+          reason: 'GLEON_METRICS="$value"',
         );
       }
     });

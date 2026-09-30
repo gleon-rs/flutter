@@ -6,8 +6,9 @@ import 'package:meta/meta.dart';
 
 /// File writes that other processes never observe half-done.
 ///
-/// Plain Dart (no Flutter imports): shared by the build hook (library cache)
-/// and the matcher (failure artifacts, later metrics).
+/// Plain Dart (no Flutter imports): the build hook's library cache. The
+/// matcher writes nothing itself; the native engine writes failure artifacts,
+/// case reports and goldens.
 abstract final class AtomicWrite {
   static final _random = Random.secure();
 
@@ -36,11 +37,18 @@ abstract final class AtomicWrite {
   }
 
   /// Whether an existing [file] that could not be replaced may stay: it
-  /// exists and, when [expectedSha256] is given, has exactly that content.
+  /// exists and, when [expectedSha256] is given, has exactly that content. An
+  /// unreadable file is not kept, so the rename error is the one reported.
   @visibleForTesting
-  static Future<bool> isKept(File file, {String? expectedSha256}) async =>
-      file.existsSync() &&
-      (expectedSha256 == null || await sha256Of(file) == expectedSha256);
+  static Future<bool> isKept(File file, {String? expectedSha256}) async {
+    if (!file.existsSync()) return false;
+    if (expectedSha256 == null) return true;
+    try {
+      return await sha256Of(file) == expectedSha256;
+    } on FileSystemException {
+      return false;
+    }
+  }
 
   static bool _isFileSystemError(Object error) => error is FileSystemException;
 

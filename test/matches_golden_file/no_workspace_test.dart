@@ -2,11 +2,11 @@ import 'dart:io';
 import 'dart:ui';
 
 import 'package:gleon/gleon.dart';
-import 'package:gleon/src/core/config/gleon_session.dart';
 import 'package:gleon/src/flutter/gleon_matches_golden_file.dart';
 
 import '../helpers/golden_sandbox.dart';
 import '../helpers/swatch.dart';
+import '../helpers/workspace_sandbox.dart';
 
 void main() {
   GoldenSandbox.install();
@@ -14,7 +14,7 @@ void main() {
   GleonMatchesGoldenFile matcher() => .new(
     Uri.parse(Swatch.golden),
     null,
-    session: GleonSession(workspace: null, metricsEnv: '1'),
+    session: sessionWithoutWorkspace(metricsEnv: '1'),
   );
 
   testWidgets('behaves like Flutter and writes no gleon files', (tester) async {

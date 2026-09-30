@@ -5,7 +5,7 @@ import 'dart:ui';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gleon/src/core/compare/golden_tolerance.dart';
 import 'package:gleon/src/core/config/gleon_session.dart';
-import 'package:gleon/src/core/config/gleon_workspace.dart';
+import 'package:gleon/src/flutter/flutter_session.dart';
 import 'package:gleon/src/flutter/gleon_matches_golden_file.dart';
 import 'package:gleon/src/flutter/ignore_regions.dart';
 import 'package:json_schema/json_schema.dart';
@@ -71,12 +71,15 @@ final class WorkspaceSandbox {
         : const [];
   }
 
-  /// A session over this workspace with the given `GLEON_METRICS` value.
-  GleonSession session({String? metricsEnv}) =>
-      .new(workspace: GleonWorkspace.find(root), metricsEnv: metricsEnv);
+  /// A session with the given `GLEON_METRICS` value (unset by default,
+  /// whatever the environment of the test run); its goldens under [root]
+  /// belong to this workspace.
+  // ignore: prefer-static-method, reads as this workspace's session in tests.
+  GleonSession session({String metricsEnv = GleonSession.unsetMetricsEnv}) =>
+      .new(integration: FlutterSession.integration, metricsEnv: metricsEnv);
 
-  /// A gleon matcher bound to [session] (the process session never sees
-  /// this workspace).
+  /// A gleon matcher bound to [session], so the environment of the test run
+  /// never leaks in.
   GleonMatchesGoldenFile matcher(
     String key, {
     GoldenTolerance? tolerance,
@@ -106,6 +109,16 @@ final class WorkspaceSandbox {
     root.deleteSync(recursive: true);
   }
 }
+
+/// A session without a workspace and the given `GLEON_METRICS` value (unset
+/// by default).
+GleonSession sessionWithoutWorkspace({
+  String metricsEnv = GleonSession.unsetMetricsEnv,
+}) => .new(
+  integration: FlutterSession.integration,
+  hasWorkspaces: false,
+  metricsEnv: metricsEnv,
+);
 
 /// Validates [json] against [caseSchema] when a gleon checkout is present.
 void expectMatchesCaseSchema(Map<String, Object?> json) {
