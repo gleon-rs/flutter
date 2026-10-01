@@ -173,8 +173,9 @@ gleon ✓ test/goldens/swatch.png  ssim 0.931 (≥0.800, +0.131)  color 5.2 (≤
 ```
 
 Turn them on with `metrics: {enabled: true}` in `.gleon/gleon.yaml` or with the environment
-variable `GLEON_METRICS=1` (which beats the file; `GLEON_METRICS=0` turns them off; any other
-value fails every golden); `metrics: {console: false}` keeps the files and drops the lines. A
+variable `GLEON_METRICS` (which beats the file): `1` or `true` turns them on, `0` or `false` off
+(any case, surrounding spaces ignored), an empty value counts as unset, and any other value fails
+every golden. `metrics: {console: false}` keeps the files and drops the lines. A
 report that cannot be written is printed as a warning and never fails the test. A case report
 records the golden and candidate SHA-256 and size, the effective tolerance and masks, the outcome
 (`identical`, `match`, `mismatch`, `dimension_mismatch`, `error` with its kind, `updated`,

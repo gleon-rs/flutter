@@ -310,7 +310,8 @@ Future<({String commit, bool isDirty})?> _checkoutState(Directory repo) async {
 
 const _gitHead = ['rev-parse', 'HEAD'];
 
-const _gitStatus = ['status', '--porcelain'];
+// Untracked inputs count even where `status.showUntrackedFiles` hides them.
+const _gitStatus = ['status', '--porcelain', '--untracked-files=all'];
 
 Never _fail(String message) {
   stderr.writeln('build_native: $message');
