@@ -28,6 +28,9 @@ screenshots:
 metrics: { enabled: false, console: false }
 ''';
 
+/// An unset environment variable.
+const _unset = '';
+
 /// Matches a lowercase hex SHA-256.
 Matcher _isSha256() => matches(RegExp(r'^[0-9a-f]{64}$'));
 
@@ -66,8 +69,12 @@ void main() {
         containsPair('height', 60),
       ),
     );
+    expect(report['golden'], isNot(contains('blob')), reason: 'PNG goldens');
     expect(report['candidate'], containsPair('sha256', _isSha256()));
     expect(report.containsKey('metrics'), isFalse);
+    expect(report.containsKey('artifacts'), isFalse, reason: 'a pass');
+    expect(report.containsKey('run_id'), isFalse, reason: 'no GLEON_RUN_ID');
+    expect(report, containsPair('schema_version', 2));
     expect(report, containsPair('regions', isEmpty));
     expect(report['comparison'], {
       'masks': isEmpty,
@@ -159,6 +166,11 @@ void main() {
       report['metrics'],
       containsPair('headroom', containsPair('color', lessThan(0))),
     );
+    expect(
+      report['metrics'],
+      containsPair('max_excess', greaterThan(0)),
+      reason: 'the envelope gate failed',
+    );
   });
 
   testWidgets('dimension mismatch is recorded without metrics', (tester) async {
@@ -223,7 +235,9 @@ void main() {
     expect(failure, contains('gleon could not compare: candidate image'));
     expect(failure, isNot(contains(GleonGoldenComparator.bugHint)));
     expect(report, containsPair('outcome', 'error'));
+    expect(report, containsPair('error_kind', 'image'));
     expect(report, containsPair('message', startsWith('candidate image')));
+    expect(report.containsKey('artifacts'), isFalse);
   });
 
   testWidgets('masks beyond the image warn', (tester) async {
@@ -256,7 +270,7 @@ void main() {
         sandbox.matcher(
           Swatch.golden,
           ignoreRegions: const [Rect.fromLTWH(95, 0, 10, 10)],
-          session: sessionWithoutWorkspace(metricsEnv: '1'),
+          session: sessionWithoutWorkspace(metrics: '1'),
         ),
       ),
     );
@@ -345,7 +359,7 @@ void main() {
           Swatch.finder,
           sandbox.matcher(
             Swatch.golden,
-            session: sandbox.session(metricsEnv: '1'),
+            session: sandbox.session(metrics: '1'),
           ),
         ),
       );
@@ -362,10 +376,7 @@ void main() {
       await tester.pumpWidget(const Swatch());
       await expectLater(
         Swatch.finder,
-        sandbox.matcher(
-          Swatch.golden,
-          session: sandbox.session(metricsEnv: '0'),
-        ),
+        sandbox.matcher(Swatch.golden, session: sandbox.session(metrics: '0')),
       );
 
       expect(sandbox.recordedFiles, isEmpty);
@@ -377,8 +388,8 @@ void main() {
       final sandbox = WorkspaceSandbox.create(_yaml);
       await tester.pumpWidget(const Swatch());
       for (final session in [
-        sandbox.session(metricsEnv: 'yes'),
-        sessionWithoutWorkspace(metricsEnv: 'yes'),
+        sandbox.session(metrics: 'yes'),
+        sessionWithoutWorkspace(metrics: 'yes'),
       ]) {
         final message = await sandbox
             .matcher(Swatch.golden, session: session)
@@ -399,16 +410,16 @@ void main() {
           sandbox.matcher(Swatch.golden, session: session),
         ),
       );
-      final session = sessionWithoutWorkspace(metricsEnv: '1');
+      final session = sessionWithoutWorkspace(metrics: '1');
 
       final lines = await run(session);
 
       expect(lines, hasLength(1));
       expect(lines.singleOrNull, contains('gleon init'));
       expect(await run(session), isEmpty, reason: 'once per session');
-      for (final value in ['0', 'false', ' ', GleonSession.unsetMetricsEnv]) {
+      for (final value in ['0', 'false', ' ', _unset]) {
         expect(
-          await run(sessionWithoutWorkspace(metricsEnv: value)),
+          await run(sessionWithoutWorkspace(metrics: value)),
           isEmpty,
           reason: 'GLEON_METRICS="$value"',
         );
@@ -438,17 +449,33 @@ void _expectSchemaRejectsOffContractCases() {
     'platform': {'arch': 'aarch64', 'os': 'macos'},
     'recorded_at': '2026-09-27T12:00:00.000Z',
     'regions': <Object>[],
-    'schema_version': 1,
+    'schema_version': 2,
     'source': {'tool': 'gleon_flutter', 'tool_version': '0.1.0'},
     'timings_ms': {'total': 1.5},
+  };
+  final failed = {
+    ...valid,
+    'artifacts': {'candidate': '.gleon/runs/latest/artifacts/a/candidate.png'},
+    'error_kind': 'image',
+    'golden': {'blob': 'sha256:${'0' * 64}', 'path': 'a.png'},
+    'outcome': 'error',
+    'run_id': '12345',
   };
   final schema = caseSchema;
 
   expect(schema?.validate(valid).isValid, isTrue);
+  expect(schema?.validate(failed).isValid, isTrue);
   for (final broken in [
+    {...valid, 'schema_version': 1},
     {...valid, 'outcome': 'passed'},
     {...valid, 'name': 'Upper/Case'},
     {...valid, 'extra': 1},
+    {...failed, 'error_kind': 'disk'},
+    {...failed, 'run_id': 'run 1'},
+    {
+      ...failed,
+      'artifacts': {'image': 'a.png'},
+    },
     {
       ...valid,
       'comparison': {

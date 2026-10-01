@@ -82,7 +82,7 @@ void main() {
             diffArtifact: '{name}_gleonDiff.png',
           ),
           hasWorkspaces: false,
-          metricsEnv: GleonSession.unsetMetricsEnv,
+          environment: const GleonEnvironment(),
         ),
       );
 

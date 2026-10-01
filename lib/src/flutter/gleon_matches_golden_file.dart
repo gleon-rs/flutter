@@ -35,10 +35,6 @@ class GleonMatchesGoldenFile extends flutter_test.MatchesGoldenFile {
   /// inject their own).
   final GleonSession? session;
 
-  /// The turn of the match currently holding `goldenFileComparator`, if any;
-  /// it completes when the match releases it.
-  static Completer<void>? _inFlight;
-
   @override
   Future<String?> matchAsync(Object? item) async {
     // `goldenFileComparator` is process-global: overlapping matches (possible
@@ -46,44 +42,32 @@ class GleonMatchesGoldenFile extends flutter_test.MatchesGoldenFile {
     // or restore each other's comparator, so they take turns. Only an actual
     // overlap waits: awaiting a future of an earlier test would schedule the
     // continuation in that test's finished (fake async) zone.
-    while (_inFlight != null) {
-      await _inFlight?.future;
+    while (_Turn._current != null) {
+      await _Turn._current?.done;
     }
-    final turn = Completer<void>();
-    _take(turn);
-    final original = flutter_test.goldenFileComparator;
+    final turn = _Turn.take();
     try {
-      // Inside the `try`: finding the workspace may throw, and the turn must
-      // still be released.
-      flutter_test.goldenFileComparator = GleonGoldenComparator(
-        original,
+      // A match abandoned by a timed-out test never reaches its `finally`,
+      // so its turn also finishes when that test ends: later tests get their
+      // own comparator and never block. Registering throws for a test that
+      // already closed; the `finally` still finishes.
+      if (FlutterSession.currentTestName != null) {
+        flutter_test.addTearDown(() => _Turn.finish(turn));
+      }
+      // Finding the workspace may throw too.
+      final comparator = GleonGoldenComparator(
+        turn.original,
         tolerance: tolerance,
         masks: masks,
         session: session,
       );
+      turn.installed = comparator;
+      flutter_test.goldenFileComparator = comparator;
 
       return await super.matchAsync(item);
     } finally {
-      flutter_test.goldenFileComparator = original;
-      _release(turn);
+      _Turn.finish(turn);
     }
-  }
-
-  /// Takes the [turn]. A match abandoned by a timed-out test never reaches
-  /// its `finally`, so the turn is also released when that test ends: later
-  /// tests never block, and matches already waiting for it wake up.
-  static void _take(Completer<void> turn) {
-    _inFlight = turn;
-    // Outside a test (`addTearDown` would throw) nothing can abandon it.
-    if (FlutterSession.currentTestName != null) {
-      flutter_test.addTearDown(() => _release(turn));
-    }
-  }
-
-  /// Releases [turn] (once; a later call is a no-op) and wakes its waiters.
-  static void _release(Completer<void> turn) {
-    if (identical(_inFlight, turn)) _inFlight = null;
-    if (!turn.isCompleted) turn.complete();
   }
 
   @override
@@ -91,4 +75,39 @@ class GleonMatchesGoldenFile extends flutter_test.MatchesGoldenFile {
       super
           .describe(description)
           .add(' (gleon ${tolerance ?? 'default tolerance'})');
+}
+
+/// One match's hold on `goldenFileComparator`: matches take turns, and each
+/// turn puts back the comparator it found.
+final class _Turn {
+  /// Takes the turn of the current comparator.
+  factory _Turn.take() => _current = _Turn._(flutter_test.goldenFileComparator);
+
+  _Turn._(this.original);
+
+  /// The comparator before this turn.
+  final flutter_test.GoldenFileComparator original;
+
+  /// The comparator this turn installed, once it did.
+  GleonGoldenComparator? installed;
+
+  /// The turn of the match currently holding `goldenFileComparator`, if any.
+  static _Turn? _current;
+
+  final _done = Completer<void>();
+
+  /// Completes when the turn finishes.
+  Future<void> get done => _done.future;
+
+  /// Puts back the comparator [turn] found, unless something else replaced
+  /// the one it installed since, and wakes the matches waiting for it; a
+  /// second call is a no-op.
+  static void finish(_Turn turn) {
+    if (turn.installed case final installed?
+        when identical(flutter_test.goldenFileComparator, installed)) {
+      flutter_test.goldenFileComparator = turn.original;
+    }
+    if (identical(_current, turn)) _current = null;
+    if (!turn._done.isCompleted) turn._done.complete();
+  }
 }

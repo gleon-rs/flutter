@@ -96,7 +96,7 @@ void main() {
         diffArtifact: '{name}-diff.png',
       ),
       hasWorkspaces: false,
-      metricsEnv: GleonSession.unsetMetricsEnv,
+      environment: const GleonEnvironment(),
     );
     final outcome = NativeEngine.golden(
       session,
@@ -125,7 +125,7 @@ void main() {
         diffArtifact: '{name}-diff.png',
       ),
       hasWorkspaces: false,
-      metricsEnv: GleonSession.unsetMetricsEnv,
+      environment: const GleonEnvironment(),
     );
     for (final tolerance in const <GoldenTolerance?>[
       null,

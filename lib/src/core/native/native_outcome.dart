@@ -72,7 +72,8 @@ enum NativeVerdict {
 
 /// Class of a failed native call, with its `u8` code in `gleon-ffi`.
 enum NativeErrorKind {
-  /// `.gleon/gleon.yaml`, `GLEON_METRICS` or a golden name is invalid.
+  /// `.gleon/gleon.yaml`, a golden name or an environment variable
+  /// (`GLEON_METRICS`, `GLEON_ARTIFACTS_DIR`, `GLEON_RUN_ID`) is invalid.
   config(2),
 
   /// An image could not be decoded, is over the analysis budget or could not

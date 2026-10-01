@@ -7,15 +7,19 @@ screenshots:
   - include: "test/goldens/**/*.png"
     mode: ssim
     diff:
-      # The goldens are recorded on macOS. Other operating systems rasterize
-      # text differently (measured on Linux x64: min local SSIM 0.754, color
-      # excess 32.5 on the text line), so the tolerance is loosened well past
-      # that for now; an 11px change of the progress bar still fails.
-      # Temporary until text-aware comparison lands (per-platform goldens are
-      # the alternative); CI records metrics on every OS to replace these
-      # guesses with measurements.
-      min_similarity: 0.6
-      color_tolerance: 64
+      # The goldens are recorded on macOS; other operating systems rasterize
+      # text differently. Calibrated on the CI case reports of every host
+      # (`metrics-<target>` artifacts of the Flutter Check workflow,
+      # 2026-09-30, identical in two runs): worst min local SSIM 0.754 (Linux
+      # x64 and arm64), worst peak color excess 41.5 (Windows x64), macOS
+      # byte-identical. Thresholds: floor(0.754 - 0.02, 0.01) = 0.73 and
+      # ceil(41.5 + 4) = 46; recalibrate the same way when goldens or Flutter
+      # change. A real regression still fails far outside them: counter 0 vs 3
+      # (an 89x8px progress bar change) measures min SSIM 0.164 and colors off
+      # by 143 (pinned by the gleon engine tests). Per-platform goldens or
+      # text-aware comparison would allow the defaults (0.8, 8).
+      min_similarity: 0.73
+      color_tolerance: 46
 
 # Per-golden case reports in .gleon/runs/latest/cases/; CI turns them on with
 # GLEON_METRICS=1.

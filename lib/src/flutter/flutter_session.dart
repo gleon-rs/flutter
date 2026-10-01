@@ -25,8 +25,10 @@ abstract final class FlutterSession {
   );
 
   /// The session of this process: each golden belongs to the workspace above
-  /// it (not the working directory, which a test may change), metrics follow
-  /// `GLEON_METRICS` (read by the native engine).
+  /// it (not the working directory, which a test may change); metrics, the
+  /// artifacts directory and the run id follow `GLEON_METRICS`,
+  /// `GLEON_ARTIFACTS_DIR` and `GLEON_RUN_ID` of the process (read by the
+  /// native engine).
   static final process = GleonSession(integration: integration);
 
   /// The running test's full name, or null outside a test.

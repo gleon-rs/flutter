@@ -40,6 +40,7 @@ dart_code_metrics:
       - "example/**"
       - "test/**"
       - "bin/**"
+      - "benchmark/**"
   metrics:
     number-of-overridden-methods:
       threshold: 10
@@ -135,6 +136,7 @@ dart_code_metrics:
     - prefer-static-class:
         exclude:
           - test/**
+          - benchmark/** # Scripts: `main` plus private helpers.
           - bin/** # Scripts: `main` plus private helpers.
           - hook/** # Scripts: `main` plus private helpers.
     - prefer-typedefs-for-callbacks:
@@ -148,6 +150,9 @@ dart_code_metrics:
         ignore-static: true
 
     # Relaxed in tests only:
+    - avoid-async-call-in-sync-function:
+        exclude:
+          - benchmark/** # bench_press awaits the futures its variants return.
     - avoid-collection-mutating-methods:
         exclude:
           - test/** # Fixtures (a mirror whose files change) are mutable.
@@ -165,6 +170,7 @@ dart_code_metrics:
           - test/** # Tests assert on the exact failure text ("≤", "±").
     - prefer-match-file-name:
         exclude:
+          - benchmark/** # Named after what they measure.
           - test/** # Test files are named after behavior; fakes are private.
     - prefer-moving-to-variable:
         exclude:

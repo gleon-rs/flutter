@@ -28,7 +28,12 @@ import 'package:crypto/crypto.dart';
 import 'package:gleon/src/core/hook/native_target.dart';
 import 'package:gleon/src/core/hook/source_build.dart';
 
-typedef _Options = ({String? dist, List<String> keys, String? repo});
+typedef _Options = ({
+  String? dist,
+  bool isDirtyAllowed,
+  List<String> keys,
+  String? repo,
+});
 
 String get _usage =>
     '''
@@ -39,6 +44,9 @@ Usage: dart bin/build_native.dart [options]
   --gleon-repo <dir>  gleon checkout (default: \$GLEON_REPO, else ../gleon).
   --dist <dir>        also copy each library there under its release asset
                       name.
+  --allow-dirty       build a checkout with uncommitted changes; the hook
+                      accepts the library for the commit it is based on, so
+                      rebuild after every engine change.
   -h, --help          show this help.
 ''';
 
@@ -55,7 +63,16 @@ Future<void> main(List<String> args) async {
     _fail('${repo.path} is not a gleon checkout; pass --gleon-repo.');
   }
   final pin = await _readPin(packageRoot);
-  await _warnIfNotPinned(pin, repo);
+  final builtFrom = await _stamp(repo, isDirtyAllowed: options.isDirtyAllowed);
+  if (pin != null && !NativeTarget.isBuildOfPin(builtFrom, pin)) {
+    stderr.writeln(
+      'warning: ${repo.path} is at $builtFrom, but native/'
+      '${NativeTarget.pinFileName} pins $pin: the build hook refuses this '
+      'library until the pin names that commit (CI and releases build the '
+      'pinned commit). To test another checkout, use the `gleon_repo` '
+      'user-define instead.',
+    );
+  }
 
   // `Abi` names are `<os>_<arch>`, like target keys with an underscore.
   final host = NativeTarget.byKey(
@@ -74,10 +91,10 @@ Future<void> main(List<String> args) async {
       await output.parent.create(recursive: true);
       await output.writeAsBytes(bytes, flush: true);
     }
-    // Records the pin this build was made for; the hook rejects the library
-    // once native/gleon_ref moves on.
+    // Records the commit this build was made from; the hook rejects the
+    // library unless native/gleon_ref pins it.
     await File.fromUri(targetDir.resolve(NativeTarget.pinFileName))
-        .writeAsString('${pin ?? '(unpinned)'}\n');
+        .writeAsString('$builtFrom\n');
     stdout.writeln(
       '${target.key}: ${sha256.convert(bytes)}  '
       '${outputs.map((file) => file.path).join(', ')}',
@@ -89,6 +106,7 @@ _Options _parse(List<String> args) {
   final keys = <String>[];
   String? repo;
   String? dist;
+  bool isDirtyAllowed = false;
   final rest = args.iterator;
   while (rest.moveNext()) {
     switch (rest.current) {
@@ -101,6 +119,9 @@ _Options _parse(List<String> args) {
       case '--dist':
         dist = _value(rest);
 
+      case '--allow-dirty':
+        isDirtyAllowed = true;
+
       case '-h' || '--help':
         stdout.write(_usage);
         exit(0);
@@ -110,7 +131,12 @@ _Options _parse(List<String> args) {
     }
   }
 
-  return (dist: dist, keys: keys.isEmpty ? const ['host'] : keys, repo: repo);
+  return (
+    dist: dist,
+    isDirtyAllowed: isDirtyAllowed,
+    keys: keys.isEmpty ? const ['host'] : keys,
+    repo: repo,
+  );
 }
 
 /// The value following the flag that [rest] is at.
@@ -229,24 +255,63 @@ Future<String?> _readPin(Uri packageRoot) async {
   return content.trim();
 }
 
-const _gitHead = ['rev-parse', 'HEAD'];
-
-Future<void> _warnIfNotPinned(String? pin, Directory repo) async {
-  if (pin == null) return;
-  final ProcessResult head;
-  try {
-    head = await Process.run('git', _gitHead, workingDirectory: repo.path);
-  } on ProcessException {
-    return; // No git: nothing to compare.
-  }
-  final actual = head.stdout.toString().trim();
-  if (head.exitCode == 0 && actual != pin) {
-    stderr.writeln(
-      'warning: ${repo.path} is at $actual, but native/${NativeTarget.pinFileName} pins $pin '
-      '(CI and releases build the pinned commit).',
+/// The stamp of a build of [repo]: its commit, with
+/// [NativeTarget.dirtySuffix] for uncommitted changes (only when
+/// [isDirtyAllowed]). Fails when git cannot tell the commit.
+Future<String> _stamp(Directory repo, {required bool isDirtyAllowed}) async {
+  final state = await _checkoutState(repo);
+  if (state == null) {
+    _fail(
+      'cannot read the commit of ${repo.path} with git, and the build hook '
+      'only accepts a library built from the commit native/'
+      '${NativeTarget.pinFileName} pins. Build another source with the '
+      '`gleon_repo` user-define instead.',
     );
   }
+  final (:commit, :isDirty) = state;
+  if (!isDirty) return commit;
+  if (!isDirtyAllowed) {
+    _fail(
+      '${repo.path} has uncommitted changes in the sources of the library. '
+      'Commit or stash them, or pass '
+      '--allow-dirty to build them (the hook then accepts the library for '
+      '$commit until you rebuild).',
+    );
+  }
+
+  return '$commit${NativeTarget.dirtySuffix}';
 }
+
+/// The commit [repo] is at and whether the inputs of the library have
+/// uncommitted or untracked changes (anything else in the checkout does not
+/// matter), or null when git cannot tell (no git, not a checkout, a checkout
+/// git refuses to read).
+Future<({String commit, bool isDirty})?> _checkoutState(Directory repo) async {
+  final ProcessResult head;
+  final ProcessResult status;
+  try {
+    head = await Process.run('git', _gitHead, workingDirectory: repo.path);
+    final arguments = [
+      ..._gitStatus,
+      '--',
+      ...SourceBuild.inputPaths(repo.uri),
+    ];
+    status = await Process.run('git', arguments, workingDirectory: repo.path);
+  } on ProcessException {
+    return null;
+  }
+  if (head.exitCode != 0 || status.exitCode != 0) return null;
+
+  return (
+    commit: head.stdout.toString().trim(),
+    isDirty: status.stdout.toString().trim().isNotEmpty,
+  );
+}
+
+const _gitHead = ['rev-parse', 'HEAD'];
+
+// Untracked inputs count even where `status.showUntrackedFiles` hides them.
+const _gitStatus = ['status', '--porcelain', '--untracked-files=all'];
 
 Never _fail(String message) {
   stderr.writeln('build_native: $message');

@@ -47,6 +47,64 @@ void main() {
     ]);
   });
 
+  test('a failing concurrent match leaves the others intact', () async {
+    final bytes = File('${GoldenSandbox.dir.path}/${Swatch.golden}')
+        .readAsBytesSync();
+    final before = goldenFileComparator;
+    final [intact, failed, alsoIntact] = await Future.wait([
+      matchesGoldenFile(Swatch.golden).matchAsync(bytes),
+      matchesGoldenFile(Swatch.golden)
+          .matchAsync(Uint8List.fromList(List.filled(64, 7))),
+      matchesGoldenFile(
+        Swatch.golden,
+        tolerance: const .pixel(),
+      ).matchAsync(bytes),
+    ]);
+
+    expect(intact, isNull);
+    expect(failed, contains('gleon could not compare'));
+    expect(alsoIntact, isNull);
+    expect(goldenFileComparator, same(before));
+  });
+
+  test('an abandoned match gives the comparator back when its test ends', () {
+    final before = goldenFileComparator;
+    // Tear-downs run last in, first out: this one runs after the match's.
+    addTearDown(() => expect(goldenFileComparator, same(before)));
+    // Like a match of a timed-out test: it never reaches its `finally`.
+    unawaited(
+      matchesGoldenFile(Swatch.golden)
+          .matchAsync(Completer<List<int>>().future),
+    );
+
+    expect(goldenFileComparator, isNot(same(before)));
+  });
+
+  // Would hang until the test times out if the abandoned turn were kept.
+  test('a match after an abandoned one does not wait for it', () async {
+    final bytes = File('${GoldenSandbox.dir.path}/${Swatch.golden}')
+        .readAsBytesSync();
+
+    await expectLater(bytes, matchesGoldenFile(Swatch.golden));
+  });
+
+  test('keys with spaces and nested folders resolve like Flutter', () async {
+    final golden = File(
+      '${GoldenSandbox.dir.path}/goldens/nested dir/swatch copy.png',
+    )..parent.createSync(recursive: true);
+    File('${GoldenSandbox.dir.path}/${Swatch.golden}').copySync(golden.path);
+    final bytes = golden.readAsBytesSync();
+
+    await expectLater(
+      bytes,
+      matchesGoldenFile('goldens/nested dir/swatch copy.png'),
+    );
+    await expectLater(
+      bytes,
+      matchesGoldenFile('goldens/nested%20dir/swatch%20copy.png'),
+    );
+  });
+
   test('a match outside any test zone still works', () async {
     final bytes = File('${GoldenSandbox.dir.path}/${Swatch.golden}')
         .readAsBytesSync();
