@@ -1,0 +1,63 @@
+# Golden comparison benchmark (Flutter SDK comparator vs gleon, see benchmark/), started by hand on
+# every supported host. Each job writes the bench_press report to its summary and uploads the JSON:
+# compare two runs with `dart run bench_press diff <old.json> <new.json>`.
+name: Benchmark
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  benchmark:
+    name: Benchmark ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    # A cache miss builds gleon-ffi from source first (Windows is the slowest).
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-15, target: macos-arm64 }
+          - { os: ubuntu-26.04, target: linux-x64 }
+          - { os: ubuntu-26.04-arm, target: linux-arm64 }
+          - { os: windows-2025, target: windows-x64 }
+    defaults:
+      run:
+        shell: bash
+        working-directory: flutter
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: flutter
+          persist-credentials: false
+
+      - name: Set up Flutter and gleon-ffi
+        uses: ./flutter/.github/actions/setup
+        with:
+          target: ${{ matrix.target }}
+
+      - name: Benchmark
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          flutter pub get
+          flutter test benchmark/
+          dart run bench_press report --from-json build/benchmark/golden_comparison.json \
+            --title "Golden comparison on $TARGET" --output build/benchmark/golden_comparison.md
+          cat build/benchmark/golden_comparison.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: benchmark-${{ matrix.target }}
+          path: flutter/build/benchmark/
+          if-no-files-found: error

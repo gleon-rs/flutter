@@ -45,9 +45,21 @@ enum NativeTarget {
     required this.libFileName,
   });
 
-  /// File in `native/` pinning the gleon commit that CI builds; a copy inside
-  /// `native/<target>/` records which pin a local build was made for.
+  /// File in `native/` pinning the gleon commit that CI builds; the file of
+  /// the same name inside `native/<target>/` records the commit a local build
+  /// was made from.
   static const pinFileName = 'gleon_ref';
+
+  /// Marks a build stamp whose checkout had uncommitted changes.
+  static const dirtySuffix = '-dirty';
+
+  /// Whether a local build stamped [builtFrom] (a gleon commit, with
+  /// [dirtySuffix] when uncommitted changes were built too) may stand in for
+  /// the [pinned] commit: only a build of that very commit may. A dirty build
+  /// of it is how an unmerged engine change is tried out, so it is accepted;
+  /// `bin/build_native.dart` makes one only with `--allow-dirty`.
+  static bool isBuildOfPin(String? builtFrom, String pinned) =>
+      builtFrom == pinned || builtFrom == '$pinned$dirtySuffix';
 
   /// Operating system, named like `code_assets`' `OS.name` and `dart:ffi`'s
   /// `Abi` (`macos`, `linux`, `windows`).

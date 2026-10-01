@@ -18,13 +18,17 @@ void main() {
   setUp(() => cache = Directory.systemTemp.createTempSync('gleon_hook_'));
   tearDown(() => cache?.deleteSync(recursive: true));
 
-  Future<File> fetch(Uri releaseUrl, {Duration? redirectTimeout}) =>
-      ReleaseDownload.fetchLibrary(
-        releaseUrl: releaseUrl,
-        target: target,
-        cacheDir: cache ?? .systemTemp,
-        redirectTimeout: redirectTimeout ?? const .new(seconds: 30),
-      );
+  Future<File> fetch(
+    Uri releaseUrl, {
+    Duration redirectTimeout = const .new(seconds: 30),
+    Duration bodyTimeout = const .new(minutes: 3),
+  }) => ReleaseDownload.fetchLibrary(
+    releaseUrl: releaseUrl,
+    target: target,
+    cacheDir: cache ?? .systemTemp,
+    redirectTimeout: redirectTimeout,
+    bodyTimeout: bodyTimeout,
+  );
 
   Matcher throwsDownload(Object message) => throwsA(
     isA<NativeDownloadException>().having(
@@ -170,6 +174,21 @@ void main() {
       throwsDownload(contains('TimeoutException')),
     );
     // Every attempt timed out and was retried.
+    expect(server.hits[target.assetName], 3);
+  });
+
+  test('a file whose body stalls fails instead of hanging', () async {
+    final server = await ReleaseServer.start(
+      {ReleaseDownload.checksumsFileName: sums},
+      stalledFiles: {target.assetName},
+    );
+    addTearDown(server.close);
+
+    await expectLater(
+      fetch(server.url, bodyTimeout: const Duration(milliseconds: 100)),
+      throwsDownload(contains('TimeoutException')),
+    );
+    // Every attempt timed out on a fresh connection and was retried.
     expect(server.hits[target.assetName], 3);
   });
 

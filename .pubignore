@@ -23,6 +23,7 @@ example/test/failures/
 CLAUDE.local.md
 
 # Maintainer-only
+/benchmark/
 /bin/
 /dist/
 /.github/

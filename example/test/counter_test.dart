@@ -35,10 +35,9 @@ void main() {
     await expectLater(
       find.byType(Main),
       // Shows ignoreRegions (golden PNG pixels): the FAB corner is excluded,
-      // and the dot shorthand for an inline tolerance.
+      // while the tolerance still comes from the rule.
       matchesGoldenFile(
         'goldens/counter_three_taps.png',
-        tolerance: const .ssim(minSimilarity: 0.6, colorTolerance: 64),
         ignoreRegions: [const Rect.fromLTWH(280, 560, 80, 80)],
       ),
     );

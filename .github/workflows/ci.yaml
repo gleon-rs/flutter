@@ -49,7 +49,7 @@ jobs:
         run: echo "gleon_ref=$(tr -d '[:space:]' < native/gleon_ref)" >> "$GITHUB_OUTPUT"
 
       # Case reports are validated against the committed JSON Schema of the pinned engine
-      # (`../gleon/gleon-model/schema/case.v1.json`); the tests skip that without the checkout.
+      # (`../gleon/gleon-model/schema/case.v2.json`); the tests skip that without the checkout.
       - name: Check out the gleon schemas
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -68,26 +68,39 @@ jobs:
           flutter analyze --fatal-infos
           flutter test $COVERAGE
 
+      # Keeps the benchmarks compiling and their verdict checks green; the numbers come from the
+      # manual Benchmark workflow on idle runners.
+      - name: Benchmark smoke run
+        if: ${{ matrix.target == 'linux-x64' }}
+        env:
+          BENCH_PRESS_ARGS: --validate
+        run: flutter test benchmark/
+
       - name: Example app
         working-directory: flutter/example
         env:
           # Records a case report per golden (see example/.gleon/gleon.yaml): the cross-OS
           # corpus for calibrating tolerances and text-aware comparison.
           GLEON_METRICS: "1"
+          # Stamps the reports of this run, so readers never mix them with another run's
+          # (re-runs of failed jobs get their own attempt).
+          GLEON_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           flutter pub get
           dart format --output=none --set-exit-if-changed .
           flutter analyze --fatal-infos
           flutter test
 
-      # Also after a failure: mismatches are the most useful calibration data. Missing reports are
-      # an error only when everything passed, so they never add a second error to a failed run.
+      # Also after a failure: mismatches are the most useful calibration data. The whole run
+      # (`cases/` plus the failure images in `artifacts/`) is what `gleon approve --from` reads.
+      # Missing reports are an error only when everything passed, so they never add a second
+      # error to a failed run.
       - name: Upload metrics
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: metrics-${{ matrix.target }}
-          path: flutter/example/.gleon/runs/latest/cases/
+          path: flutter/example/.gleon/runs/latest/
           if-no-files-found: ${{ job.status == 'success' && 'error' || 'warn' }}
 
       - name: Upload coverage

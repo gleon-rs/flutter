@@ -1,4 +1,5 @@
-// The integration is the input of a session; both mirror one native call.
+// The integration and the environment are the inputs of a session; all mirror
+// one native call.
 // ignore_for_file: prefer-single-declaration-per-file
 
 import 'dart:ffi';
@@ -11,19 +12,19 @@ import '../native/native_engine.dart';
 /// Per-process gleon state held by the native engine: the workspaces of the
 /// goldens (each golden belongs to the nearest directory above it with
 /// `.gleon/gleon.yaml`), their configs (read again when they change) and the
-/// `GLEON_METRICS` value.
+/// environment: `GLEON_METRICS`, `GLEON_ARTIFACTS_DIR` and `GLEON_RUN_ID`.
 final class GleonSession implements Finalizable {
   /// Opens a session; without [hasWorkspaces] no golden belongs to a
   /// workspace (tests of the behavior without one). The native engine reads
-  /// `GLEON_METRICS` from the environment unless [metricsEnv] overrides it
-  /// ([unsetMetricsEnv] for unset), as tests do.
+  /// its variables from the process environment unless [environment] gives
+  /// them, as tests do.
   GleonSession({
     required GleonIntegration integration,
     bool hasWorkspaces = true,
-    String? metricsEnv,
+    GleonEnvironment? environment,
   }) : handle = NativeEngine.openSession(
          hasWorkspaces: hasWorkspaces,
-         metricsEnv: metricsEnv,
+         environment: environment,
          integration: integration,
        ) {
     NativeEngine.sessionFinalizer.attach(
@@ -33,11 +34,30 @@ final class GleonSession implements Finalizable {
     );
   }
 
-  /// The `metricsEnv` override of an unset `GLEON_METRICS`.
-  static const unsetMetricsEnv = '';
-
   /// The native session, released when this object is garbage collected.
   final Pointer<GleonSessionHandle> handle;
+}
+
+/// The environment variables of the native engine, given instead of the
+/// process environment so tests never depend on the shell they run in; an
+/// empty value is unset.
+@immutable
+final class GleonEnvironment {
+  /// Creates the values; all unset by default.
+  const GleonEnvironment({
+    this.metrics = '',
+    this.artifactsDir = '',
+    this.runId = '',
+  });
+
+  /// `GLEON_METRICS`: whether case reports are recorded.
+  final String metrics;
+
+  /// `GLEON_ARTIFACTS_DIR`: where the images of failures are kept.
+  final String artifactsDir;
+
+  /// `GLEON_RUN_ID`: the run in case reports.
+  final String runId;
 }
 
 /// Who talks to the engine: recorded in case reports and used to name the

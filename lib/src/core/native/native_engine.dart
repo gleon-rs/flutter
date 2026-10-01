@@ -19,7 +19,7 @@ import 'native_outcome.dart';
 abstract final class NativeEngine {
   /// C contract version this Dart code understands (`ABI_VERSION` in
   /// `gleon-ffi`). Keep both in lockstep.
-  static const expectedAbiVersion = 6;
+  static const expectedAbiVersion = 7;
 
   /// Releases sessions that are garbage collected.
   static final sessionFinalizer = NativeFinalizer(
@@ -37,19 +37,20 @@ abstract final class NativeEngine {
   /// above it with `.gleon/gleon.yaml`.
   static const _workspacesFlag = 1;
 
-  /// `gleon_session_new` flag: use the given `GLEON_METRICS` value instead of
-  /// the process environment.
-  static const _metricsEnvFlag = 2;
+  /// `gleon_session_new` flag: take `GLEON_METRICS`, `GLEON_ARTIFACTS_DIR`
+  /// and `GLEON_RUN_ID` from the packed strings instead of the process
+  /// environment.
+  static const _environmentFlag = 2;
 
   /// Opens a native session: with [hasWorkspaces], each golden belongs to
-  /// the nearest directory above it with `.gleon/gleon.yaml`. [metricsEnv]
-  /// overrides `GLEON_METRICS` (empty for unset); when null the native code
-  /// reads the environment.
+  /// the nearest directory above it with `.gleon/gleon.yaml`. [environment]
+  /// gives the engine's environment variables; when null the native code
+  /// reads the process environment.
   ///
   /// Throws a [StateError] when the library is missing or speaks another ABI.
   static Pointer<GleonSessionHandle> openSession({
     required bool hasWorkspaces,
-    required String? metricsEnv,
+    required GleonEnvironment? environment,
     required GleonIntegration integration,
   }) {
     checkAbiVersion(_abiVersion);
@@ -62,7 +63,9 @@ abstract final class NativeEngine {
       :toolVersion,
     ) = integration;
     final (strings, lengths) = _pack([
-      metricsEnv,
+      environment?.metrics,
+      environment?.artifactsDir,
+      environment?.runId,
       tool,
       toolVersion,
       renderer,
@@ -73,7 +76,7 @@ abstract final class NativeEngine {
 
     return GleonFfi.sessionNew(
       (hasWorkspaces ? _workspacesFlag : 0) |
-          (metricsEnv == null ? 0 : _metricsEnvFlag),
+          (environment == null ? 0 : _environmentFlag),
       strings.address,
       strings.length,
       lengths.address,

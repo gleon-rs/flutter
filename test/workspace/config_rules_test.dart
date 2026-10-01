@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:ui';
 
 import 'package:gleon/gleon.dart';
@@ -97,7 +98,14 @@ void main() {
         .matcher(Swatch.golden)
         .matchAsync(Swatch.finder);
 
-    expect(message, contains('${sandbox.root.path}/.gleon/gleon.yaml'));
+    // With the separators of the platform, like every path gleon shows.
+    final config = [
+      sandbox.root.path,
+      '.gleon',
+      'gleon.yaml',
+    ].join(Platform.pathSeparator);
+
+    expect(message, contains('gleon: $config: '));
     expect(message, contains('unknown field `colour`'));
   });
 

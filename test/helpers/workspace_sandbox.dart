@@ -12,7 +12,7 @@ import 'package:json_schema/json_schema.dart';
 
 import 'golden_sandbox.dart';
 
-/// `case.v1.json` of a sibling gleon checkout (as in CI), or null.
+/// `case.v2.json` of a sibling gleon checkout (as in CI), or null.
 // ignore: avoid-explicit-type-declaration, not obvious from the initializer.
 final JsonSchema? caseSchema = _loadCaseSchema();
 
@@ -71,12 +71,32 @@ final class WorkspaceSandbox {
         : const [];
   }
 
-  /// A session with the given `GLEON_METRICS` value (unset by default,
-  /// whatever the environment of the test run); its goldens under [root]
-  /// belong to this workspace.
+  /// The images kept for the golden named [name] in the default artifacts
+  /// directory.
+  Directory artifactsOf(String name) =>
+      .new('${root.path}/.gleon/runs/latest/artifacts/$name');
+
+  /// Whether a case report was written.
+  bool get hasCases =>
+      Directory('${root.path}/.gleon/runs/latest/cases').existsSync();
+
+  /// A session with the given values of `GLEON_METRICS`,
+  /// `GLEON_ARTIFACTS_DIR` and `GLEON_RUN_ID` (unset by default, whatever the
+  /// environment of the test run); its goldens under [root] belong to this
+  /// workspace.
   // ignore: prefer-static-method, reads as this workspace's session in tests.
-  GleonSession session({String metricsEnv = GleonSession.unsetMetricsEnv}) =>
-      .new(integration: FlutterSession.integration, metricsEnv: metricsEnv);
+  GleonSession session({
+    String metrics = '',
+    String artifactsDir = '',
+    String runId = '',
+  }) => .new(
+    integration: FlutterSession.integration,
+    environment: GleonEnvironment(
+      metrics: metrics,
+      artifactsDir: artifactsDir,
+      runId: runId,
+    ),
+  );
 
   /// A gleon matcher bound to [session], so the environment of the test run
   /// never leaks in.
@@ -111,13 +131,11 @@ final class WorkspaceSandbox {
 }
 
 /// A session without a workspace and the given `GLEON_METRICS` value (unset
-/// by default).
-GleonSession sessionWithoutWorkspace({
-  String metricsEnv = GleonSession.unsetMetricsEnv,
-}) => .new(
+/// by default, like the other variables).
+GleonSession sessionWithoutWorkspace({String metrics = ''}) => .new(
   integration: FlutterSession.integration,
   hasWorkspaces: false,
-  metricsEnv: metricsEnv,
+  environment: GleonEnvironment(metrics: metrics),
 );
 
 /// Validates [json] against [caseSchema] when a gleon checkout is present.
@@ -130,7 +148,7 @@ void expectMatchesCaseSchema(Map<String, Object?> json) {
 }
 
 JsonSchema? _loadCaseSchema() {
-  final file = File('../gleon/gleon-model/schema/case.v1.json');
+  final file = File('../gleon/gleon-model/schema/case.v2.json');
 
   return file.existsSync() ? JsonSchema.create(file.readAsStringSync()) : null;
 }

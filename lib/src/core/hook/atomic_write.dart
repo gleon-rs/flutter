@@ -16,9 +16,10 @@ abstract final class AtomicWrite {
   /// concurrent writers and readers never observe a partial file.
   ///
   /// Windows cannot replace a file another process has loaded. When the
-  /// rename fails and [file] already exists, it is kept if [expectedSha256]
-  /// is null or matches its content (a concurrent build stored the same
-  /// verified bytes); otherwise the error is rethrown.
+  /// rename fails and [file] already exists, it is kept if its content has
+  /// [expectedSha256] (by default the hash of [bytes]): a concurrent build
+  /// stored the same verified bytes. Otherwise the error is rethrown, so a
+  /// broken copy is never kept.
   static Future<void> bytes(
     File file,
     List<int> bytes, {
@@ -32,17 +33,20 @@ abstract final class AtomicWrite {
     } on FileSystemException {
       // A leftover `.tmp` file is harmless; the rename failure matters.
       await temp.delete().catchError((_) => temp, test: _isFileSystemError);
-      if (!await isKept(file, expectedSha256: expectedSha256)) rethrow;
+      final expected = expectedSha256 ?? sha256.convert(bytes).toString();
+      if (!await isKept(file, expectedSha256: expected)) rethrow;
     }
   }
 
-  /// Whether an existing [file] that could not be replaced may stay: it
-  /// exists and, when [expectedSha256] is given, has exactly that content. An
-  /// unreadable file is not kept, so the rename error is the one reported.
+  /// Whether an existing [file] that could not be replaced may stay: it has
+  /// exactly the content of [expectedSha256]. An unreadable file is not
+  /// kept, so the rename error is the one reported.
   @visibleForTesting
-  static Future<bool> isKept(File file, {String? expectedSha256}) async {
+  static Future<bool> isKept(
+    File file, {
+    required String expectedSha256,
+  }) async {
     if (!file.existsSync()) return false;
-    if (expectedSha256 == null) return true;
     try {
       return await sha256Of(file) == expectedSha256;
     } on FileSystemException {

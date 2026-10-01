@@ -145,9 +145,10 @@ Future<Uri> _prebuilt(
   }
 }
 
-/// A local build records the `native/gleon_ref` pin it was made for (see
-/// `bin/build_native.dart`); after the pin moves, that library would silently
-/// test an outdated engine. The pub.dev archive ships no pin, so no check.
+/// A local build records the gleon commit it was made from (see
+/// `bin/build_native.dart`); a build of another commit, or of an old pin after
+/// the pin moved, would silently test another engine. The pub.dev archive
+/// ships no pin, so no check.
 void _rejectStaleBuild(
   Uri nativeDir,
   NativeTarget target,
@@ -162,13 +163,14 @@ void _rejectStaleBuild(
     ..add(pin.uri)
     ..add(stamp.uri);
   final pinned = pin.readAsStringSync().trim();
-  final builtFor = stamp.existsSync() ? stamp.readAsStringSync().trim() : null;
-  if (builtFor != pinned) {
+  final builtFrom = stamp.existsSync() ? stamp.readAsStringSync().trim() : null;
+  if (!NativeTarget.isBuildOfPin(builtFrom, pinned)) {
     throw StateError(
-      'gleon: ${Directory.fromUri(targetDir).path} was built for gleon '
-      '${builtFor ?? '(unknown)'}, but native/$pinFile pins $pinned. Rebuild '
-      'it with `dart bin/build_native.dart`, or delete that directory to '
-      'download the released library.',
+      'gleon: ${Directory.fromUri(targetDir).path} was built from gleon '
+      '${builtFrom ?? '(unknown)'}, but native/$pinFile pins $pinned. '
+      'Rebuild it from the pinned commit with `dart bin/build_native.dart`, '
+      'build from any checkout with the `gleon_repo` user-define, or delete '
+      'that directory to download the released library.',
     );
   }
 }

@@ -5,7 +5,7 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 
-import '../io/atomic_write.dart';
+import 'atomic_write.dart';
 import 'native_download_exception.dart';
 import 'native_target.dart';
 
@@ -48,12 +48,14 @@ abstract final class ReleaseDownload {
   /// [releaseUrl], downloading it into [cacheDir] only if no verified copy is
   /// cached yet.
   ///
-  /// [redirectTimeout] bounds reading the body of a redirect response.
+  /// [redirectTimeout] bounds reading the body of a redirect response,
+  /// [bodyTimeout] reading a downloaded file.
   static Future<File> fetchLibrary({
     required Uri releaseUrl,
     required NativeTarget target,
     required Directory cacheDir,
     Duration redirectTimeout = const Duration(seconds: 30),
+    Duration bodyTimeout = const Duration(minutes: 3),
   }) async {
     if (!_Release.isAllowedUrl(releaseUrl)) {
       throw NativeDownloadException(
@@ -66,6 +68,7 @@ abstract final class ReleaseDownload {
       url: releaseUrl,
       cacheDir: cacheDir,
       redirectTimeout: redirectTimeout,
+      bodyTimeout: bodyTimeout,
     );
     try {
       return await fetch.library(target);
@@ -81,11 +84,13 @@ final class _Release {
     required this.url,
     required this.cacheDir,
     required this.redirectTimeout,
+    required this.bodyTimeout,
   });
 
   final Uri url;
   final Directory cacheDir;
   final Duration redirectTimeout;
+  final Duration bodyTimeout;
 
   static const _overridesHint =
       'Alternatively set the `ffi_path` user-define to a local copy of the '
@@ -198,7 +203,7 @@ final class _Release {
       final status = response.statusCode;
       if (status == HttpStatus.ok) {
         final builder = BytesBuilder(copy: false);
-        await response.forEach(builder.add).timeout(const Duration(minutes: 3));
+        await _read(response, response.forEach(builder.add), bodyTimeout);
 
         return builder.takeBytes();
       }
@@ -269,12 +274,20 @@ final class _Release {
     }
   }
 
-  /// Discards a body that is never used (redirects, error pages), dropping
-  /// the connection if it stalls (the retry loop in [_download] then reports
-  /// it).
-  Future<void> _drain(HttpClientResponse response) async {
+  /// Discards a body that is never used (redirects, error pages).
+  Future<void> _drain(HttpClientResponse response) =>
+      _read(response, response.drain<void>(), redirectTimeout);
+
+  /// Waits for [reading] the body of [response] at most [timeout], dropping
+  /// the connection if it stalls, so a retry never reuses it (the retry loop
+  /// in [_download] then reports the timeout).
+  static Future<void> _read(
+    HttpClientResponse response,
+    Future<void> reading,
+    Duration timeout,
+  ) async {
     try {
-      await response.drain<void>().timeout(redirectTimeout);
+      await reading.timeout(timeout);
     } on TimeoutException {
       // If the connection is already gone, that error is retried instead.
       final socket = await response.detachSocket();

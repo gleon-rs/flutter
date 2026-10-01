@@ -2,15 +2,16 @@ import 'dart:async';
 import 'dart:io';
 
 /// A local release mirror: serves [files] (name → bytes), answers [redirects]
-/// (name → location), sends redirects whose body never arrives for [stalled],
-/// answers [statuses] (name → bare status code) and counts requests per name
-/// in [hits].
+/// (name → location), sends redirects whose body never arrives for [stalled]
+/// and files whose body never arrives for [stalledFiles], answers [statuses]
+/// (name → bare status code) and counts requests per name in [hits].
 class ReleaseServer {
   ReleaseServer._(
     this._server, {
     required this.files,
     required this.redirects,
     required this.stalled,
+    required this.stalledFiles,
     required this.statuses,
   });
 
@@ -22,6 +23,9 @@ class ReleaseServer {
 
   /// Names whose redirect body stalls.
   final Set<String> stalled;
+
+  /// Names answered with 200 and a body that stalls.
+  final Set<String> stalledFiles;
 
   /// Names answered with only a status code (no body, no headers).
   final Map<String, int> statuses;
@@ -41,6 +45,7 @@ class ReleaseServer {
     Map<String, List<int>> files, {
     Map<String, String> redirects = const {},
     Set<String> stalledRedirects = const {},
+    Set<String> stalledFiles = const {},
     Map<String, int> statuses = const {},
   }) async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -49,6 +54,7 @@ class ReleaseServer {
       files: {...files},
       redirects: redirects,
       stalled: stalledRedirects,
+      stalledFiles: stalledFiles,
       statuses: statuses,
     );
     release._subscription = server.listen(release._handle);
@@ -70,6 +76,15 @@ class ReleaseServer {
       response
         ..statusCode = HttpStatus.found
         ..headers.set(HttpHeaders.locationHeader, 'elsewhere')
+        ..contentLength = 1024
+        ..add(const [0]);
+      // The promised body never arrives; the client must give up.
+      await response.flush();
+
+      return;
+    }
+    if (stalledFiles.contains(name)) {
+      response
         ..contentLength = 1024
         ..add(const [0]);
       // The promised body never arrives; the client must give up.

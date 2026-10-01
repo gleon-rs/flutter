@@ -35,6 +35,15 @@ void main() {
     );
   });
 
+  test('only a build of the pinned commit serves the pin', () {
+    const pin = '47125b6cc63fe9dfe07cb3e736eb8a902da38cac';
+    expect(NativeTarget.isBuildOfPin(pin, pin), isTrue);
+    expect(NativeTarget.isBuildOfPin('$pin-dirty', pin), isTrue);
+    for (final other in [null, '(unknown)', 'e957394', '$pin-other']) {
+      expect(NativeTarget.isBuildOfPin(other, pin), isFalse, reason: other);
+    }
+  });
+
   test('release asset names are unique per target', () {
     final names = NativeTarget.values.map((target) => target.assetName);
     expect(names.toSet(), hasLength(NativeTarget.values.length));

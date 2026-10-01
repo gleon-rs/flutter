@@ -1,0 +1,161 @@
+import 'dart:io';
+import 'dart:ui';
+
+import 'package:gleon/gleon.dart';
+
+import '../helpers/swatch.dart';
+import '../helpers/workspace_sandbox.dart';
+
+const _yaml = '''
+required_version: ">=0.1.0"
+screenshots:
+  - include: "test/goldens/**/*.png"
+    mode: ssim
+metrics:
+  enabled: true
+  console: false
+''';
+
+const _withoutMetrics = '''
+required_version: ">=0.1.0"
+screenshots:
+  - include: "test/goldens/*.png"
+artifacts: .gleon/runs/kept
+''';
+
+/// Flutter's failure file of the swatch golden for each gleon image.
+const _flutterFailures = {
+  'candidate': 'swatch_testImage.png',
+  'diff': 'swatch_gleonDiff.png',
+  'golden': 'swatch_masterImage.png',
+};
+
+void main() {
+  testWidgets('a mismatch keeps the failure images too', (tester) async {
+    final sandbox = WorkspaceSandbox.create(_yaml);
+    await tester.pumpWidget(const Swatch(accent: Color(0xFF4CAF50)));
+    await sandbox.matcher(Swatch.golden).matchAsync(Swatch.finder);
+    final artifacts = sandbox.readCase('test/goldens/swatch')['artifacts'];
+
+    expect(artifacts, {
+      'candidate':
+          '.gleon/runs/latest/artifacts/test/goldens/swatch/'
+          'candidate.png',
+      'diff': '.gleon/runs/latest/artifacts/test/goldens/swatch/diff.png',
+      'golden': '.gleon/runs/latest/artifacts/test/goldens/swatch/golden.png',
+    });
+    for (final MapEntry(key: kind, value: failure)
+        in _flutterFailures.entries) {
+      final path = artifacts is Map ? artifacts[kind] : null;
+      expect(
+        File('${sandbox.root.path}/$path').readAsBytesSync(),
+        File('${sandbox.root.path}/test/failures/$failure').readAsBytesSync(),
+        reason: kind,
+      );
+    }
+  });
+
+  testWidgets('a pass removes earlier failure images', (tester) async {
+    final sandbox = WorkspaceSandbox.create(_yaml);
+    await tester.pumpWidget(const Swatch(accent: Color(0xFF4CAF50)));
+    await sandbox.matcher(Swatch.golden).matchAsync(Swatch.finder);
+    final kept = sandbox.artifactsOf('test/goldens/swatch');
+
+    expect(kept.listSync(), hasLength(3));
+    await tester.pumpWidget(const Swatch());
+    await expectLater(Swatch.finder, sandbox.matcher(Swatch.golden));
+
+    expect(kept.existsSync(), isFalse);
+  });
+
+  testWidgets('a dimension mismatch keeps no diff image', (tester) async {
+    final sandbox = WorkspaceSandbox.create(_yaml);
+    await tester.pumpWidget(const Swatch(size: Size(100, 61)));
+    await sandbox.matcher(Swatch.golden).matchAsync(Swatch.finder);
+
+    expect(sandbox.readCase('test/goldens/swatch')['artifacts'], {
+      'candidate': endsWith('/test/goldens/swatch/candidate.png'),
+      'golden': endsWith('/test/goldens/swatch/golden.png'),
+    });
+  });
+
+  testWidgets('a missing golden keeps its candidate for gleon approve', (
+    tester,
+  ) async {
+    final sandbox = WorkspaceSandbox.create(_yaml);
+    await tester.pumpWidget(const Swatch());
+    await sandbox.matcher('goldens/new/swatch.png').matchAsync(Swatch.finder);
+
+    expect(sandbox.readCase('test/goldens/new/swatch')['artifacts'], {
+      'candidate': endsWith('/test/goldens/new/swatch/candidate.png'),
+    });
+    expect(
+      Directory('${sandbox.root.path}/test/failures').existsSync(),
+      isFalse,
+      reason: "Flutter's comparator writes nothing for a missing golden",
+    );
+  });
+
+  testWidgets('images are kept without metrics, where artifacts: says', (
+    tester,
+  ) async {
+    final sandbox = WorkspaceSandbox.create(_withoutMetrics);
+    await tester.pumpWidget(const Swatch(accent: Color(0xFF4CAF50)));
+    final failure = await sandbox
+        .matcher(Swatch.golden)
+        .matchAsync(Swatch.finder);
+    final kept = Directory(
+      '${sandbox.root.path}/.gleon/runs/kept/test/goldens/swatch',
+    );
+
+    expect(failure, contains('Failure feedback can be found at'));
+    expect(kept.listSync(), hasLength(3));
+    expect(sandbox.hasCases, isFalse, reason: 'metrics are off');
+  });
+
+  group('GLEON_ARTIFACTS_DIR and GLEON_RUN_ID', () {
+    testWidgets('move the images and name the run', (tester) async {
+      final sandbox = WorkspaceSandbox.create(_yaml);
+      await tester.pumpWidget(const Swatch(accent: Color(0xFF4CAF50)));
+      await sandbox
+          .matcher(
+            Swatch.golden,
+            session: sandbox.session(
+              artifactsDir: '.gleon/runs/ram',
+              runId: '12345-2',
+            ),
+          )
+          .matchAsync(Swatch.finder);
+      final report = sandbox.readCase('test/goldens/swatch');
+
+      expect(report, containsPair('run_id', '12345-2'));
+      expect(
+        report['artifacts'],
+        containsPair('diff', '.gleon/runs/ram/test/goldens/swatch/diff.png'),
+      );
+      expect(sandbox.artifactsOf('test/goldens/swatch').existsSync(), isFalse);
+    });
+
+    testWidgets('invalid values fail every golden as config errors', (
+      tester,
+    ) async {
+      final sandbox = WorkspaceSandbox.create(_yaml);
+      await tester.pumpWidget(const Swatch());
+      for (final (session, text) in [
+        (
+          sandbox.session(artifactsDir: 'build/out'),
+          "GLEON_ARTIFACTS_DIR: 'build/out' must be "
+              '`.gleon/runs/latest/artifacts`',
+        ),
+        (sandbox.session(runId: 'run 1'), 'GLEON_RUN_ID: a run id must be'),
+      ]) {
+        final message = await sandbox
+            .matcher(Swatch.golden, session: session)
+            .matchAsync(Swatch.finder);
+
+        expect(message, allOf(startsWith('gleon: '), contains(text)));
+        expect(message, isNot(contains('bug')), reason: 'a config error');
+      }
+    });
+  });
+}

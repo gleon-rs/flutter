@@ -153,6 +153,17 @@ abstract final class SourceBuild {
       ],
   ];
 
+  /// The inputs of [inputs] as git pathspecs relative to the checkout
+  /// [root]: a change anywhere else (another crate, docs, untracked notes)
+  /// does not change the library.
+  static List<String> inputPaths(Uri root) => [
+    ..._workspaceFiles,
+    for (final member in _localCrates(root)) ...[
+      '$member/Cargo.toml',
+      '$member/src',
+    ],
+  ];
+
   /// [crate] and its transitive `path` dependencies inside the checkout.
   static Set<String> _localCrates(Uri root) {
     final crates = <String>{};

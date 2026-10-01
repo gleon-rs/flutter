@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gleon/src/core/io/atomic_write.dart';
+import 'package:gleon/src/core/hook/atomic_write.dart';
 
 void main() {
   Directory? temp;
@@ -74,10 +74,12 @@ void main() {
       final file = fileIn('loaded.dll')..writeAsBytesSync(const [7]);
       final hash = sha256.convert(const [7]).toString();
 
-      expect(await AtomicWrite.isKept(file), isTrue);
       expect(await AtomicWrite.isKept(file, expectedSha256: hash), isTrue);
       expect(await AtomicWrite.isKept(file, expectedSha256: '0' * 64), isFalse);
-      expect(await AtomicWrite.isKept(fileIn('missing.dll')), isFalse);
+      expect(
+        await AtomicWrite.isKept(fileIn('missing.dll'), expectedSha256: hash),
+        isFalse,
+      );
     },
   );
 

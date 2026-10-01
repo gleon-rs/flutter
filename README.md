@@ -81,29 +81,37 @@ await expectLater(
 );
 ```
 
-| Tolerance                                              | Meaning                                                                                                                             |
-| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `.exact()` (default)                                   | Every pixel must be identical, like Flutter.                                                                                        |
-| `.pixel({maxDiffRatio = 0.01})`                        | At most this fraction (0.0–1.0) of pixels may differ.                                                                               |
-| `.ssim({minSimilarity = 0.8, colorTolerance = 8})`     | Min local SSIM of every neighborhood (0.0–1.0) and tolerated deviation beyond the local 3x3 envelope (0–255); see below.            |
+| Tolerance                                          | Meaning                                                                                                                  |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `.exact()` (default)                               | Every pixel must be identical, like Flutter.                                                                             |
+| `.pixel({maxDiffRatio = 0.01})`                    | At most this fraction (0.0–1.0) of pixels may differ.                                                                    |
+| `.ssim({minSimilarity = 0.8, colorTolerance = 8})` | Min local SSIM of every neighborhood (0.0–1.0) and tolerated deviation beyond the local 3x3 envelope (0–255); see below. |
 
 `ignoreRegions` (rectangles excluded from the comparison) works with every tolerance. Each
 variant only has the parameters of its mode, so a setting for the wrong mode cannot be written;
-out-of-range values throw an `ArgumentError` when the matcher is created.
+out-of-range values, and ignore regions that are empty, negative or reach beyond 4294967295
+pixels, throw an `ArgumentError` when the matcher is created.
 
 On failure the test message contains the metric and the thresholds, and
 `failures/<name>_masterImage.png`, `_testImage.png` and `_gleonDiff.png` are written next to the
-test (like Flutter's own failure output).
+test (like Flutter's own failure output). As in Flutter, `<name>` is only the golden's file name:
+goldens of the same name in different folders, compared from tests in one directory, share these
+files, and the later failure replaces the earlier one's. The artifacts directory (see
+[Failure images](#failure-images)) keeps every golden apart. Warnings (masks clipped to the
+image, a case report that cannot be written) are printed one per line and never fail a test. A
+failure caused by a bug in gleon itself, not by the test or its files, ends with a request to
+report it.
 
 Suite-wide tolerances per path live in `.gleon/gleon.yaml`, see below.
 
 ## Configuration with `.gleon/gleon.yaml`
 
 Suite settings live in the [gleon CLI](https://github.com/gleon-rs/gleon)'s workspace file —
-the very same file, so a project that later adopts the CLI keeps its rules. On the first
-comparison the package looks for `.gleon/gleon.yaml` from the working directory (the package root
-under `flutter test`) upwards, reads it once per test process, and resolves the rule of every
-golden by its path relative to that directory, with the CLI's own code:
+the very same file, so a project that later adopts the CLI keeps its rules. Each golden belongs to
+the nearest directory above it with `.gleon/gleon.yaml` (its workspace; the working directory of
+the test does not matter, and one test run may span several workspaces). The rule of a golden is
+resolved by its path relative to that directory, with the CLI's own code; the file is read again
+when it changes:
 
 ```yaml
 # .gleon/gleon.yaml (create it by hand or with `gleon init`)
@@ -125,6 +133,9 @@ screenshots:
 
 metrics:
   enabled: false
+
+# Where the images of failing goldens are kept (relative to the workspace root).
+artifacts: .gleon/runs/latest/artifacts
 ```
 
 - **Priority:** the `tolerance` argument of a call beats the golden's rule, which beats exact.
@@ -139,6 +150,17 @@ metrics:
 - Without `.gleon/gleon.yaml` everything behaves like Flutter: exact by default, no metrics, and
   nothing is written on passing tests.
 
+### Failure images
+
+A failing golden covered by a rule also keeps its images in the workspace's artifacts directory,
+`<artifacts>/<test name>/golden.png`, `candidate.png` and `diff.png` (a missing golden keeps its
+candidate only, ready to approve with the gleon CLI), with or without metrics; when the golden
+passes again, they are removed. The directory is `.gleon/runs/latest/artifacts` unless
+`artifacts:` or the environment variable `GLEON_ARTIFACTS_DIR` (which beats the file) names
+another directory under `.gleon/runs/` outside `latest/` (any other value fails every golden), so
+the images are always ignored by Git and removed by `gleon clean`. To keep them on a RAM disk,
+link `.gleon/runs` there. The `failures/` files next to the test are written as before.
+
 ## Metrics
 
 Passing goldens don't show how close they came to failing. With metrics on, every comparison of
@@ -151,18 +173,52 @@ gleon ✓ test/goldens/swatch.png  ssim 0.931 (≥0.800, +0.131)  color 5.2 (≤
 ```
 
 Turn them on with `metrics: {enabled: true}` in `.gleon/gleon.yaml` or with the environment
-variable `GLEON_METRICS=1` (which beats the file; `GLEON_METRICS=0` turns them off);
-`metrics: {console: false}` keeps the files and drops the lines. A case report records the golden
-and candidate SHA-256 and size, the effective tolerance and masks, the outcome (`identical`,
-`match`, `mismatch`, `dimension_mismatch`, `error`, `updated`), the metrics with their headroom to
-each threshold (for SSIM `min_ssim - min_similarity` and `color_tolerance - peak_excess`), the test
-name, platform, Flutter version and timings. The format is a JSON Schema in the gleon repository
-(`gleon-model/schema/case.v1.json`), shared with the CLI.
+variable `GLEON_METRICS=1` (which beats the file; `GLEON_METRICS=0` turns them off; any other
+value fails every golden); `metrics: {console: false}` keeps the files and drops the lines. A
+report that cannot be written is printed as a warning and never fails the test. A case report
+records the golden and candidate SHA-256 and size, the effective tolerance and masks, the outcome
+(`identical`, `match`, `mismatch`, `dimension_mismatch`, `error` with its kind, `updated`,
+`missing` for a golden that does not exist yet), the metrics with their headroom to each threshold
+(for SSIM `min_ssim - min_similarity` and `color_tolerance - peak_excess`), the paths of the
+failure images, the test name, platform, Flutter version and timings. The format is a JSON Schema
+in the gleon repository (`gleon-model/schema/case.v2.json`), shared with the CLI.
+
+Reports of different goldens come from different test processes and stay until overwritten, so a
+report does not show by itself which run wrote it. Set `GLEON_RUN_ID` (e.g.
+`GLEON_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}` in GitHub Actions; up to 128
+letters, digits, `.`, `_` and `-`) to stamp every report of a run with the same id. A golden that
+cannot be read or written is recorded as an `io` error.
 
 Use them to set tolerances from measurements instead of guesses, e.g. by collecting the reports
 from CI runs on every OS. The same reports are the input of the gleon CLI's reports and history;
 the CLI also keeps goldens out of Git (content-addressed blobs with small JSON manifests) and
 manages per-platform baselines.
+
+## Performance
+
+One golden comparison, Flutter's own comparator (`LocalFileComparator`, behind `flutter_test`'s
+`matchesGoldenFile`) against gleon, with the same golden file and candidate bytes. Measured
+inside `flutter test`, where golden tests run, with
+[bench_press](https://pub.dev/packages/bench_press) (mean latency; every ratio has a 95% confidence
+interval within ±8%). Apple M3 Max, macOS, Flutter 3.47.5:
+
+| Scenario                                      | Golden    | Flutter SDK | gleon (exact) | Speedup | gleon `ssim` |
+| --------------------------------------------- | --------- | ----------: | ------------: | ------: | -----------: |
+| Passing, identical bytes                      | 400x300   |      191 µs |         34 µs |    5.7x |        34 µs |
+|                                               | 390x844   |      213 µs |         36 µs |    5.9x |        36 µs |
+|                                               | 1170x2532 |      423 µs |         45 µs |    9.5x |        45 µs |
+| Passing, re-encoded (same pixels)             | 400x300   |     2.95 ms |       0.53 ms |    5.5x |      0.52 ms |
+|                                               | 390x844   |     7.67 ms |       1.57 ms |    4.9x |      1.57 ms |
+|                                               | 1170x2532 |     56.4 ms |        9.1 ms |    6.2x |       9.3 ms |
+| Failing (small change, failure files written) | 400x300   |     34.6 ms |       1.96 ms |   17.6x |      1.85 ms |
+|                                               | 390x844   |     61.1 ms |       4.44 ms |   13.8x |      4.07 ms |
+
+Across all cases gleon is 7.7x faster (geometric mean), and tolerant `ssim` costs no more than
+exact. A failing 1170x2532 golden takes Flutter about 0.4 s and gleon 25 ms; that case is beyond
+bench_press's 200 ms limit for one operation, so it is a plain timing. Flutter decodes through the
+engine but inverts both images and compares them pixel by pixel in Dart, and a failure renders two
+diff images and encodes four PNGs; gleon decodes and compares in Rust and writes one diff image.
+gleon here runs without a `.gleon/` workspace (exact, nothing recorded, like Flutter).
 
 ## How `ssim` decides
 
@@ -188,7 +244,8 @@ The defaults are calibrated on a corpus of benign rendering noise vs. regression
 - `ssim` can pass a low-contrast color change of a one-pixel line. Use `exact`/`pixel` where every
   pixel matters.
 - Only Flutter's default `LocalFileComparator` is supported as the underlying golden store.
-- Web (`--platform chrome`) and on-device tests are not supported.
+- Web (`--platform chrome`) and on-device tests are not supported: the native library does not
+  exist there, and the first comparison fails with a message saying so.
 
 ## Contributing
 
@@ -199,17 +256,23 @@ One package with a hard internal boundary:
 ```text
 lib/gleon.dart            exports only (flutter_test minus matchesGoldenFile, plus the gleon API)
 lib/src/core/             plain Dart: never imports Flutter (dart:ui, package:flutter*)
-  compare/                GoldenTolerance, PixelRegion, MaskZone, tolerance resolution
-  config/                 .gleon/gleon.yaml discovery, rule resolution (native), comparison plan
-  native/                 @Native leaf bindings, ABI check, typed report and metrics parsing
-  report/                 case reports, console lines
-  hook/                   native targets, release download, source build (used by hook/build.dart)
-  io/                     atomic file writes shared by the hook and the matcher
-lib/src/flutter/          the Flutter layer: matchesGoldenFile, the comparator, case recording,
-                          failure artifacts
+  compare/                GoldenTolerance, PixelRegion (the call's tolerance and masks)
+  config/                 GleonIntegration (who calls), GleonSession (the native session)
+  native/                 @Native leaf bindings, NativeEngine (ABI check, packing), verdicts,
+                          error kinds
+  hook/                   native targets, release download, source build, atomic writes (used by
+                          hook/build.dart)
+lib/src/flutter/          the Flutter layer: matchesGoldenFile, the comparator, FlutterSession
+                          (this package as an integration)
 hook/build.dart           thin build hook on top of lib/src/core/hook/
 bin/                      maintainer scripts (dart:io + crypto only), run with plain `dart`
 ```
+
+The native engine (`gleon-ffi`) does the whole job of a golden: it finds the workspace, resolves
+the `.gleon/gleon.yaml` rule, reads and compares the golden, and writes failure artifacts, case
+reports and updated goldens; this package passes facts (paths, the PNG, the call's tolerance and
+masks) and shows the verdict and texts it gets back. The C types and bindings of that contract
+live together in `lib/src/core/native/gleon_ffi.dart`.
 
 **Rule:** code in `lib/src/core/` must not import Flutter, so it stays usable from `dart test`,
 the build hook and other SDKs later; everything Flutter-specific (`Rect`, matchers, comparators)
@@ -218,11 +281,12 @@ lives in `lib/src/flutter/` and converts to core types at the boundary. DCM enfo
 
 ### Why leaf FFI calls
 
-Every native call is an `isLeaf: true` call. That allows passing the PNG buffers zero-copy via
-`Uint8List.address` and returning `{ptr, len}` slices by value, so the Dart side never allocates
-native memory (no `package:ffi`, no `malloc`/`free` pairs, no finalizers). The price is that the
-isolate group cannot reach a GC safepoint while a comparison runs (milliseconds for typical
-goldens, seconds for very large SSIM comparisons). For tests that is the right trade-off: the test
+Every native call is an `isLeaf: true` call. That allows passing the PNG zero-copy via
+`Uint8List.address` (and a call's strings as one UTF-8 buffer plus a `Uint32List` of their
+lengths) and returning `{ptr, len}` slices by value, so the Dart side never allocates native memory
+(no `package:ffi`, no `malloc`/`free` pairs; only the session is released by a `NativeFinalizer`).
+The price is that the isolate group cannot reach a GC safepoint while a comparison runs
+(milliseconds for typical goldens, seconds for very large SSIM comparisons). For tests that is the right trade-off: the test
 awaits the result anyway, and `flutter test` parallelizes across processes. Apps that must stay
 responsive would instead copy into `malloc`ed memory and make non-leaf calls in `Isolate.run`.
 
@@ -235,11 +299,28 @@ dcm analyze .                     # DCM 1.39.2, also in example/
 flutter test                      # also in example/
 ```
 
-Case reports written by the tests are validated against `case.v1.json` when a gleon checkout sits
+Case reports written by the tests are validated against `case.v2.json` when a gleon checkout sits
 next to this repository (`../gleon`, as in CI); without it that check is skipped.
 
 `analysis_options.yaml` is the single, strict configuration (analyzer lints plus DCM presets);
 every disabled or narrowed rule carries its reason.
+
+### Benchmarks
+
+`benchmark/` holds [bench_press](https://pub.dev/packages/bench_press) benchmarks that need the
+Flutter engine (`dart:ui`), so they run under `flutter test`, not `dart run bench_press run`:
+
+```sh
+flutter test benchmark/      # ~2 min; results in build/benchmark/golden_comparison.json
+dart run bench_press report --from-json build/benchmark/golden_comparison.json
+```
+
+To check a change for regressions, keep the JSON of a run before it and compare
+(`dart run bench_press diff old.json build/benchmark/golden_comparison.json`). Run on an idle
+machine: bench_press withholds ratios of unstable samples ("unresolved"). `BENCH_PRESS_ARGS`
+passes options (`--validate` for a smoke run, as CI does; `--trials 30`). The manual
+**Benchmark** workflow runs them on every supported host and puts the report into each job's
+summary.
 
 ## Maintainers
 
@@ -252,7 +333,11 @@ dart bin/build_native.dart                 # host; --target all cross-builds on 
 ```
 
 Use plain `dart`, not `dart run`: `dart run` executes the build hook first. Cross builds need
-`cargo-zigbuild` (Linux) and `cargo-xwin` (Windows); CI builds every target natively.
+`cargo-zigbuild` (Linux) and `cargo-xwin` (Windows); CI builds every target natively. A build
+records the gleon commit it was made from, and the hook uses it only while `native/gleon_ref` pins
+that commit. To try an unmerged engine change on top of the pinned commit, build with
+`--allow-dirty` (and rebuild after every change: the hook cannot tell two dirty builds apart); to
+test another checkout, use the `gleon_repo` user-define.
 
 Releasing: bump `version` in `pubspec.yaml` and `CHANGELOG.md`, update `native/gleon_ref` if the
 engine changed, and push the tag `vX.Y.Z`. The release workflow builds and tests all targets on

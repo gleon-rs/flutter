@@ -14,7 +14,7 @@ void main() {
   GleonMatchesGoldenFile matcher() => .new(
     Uri.parse(Swatch.golden),
     null,
-    session: sessionWithoutWorkspace(metricsEnv: '1'),
+    session: sessionWithoutWorkspace(metrics: '1'),
   );
 
   testWidgets('behaves like Flutter and writes no gleon files', (tester) async {
