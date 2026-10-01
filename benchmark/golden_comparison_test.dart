@@ -99,27 +99,46 @@ void main() {
           if (scenario.isPass || size.hasMismatch)
             await _prepare(dir, size, scenario),
     ];
-    // A variant that ends differently would measure another code path.
+    // Each variant must end as its scenario expects, and a failure must be a
+    // mismatch (it wrote its failure images), not an error: otherwise it would
+    // measure another code path. Measured calls must then end the same way.
+    final expected = <(String, String), String?>{};
     for (final testCase in cases) {
       for (final MapEntry(key: name, value: comparator) in {
         'flutter': flutter,
         ...candidates,
       }.entries) {
-        expect(
-          await _isMatch(comparator, testCase),
-          testCase.scenario.isPass,
-          reason: '$name, ${testCase.name}',
+        // Both comparators copy the golden there for a mismatch only.
+        final master = File(
+          '${dir.path}/failures/${testCase.name}_masterImage.png',
         );
+        if (master.existsSync()) master.deleteSync();
+        final outcome = await _failureOf(comparator, testCase);
+        final reason = '$name, ${testCase.name}: ${outcome ?? 'a pass'}';
+        expect(outcome == null, testCase.scenario.isPass, reason: reason);
+        expect(master.existsSync(), !testCase.scenario.isPass, reason: reason);
+        expected[(name, testCase.name)] = outcome;
       }
     }
 
     final matrix = Benchmark.matrix<_Case>(
       cases: cases,
       name: (testCase) => testCase.name,
-      baseline: ('flutter', (testCase) => _isMatch(flutter, testCase)),
+      baseline: (
+        'flutter',
+        (testCase) => _measure(
+          flutter,
+          testCase,
+          expected: expected[('flutter', testCase.name)],
+        ),
+      ),
       candidates: {
         for (final MapEntry(key: name, value: comparator) in candidates.entries)
-          name: (testCase) => _isMatch(comparator, testCase),
+          name: (testCase) => _measure(
+            comparator,
+            testCase,
+            expected: expected[(name, testCase.name)],
+          ),
       },
       throughput: (testCase) => .elements(testCase.pixels, unit: 'px'),
       // Failure paths write files, which is noisy: more trials are taken
@@ -136,16 +155,41 @@ void main() {
   });
 }
 
-/// Whether [comparator] passes [testCase]; a failure is part of the measured
-/// work, not an error.
-Future<bool> _isMatch(GoldenFileComparator comparator, _Case testCase) async {
+/// The failure message of [comparator] on [testCase], or null when it passes.
+/// Both comparators throw for a mismatch: gleon a [TestFailure], Flutter a
+/// [FlutterError]; anything else is rethrown.
+Future<String?> _failureOf(
+  GoldenFileComparator comparator,
+  _Case testCase,
+) async {
   try {
-    return await comparator.compare(testCase.candidate, testCase.golden);
+    await comparator.compare(testCase.candidate, testCase.golden);
+
+    return null;
   } on Object catch (error) {
-    // A TestFailure from gleon, an Error from Flutter's comparator.
-    if (error is TestFailure || error is FlutterError) return false;
+    if (error
+        case TestFailure(:final String? message) ||
+            FlutterError(:final String? message)) {
+      // A failure without a message is still a failure, never a pass.
+      return message ?? '$error';
+    }
 
     rethrow;
+  }
+}
+
+/// Runs [comparator] on [testCase] and throws unless it ends with [expected]
+/// (a failure message, or null for a pass) like when it was verified.
+Future<void> _measure(
+  GoldenFileComparator comparator,
+  _Case testCase, {
+  required String? expected,
+}) async {
+  final outcome = await _failureOf(comparator, testCase);
+  if (outcome != expected) {
+    throw StateError(
+      '${testCase.name} ended differently: ${outcome ?? 'a pass'}',
+    );
   }
 }
 
