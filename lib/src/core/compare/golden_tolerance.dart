@@ -103,6 +103,16 @@ sealed class GoldenTolerance {
       throw ArgumentError.value(value, name, 'must be between 0.0 and 1.0');
     }
   }
+
+  static void _checkColor(double value) {
+    if (!value.isFinite || value < 0 || value > 255) {
+      throw ArgumentError.value(
+        value,
+        'colorTolerance',
+        'must be between 0 and 255',
+      );
+    }
+  }
 }
 
 /// Every pixel must be identical; see [GoldenTolerance.exact].
@@ -164,15 +174,7 @@ final class SsimTolerance extends GoldenTolerance {
   @override
   void validate() {
     GoldenTolerance._checkRatio(minSimilarity, 'minSimilarity');
-    if (!colorTolerance.isFinite ||
-        colorTolerance < 0 ||
-        colorTolerance > 255) {
-      throw ArgumentError.value(
-        colorTolerance,
-        'colorTolerance',
-        'must be between 0 and 255',
-      );
-    }
+    GoldenTolerance._checkColor(colorTolerance);
   }
 
   @override
@@ -180,4 +182,69 @@ final class SsimTolerance extends GoldenTolerance {
       other is SsimTolerance &&
       other.minSimilarity == minSimilarity &&
       other.colorTolerance == colorTolerance;
+}
+
+/// How much the text of a captured widget may deviate from its golden, while
+/// everything else is compared under the [GoldenTolerance] (which must be
+/// exact or pixel).
+///
+/// Operating systems rasterize the same glyphs a little differently (hinting,
+/// anti-aliasing); with the app's real fonts (`loadAppFonts`) that is the
+/// only difference between them, and only inside the boxes of text. There a
+/// pixel counts as equal while no channel differs by more than
+/// [colorTolerance], and the text passes while every 16x16 tile has at most
+/// [maxDiffRatio] differing pixels: noise is spread thin, a changed word is
+/// a dense cluster.
+///
+/// ```dart
+/// import "package:gleon/gleon.dart";
+///
+/// void main() {
+///   testWidgets("card", (tester) async {
+///     await expectLater(
+///       find.text("Card"),
+///       matchesGoldenFile(
+///         "goldens/card.png",
+///         textTolerance: const TextTolerance(maxDiffRatio: 0.05),
+///       ),
+///     );
+///   });
+/// }
+/// ```
+@immutable
+@pragma('vm:deeply-immutable')
+// ignore: prefer-single-declaration-per-file, shares GoldenTolerance's format.
+final class TextTolerance {
+  /// Creates a text tolerance.
+  const TextTolerance({this.colorTolerance = 24, this.maxDiffRatio = 0.1});
+
+  /// Largest difference of any channel of a text pixel, in 8-bit units
+  /// (0–255).
+  final double colorTolerance;
+
+  /// Largest fraction (0.0–1.0) of differing pixels in any 16x16 tile of
+  /// text.
+  final double maxDiffRatio;
+
+  @override
+  int get hashCode => Object.hash(TextTolerance, colorTolerance, maxDiffRatio);
+
+  /// Throws an [ArgumentError] for out-of-range values.
+  void validate() {
+    GoldenTolerance._checkRatio(maxDiffRatio, 'maxDiffRatio');
+    GoldenTolerance._checkColor(colorTolerance);
+  }
+
+  /// The thresholds as in failure messages (`text color ±24, ≤ 10.00% per
+  /// tile`).
+  @override
+  String toString() =>
+      'text color ±${GoldenTolerance._decimal(colorTolerance, 0, max: 2)}'
+      ', ≤ ${GoldenTolerance._percent(maxDiffRatio)}% per tile';
+
+  @override
+  bool operator ==(Object other) =>
+      other is TextTolerance &&
+      other.colorTolerance == colorTolerance &&
+      other.maxDiffRatio == maxDiffRatio;
 }

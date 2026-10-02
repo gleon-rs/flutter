@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -104,14 +105,21 @@ final class WorkspaceSandbox {
     String key, {
     GoldenTolerance? tolerance,
     List<Rect> ignoreRegions = const [],
+    TextTolerance? textTolerance,
     GleonSession? session,
   }) => .new(
     Uri.parse(key),
     null,
     tolerance: tolerance,
     masks: IgnoreRegions.toMasks(ignoreRegions),
+    textTolerance: textTolerance,
     session: session ?? this.session(),
   );
+
+  /// The bytes of the golden [key] (relative to `test/`): byte inputs of
+  /// the golden itself are identical.
+  Uint8List goldenBytes(String key) =>
+      File('${root.path}/test/$key').readAsBytesSync();
 
   /// The case report named [name], validated against the committed schema.
   Map<String, Object?> readCase(String name) {
