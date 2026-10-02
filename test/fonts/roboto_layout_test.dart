@@ -4,16 +4,35 @@ import 'package:flutter/painting.dart';
 import 'package:flutter/services.dart';
 import 'package:gleon/gleon.dart';
 
+import '../helpers/font_metrics.dart';
+
 // The text-regions plan loads real fonts in tests (Roboto from the Flutter
 // SDK) and only tolerates differences inside the boxes of text. That only
 // works if every OS lays the text out alike, so the boxes and everything around
 // them stay in place: the line metrics are pinned to the values measured on
-// macOS and checked on every OS of CI.
+// macOS and checked on every OS of CI. Windows takes line metrics from other
+// font tables, which the fonts are aligned for (`withPortableLineMetrics`).
 void main() {
   test('the Flutter SDK provides Roboto to tests', () {
     for (final file in _files) {
       expect(File(_path(file)).existsSync(), isTrue, reason: file);
     }
+  });
+
+  test('Windows line metrics are aligned with hhea, checksums kept', () {
+    final font = withPortableLineMetrics(
+      File(_path('Roboto-Regular.ttf')).readAsBytesSync(),
+    );
+    final data = ByteData.sublistView(font);
+    final tables = _tables(font);
+    final (hhea, os2) = (tables['hhea'] ?? -1, tables['OS/2'] ?? -1);
+
+    expect(
+      (data.getUint16(os2 + 74), data.getUint16(os2 + 76)),
+      (data.getInt16(hhea + 4), -data.getInt16(hhea + 6)),
+    );
+    expect((data.getUint16(os2 + 74), data.getUint16(os2 + 76)), (1900, 500));
+    expect(openTypeChecksum(data, 0, font.length), 0xB1B0AFBA);
   });
 
   testWidgets('Roboto lays text out alike on every OS', (tester) async {
@@ -48,10 +67,21 @@ String _path(String file) {
 Future<void> _load() async {
   final loader = FontLoader('Roboto');
   for (final file in _files) {
-    final bytes = File(_path(file)).readAsBytesSync();
+    final bytes = withPortableLineMetrics(File(_path(file)).readAsBytesSync());
     loader.addFont(Future.value(ByteData.sublistView(bytes)));
   }
   await loader.load();
+}
+
+/// The offsets of the tables of [font] by tag.
+Map<String, int> _tables(Uint8List font) {
+  final data = ByteData.sublistView(font);
+
+  return {
+    for (int index = 0; index < data.getUint16(4); index += 1)
+      String.fromCharCodes(font, index * 16 + 12, index * 16 + 16): data
+          .getUint32(index * 16 + 20),
+  };
 }
 
 /// Every line of [_sample] wrapped at 180 px in Roboto of [size] and [weight],
