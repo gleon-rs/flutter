@@ -122,6 +122,79 @@ jobs:
           path: flutter/example/test/failures/
           if-no-files-found: ignore
 
+  cli:
+    name: gleon CLI on the example
+    # The case reports of a Flutter run read by the gleon CLI of the pinned commit: the contract
+    # between this package (the writer) and the CLI (the reader), end to end.
+    if: ${{ github.event_name != 'push' }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+        working-directory: flutter
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: flutter
+          persist-credentials: false
+
+      - name: Set up Flutter and gleon-ffi
+        uses: ./flutter/.github/actions/setup
+        with:
+          target: linux-x64
+
+      - name: Read the gleon pin
+        id: pin
+        run: echo "gleon_ref=$(tr -d '[:space:]' < native/gleon_ref)" >> "$GITHUB_OUTPUT"
+
+      # One build per pinned commit, like the native library.
+      - name: Restore the gleon CLI
+        id: cli-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: gleon-cli/target/release/gleon
+          key: gleon-cli-linux-x64-${{ steps.pin.outputs.gleon_ref }}
+
+      - name: Check out gleon
+        if: ${{ steps.cli-cache.outputs.cache-hit != 'true' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: gleon-rs/gleon
+          ref: ${{ steps.pin.outputs.gleon_ref }}
+          path: gleon-cli
+          persist-credentials: false
+
+      - name: Build the gleon CLI
+        if: ${{ steps.cli-cache.outputs.cache-hit != 'true' }}
+        working-directory: gleon-cli
+        run: |
+          if ! command -v rustup >/dev/null; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+            export PATH="$HOME/.cargo/bin:$PATH"
+          fi
+          rustup toolchain install
+          cargo build --release --locked -p gleon
+
+      - name: Put the gleon CLI on PATH
+        run: echo "$GITHUB_WORKSPACE/gleon-cli/target/release" >> "$GITHUB_PATH"
+
+      - name: Report the example's run
+        working-directory: flutter/example
+        env:
+          GLEON_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          flutter pub get
+          gleon test -- flutter test
+          gleon report markdown
+          gleon report junit --out build/gleon/junit.xml
+          gleon dashboard --out build/gleon/dashboard.html
+          # Every golden of the example was read, and none failed.
+          grep -Eq 'tests="[1-9][0-9]*" failures="0" errors="0"' build/gleon/junit.xml
+
   quality:
     name: Quality gates
     # Validated on the pull request; a merge to main does not change the result.

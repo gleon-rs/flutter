@@ -65,7 +65,7 @@ void main() {
     await tester.pumpWidget(const Swatch());
     await expectLater(Swatch.finder, sandbox.matcher(Swatch.golden));
 
-    expect(kept.existsSync(), isFalse);
+    expect(kept.listSync(), isEmpty);
   });
 
   testWidgets('a dimension mismatch keeps no diff image', (tester) async {
@@ -96,7 +96,9 @@ void main() {
     );
   });
 
-  testWidgets('images are kept without metrics, where artifacts: says', (
+  // Without metrics a failure is still recorded, for `gleon report` and
+  // `gleon approve`; passes are not, and a fix removes the failure's report.
+  testWidgets('failures are kept without metrics, where artifacts: says', (
     tester,
   ) async {
     final sandbox = WorkspaceSandbox.create(_withoutMetrics);
@@ -110,7 +112,24 @@ void main() {
 
     expect(failure, contains('Failure feedback can be found at'));
     expect(kept.listSync(), hasLength(3));
-    expect(sandbox.hasCases, isFalse, reason: 'metrics are off');
+    final report = sandbox.readCase('test/goldens/swatch');
+    expect(report, containsPair('outcome', 'mismatch'));
+    expect(
+      report['artifacts'],
+      containsPair(
+        'candidate',
+        '.gleon/runs/kept/test/goldens/swatch/candidate.png',
+      ),
+    );
+
+    await tester.pumpWidget(const Swatch());
+    final fixed = await sandbox
+        .matcher(Swatch.golden)
+        .matchAsync(Swatch.finder);
+
+    expect(fixed, isNull);
+    expect(sandbox.hasCase('test/goldens/swatch'), isFalse);
+    expect(kept.listSync(), isEmpty);
   });
 
   group('GLEON_ARTIFACTS_DIR and GLEON_RUN_ID', () {
