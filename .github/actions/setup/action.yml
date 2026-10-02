@@ -64,16 +64,19 @@ runs:
         ref: ${{ steps.pin.outputs.gleon_ref }}
         path: gleon
         persist-credentials: false
+    # Rustup from a pinned action, never a downloaded installer script.
+    - name: Set up Rust
+      if: ${{ inputs.build == 'true' && steps.cache.outputs.cache-hit != 'true' }}
+      uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
+      with:
+        rust-src-dir: gleon
+        cache: false
+        build-warnings: warn
     - name: Install the pinned Rust toolchain
       if: ${{ inputs.build == 'true' && steps.cache.outputs.cache-hit != 'true' }}
       shell: bash
       working-directory: gleon
       run: |
-        if ! command -v rustup >/dev/null; then
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
-          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-          export PATH="$HOME/.cargo/bin:$PATH"
-        fi
         rustup toolchain install
         rustc --version
     - name: Build gleon-ffi

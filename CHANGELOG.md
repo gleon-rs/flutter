@@ -13,6 +13,12 @@
   `.gleon/gleon.yaml` or `GLEON_ARTIFACTS_DIR` to move it under `.gleon/runs/`); a missing golden
   keeps its candidate, and a pass removes the images of an earlier failure. `failures/` next to
   the test is written as before.
+- The gleon CLI turns the case reports of a `flutter test` run into a PR comment, HTML and JUnit
+  reports, the run history and approvals (`gleon test -- flutter test`, then `gleon report`,
+  `gleon dashboard` or `gleon approve`); see the README.
+- A failing golden covered by a rule writes its case report without metrics too (metrics add the
+  reports of passes and the console line), so `gleon approve` works after a plain `flutter test`;
+  a pass removes the report of an earlier failure.
 - `GLEON_RUN_ID` stamps every case report of a run with the same id. Like `GLEON_METRICS`, an
   invalid `GLEON_RUN_ID` or `GLEON_ARTIFACTS_DIR` fails every golden. A golden that cannot be read
   or written is recorded as an `io` error.

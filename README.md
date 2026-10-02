@@ -154,8 +154,10 @@ artifacts: .gleon/runs/latest/artifacts
 
 A failing golden covered by a rule also keeps its images in the workspace's artifacts directory,
 `<artifacts>/<test name>/golden.png`, `candidate.png` and `diff.png` (a missing golden keeps its
-candidate only, ready to approve with the gleon CLI), with or without metrics; when the golden
-passes again, they are removed. The directory is `.gleon/runs/latest/artifacts` unless
+candidate only, ready to approve with the gleon CLI), and its case report (see
+[Metrics](#metrics)), with or without metrics; when the golden passes again, the images are
+removed and so is the report (with metrics, the report of the pass replaces it). The directory
+is `.gleon/runs/latest/artifacts` unless
 `artifacts:` or the environment variable `GLEON_ARTIFACTS_DIR` (which beats the file) names
 another directory under `.gleon/runs/` outside `latest/` (any other value fails every golden), so
 the images are always ignored by Git and removed by `gleon clean`. To keep them on a RAM disk,
@@ -163,10 +165,10 @@ link `.gleon/runs` there. The `failures/` files next to the test are written as 
 
 ## Metrics
 
-Passing goldens don't show how close they came to failing. With metrics on, every comparison of
-a golden covered by a rule writes a case report to `.gleon/runs/latest/cases/<test name>.json`
-(overwritten by each run; `.gleon/.gitignore` ignores `runs/` and is created like `gleon init`
-would if it is missing) and prints one line:
+Passing goldens don't show how close they came to failing. A golden covered by a rule writes a
+case report to `.gleon/runs/latest/cases/<test name>.json` when it fails, and with metrics on
+for every comparison (overwritten by each run; `.gleon/.gitignore` ignores `runs/` and is created
+like `gleon init` would if it is missing); metrics also print one line:
 
 ```text
 gleon ✓ test/goldens/swatch.png  ssim 0.931 (≥0.800, +0.131)  color 5.2 (≤8, +2.8)  12 ms
@@ -191,9 +193,29 @@ letters, digits, `.`, `_` and `-`) to stamp every report of a run with the same 
 cannot be read or written is recorded as an `io` error.
 
 Use them to set tolerances from measurements instead of guesses, e.g. by collecting the reports
-from CI runs on every OS. The same reports are the input of the gleon CLI's reports and history;
-the CLI also keeps goldens out of Git (content-addressed blobs with small JSON manifests) and
-manages per-platform baselines.
+from CI runs on every OS.
+
+### Reports, history and approvals with the gleon CLI
+
+The [gleon CLI](https://github.com/gleon-rs/gleon) reads these case reports as one run, no
+`gleon diff` needed:
+
+```sh
+gleon test -- flutter test   # one run: sets GLEON_RUN_ID and GLEON_METRICS=1, records run.json
+gleon report markdown        # the PR comment of the run; also html, junit, json
+gleon dashboard              # adds the run to .gleon/history.json and renders dashboard.html
+gleon approve                # writes the candidates of failed goldens to their PNG files
+```
+
+`gleon test` passes the test command's exit code through; on Windows it finds `flutter.bat`.
+Without it, the CLI picks the run of `GLEON_RUN_ID`, else the run of the newest report; reports
+without a run id are read together, with a warning that they may mix runs, and after a plain
+`flutter test` without metrics only the failures are there (approving works, the totals don't).
+In CI, set `GLEON_RUN_ID` for the job, upload `.gleon/runs/` and pass the downloaded `latest/`
+to `--from` (`gleon report markdown --from <dir>/latest`, `gleon approve --from <dir>/latest`,
+one `--from` per job).
+The CLI can also keep goldens out of Git (content-addressed blobs with small JSON manifests) and
+manage per-platform baselines.
 
 ## Performance
 

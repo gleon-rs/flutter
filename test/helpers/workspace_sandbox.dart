@@ -76,9 +76,9 @@ final class WorkspaceSandbox {
   Directory artifactsOf(String name) =>
       .new('${root.path}/.gleon/runs/latest/artifacts/$name');
 
-  /// Whether a case report was written.
-  bool get hasCases =>
-      Directory('${root.path}/.gleon/runs/latest/cases').existsSync();
+  /// Whether the case report of the golden named [name] exists.
+  bool hasCase(String name) =>
+      File('${root.path}/.gleon/runs/latest/cases/$name.json').existsSync();
 
   /// A session with the given values of `GLEON_METRICS`,
   /// `GLEON_ARTIFACTS_DIR` and `GLEON_RUN_ID` (unset by default, whatever the
