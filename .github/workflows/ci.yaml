@@ -168,14 +168,20 @@ jobs:
           path: gleon-cli
           persist-credentials: false
 
+      # Rustup from a pinned action (never a downloaded installer script), even when the native
+      # library came from the cache and nothing installed Rust yet.
+      - name: Set up Rust
+        if: ${{ steps.cli-cache.outputs.cache-hit != 'true' }}
+        uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
+        with:
+          rust-src-dir: gleon-cli
+          cache: false
+          build-warnings: warn
+
       - name: Build the gleon CLI
         if: ${{ steps.cli-cache.outputs.cache-hit != 'true' }}
         working-directory: gleon-cli
         run: |
-          if ! command -v rustup >/dev/null; then
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
-            export PATH="$HOME/.cargo/bin:$PATH"
-          fi
           rustup toolchain install
           cargo build --release --locked -p gleon
 
