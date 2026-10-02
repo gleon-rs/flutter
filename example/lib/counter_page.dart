@@ -10,8 +10,6 @@ class CounterPage extends StatefulWidget {
 }
 
 class _CounterPageState extends State<CounterPage> {
-  static const _goal = 10;
-
   int _counter = 0;
 
   void _handleIncrement() => setState(() => _counter += 1);
@@ -34,16 +32,6 @@ class _CounterPageState extends State<CounterPage> {
               '$_counter',
               key: const ValueKey('counter'),
               style: textTheme.headlineMedium,
-            ),
-            // Visible progress towards the goal. Flutter's test font draws
-            // every glyph as the same box, so goldens could not see digits.
-            Padding(
-              padding: const .all(32),
-              child: LinearProgressIndicator(
-                value: (_counter / _goal).clamp(0, 1),
-                minHeight: 8,
-                semanticsLabel: 'Progress towards $_goal presses',
-              ),
             ),
           ],
         ),

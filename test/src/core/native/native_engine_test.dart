@@ -165,4 +165,41 @@ void main() {
     expect(corrupt.message, contains('could not compare'));
     expect(corrupt.errorKind, NativeErrorKind.image);
   });
+
+  test('raw candidates must have width x height RGBA pixels', () {
+    final dir = Directory.systemTemp.createTempSync('gleon_engine_');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final golden = File('${dir.path}/a.png')
+      ..writeAsBytesSync(File('test/goldens/swatch.png').readAsBytesSync());
+    final session = GleonSession(
+      integration: const GleonIntegration(
+        tool: 'gleon_other',
+        toolVersion: '1.0.0',
+        goldenArtifact: '{name}-expected.png',
+        candidateArtifact: '{name}-actual.png',
+        diffArtifact: '{name}-diff.png',
+      ),
+      hasWorkspaces: false,
+      environment: const GleonEnvironment(),
+    );
+    NativeOutcome compare(Uint8List pixels) => NativeEngine.golden(
+      session,
+      goldenPath: golden.path,
+      goldenUri: 'a.png',
+      failuresDir: '${dir.path}/failures/',
+      candidate: pixels,
+      rawSize: (height: 60, width: 100),
+      textRegions: const [PixelRegion(x: 0, y: 0, width: 10, height: 10)],
+      textTolerance: const TextTolerance(),
+    );
+
+    final short = compare(Uint8List(100 * 60 * 4 - 1));
+    expect(short.errorKind, NativeErrorKind.invalidInput);
+    expect(short.message, contains('100x60 RGBA needs 24000'));
+
+    final white = compare(Uint8List(100 * 60 * 4)..fillRange(0, 24000, 255));
+    expect(white.verdict, NativeVerdict.mismatch);
+    expect(white.message, contains('text color'));
+    expect(File('${dir.path}/failures/a-actual.png').existsSync(), isTrue);
+  });
 }

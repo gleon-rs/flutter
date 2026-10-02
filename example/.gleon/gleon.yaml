@@ -5,21 +5,21 @@ required_version: ">=0.1.0"
 
 screenshots:
   - include: "test/goldens/**/*.png"
-    mode: ssim
+    # Everything but text must match exactly: the tests load the app's real
+    # fonts (`loadAppFonts` in test/flutter_test_config.dart), and the goldens
+    # are recorded on macOS. Other operating systems rasterize glyphs a little
+    # differently, only inside the boxes of text, which `text` tolerates: a
+    # text pixel is equal while no channel differs by more than
+    # `color_tolerance`, and text passes while every 16x16 tile has at most
+    # `max_diff_ratio` differing pixels (a changed digit is a dense cluster).
+    # Provisional values: calibrate them on the CI case reports of every host
+    # (`metrics-<target>` artifacts of the Flutter Check workflow).
+    mode: pixel
     diff:
-      # The goldens are recorded on macOS; other operating systems rasterize
-      # text differently. Calibrated on the CI case reports of every host
-      # (`metrics-<target>` artifacts of the Flutter Check workflow,
-      # 2026-09-30, identical in two runs): worst min local SSIM 0.754 (Linux
-      # x64 and arm64), worst peak color excess 41.5 (Windows x64), macOS
-      # byte-identical. Thresholds: floor(0.754 - 0.02, 0.01) = 0.73 and
-      # ceil(41.5 + 4) = 46; recalibrate the same way when goldens or Flutter
-      # change. A real regression still fails far outside them: counter 0 vs 3
-      # (an 89x8px progress bar change) measures min SSIM 0.164 and colors off
-      # by 143 (pinned by the gleon engine tests). Per-platform goldens or
-      # text-aware comparison would allow the defaults (0.8, 8).
-      min_similarity: 0.73
-      color_tolerance: 46
+      threshold: 0
+    text:
+      color_tolerance: 24
+      max_diff_ratio: 0.1
 
 # Per-golden case reports in .gleon/runs/latest/cases/; CI turns them on with
 # GLEON_METRICS=1.

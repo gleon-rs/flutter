@@ -3,15 +3,14 @@ import 'dart:io';
 import 'package:flutter/painting.dart';
 import 'package:flutter/services.dart';
 import 'package:gleon/gleon.dart';
-
-import '../helpers/font_metrics.dart';
+import 'package:gleon/src/flutter/app_fonts.dart';
 
 // The text-regions plan loads real fonts in tests (Roboto from the Flutter
 // SDK) and only tolerates differences inside the boxes of text. That only
 // works if every OS lays the text out alike, so the boxes and everything around
 // them stay in place: the line metrics are pinned to the values measured on
 // macOS and checked on every OS of CI. Windows takes line metrics from other
-// font tables, which the fonts are aligned for (`withPortableLineMetrics`).
+// font tables, which `loadAppFonts` aligns the fonts for.
 void main() {
   test('the Flutter SDK provides Roboto to tests', () {
     for (final file in _files) {
@@ -20,7 +19,7 @@ void main() {
   });
 
   test('Windows line metrics are aligned with hhea, checksums kept', () {
-    final font = withPortableLineMetrics(
+    final font = AppFonts.withPortableLineMetrics(
       File(_path('Roboto-Regular.ttf')).readAsBytesSync(),
     );
     final data = ByteData.sublistView(font);
@@ -32,11 +31,35 @@ void main() {
       (data.getInt16(hhea + 4), -data.getInt16(hhea + 6)),
     );
     expect((data.getUint16(os2 + 74), data.getUint16(os2 + 76)), (1900, 500));
-    expect(openTypeChecksum(data, 0, font.length), 0xB1B0AFBA);
+    expect(
+      [
+        for (final field in [68, 70, 72]) data.getInt16(os2 + field),
+      ],
+      [
+        for (final field in [4, 6, 8]) data.getInt16(hhea + field),
+      ],
+      reason: 'sTypo* are hhea',
+    );
+    expect(AppFonts.checksum(data, 0, font.length), 0xB1B0AFBA);
+  });
+
+  test('checksums pad the last word with zeros', () {
+    final data = ByteData.sublistView(Uint8List.fromList([1, 2, 3, 4, 5]));
+
+    expect(AppFonts.checksum(data, 0, 5), 0x01020304 + 0x05000000);
+    expect(AppFonts.checksum(data, 1, 3), 0x02030400);
+  });
+
+  test('a font with a truncated hhea table is kept as it is', () {
+    final font = File(_path('Roboto-Regular.ttf')).readAsBytesSync();
+    // The record's length: the line gap at bytes 8..10 would be beyond it.
+    ByteData.sublistView(font).setUint32(_record(font, 'hhea') + 12, 8);
+
+    expect(AppFonts.withPortableLineMetrics(font), font);
   });
 
   testWidgets('Roboto lays text out alike on every OS', (tester) async {
-    await tester.runAsync(_load);
+    await tester.runAsync(loadAppFonts);
     final lines = [
       for (final size in [10.0, 12.0, 14.0, 16.0, 24.0])
         for (final weight in const [
@@ -49,7 +72,96 @@ void main() {
 
     expect(lines, _onMacOS);
   });
+
+  // Roboto has no USE_TYPO_METRICS; many app fonts do, and some systems then
+  // measure lines by `OS/2` `sTypo*` (for Roboto 1536/-512 + 102, not hhea).
+  testWidgets('a font with USE_TYPO_METRICS lays text out alike too', (
+    tester,
+  ) async {
+    await tester.runAsync(() => _loadVariant(_typoRoboto, _setUseTypoMetrics));
+    final lines = [
+      for (final size in [10.0, 12.0, 14.0, 16.0, 24.0])
+        for (final weight in const [
+          FontWeight.w400,
+          FontWeight.w500,
+          FontWeight.w700,
+        ])
+          ..._lines(size, weight, family: _typoRoboto),
+    ];
+
+    expect(lines, _onMacOS);
+  });
+
+  // Roboto's line gap is 0; other fonts have one, which every system must add
+  // the same way (DirectWrite derives it from hhea and the Windows metrics).
+  testWidgets('a font with a line gap lays text out alike too', (tester) async {
+    await tester.runAsync(() => _loadVariant(_gapRoboto, _setLineGap));
+
+    expect(_lines(14, .w400, family: _gapRoboto), _withLineGapOnMacOS);
+  });
 }
+
+/// Roboto with USE_TYPO_METRICS set, as an app font would have it.
+const _typoRoboto = 'RobotoTypo';
+
+/// Roboto with a line gap.
+const _gapRoboto = 'RobotoGap';
+
+/// Loads [_files] as [family], each changed by [change] and made portable.
+Future<void> _loadVariant(String family, void Function(Uint8List font) change) {
+  final loader = FontLoader(family);
+  for (final file in _files) {
+    final font = File(_path(file)).readAsBytesSync();
+    change(font);
+    final portable = AppFonts.withPortableLineMetrics(font);
+    loader.addFont(.value(ByteData.sublistView(portable)));
+  }
+
+  return loader.load();
+}
+
+void _setUseTypoMetrics(Uint8List font) {
+  final fsSelection = _os2(font) + 62;
+  final data = ByteData.sublistView(font);
+  data.setUint16(fsSelection, data.getUint16(fsSelection) | _useTypoMetrics);
+}
+
+/// Sets the `hhea` line gap to 200 units (of 2048) and its table checksum.
+void _setLineGap(Uint8List font) {
+  final record = _record(font, 'hhea');
+  final data = ByteData.sublistView(font);
+  final (offset, length) = (
+    data.getUint32(record + 8),
+    data.getUint32(record + 12),
+  );
+  data
+    ..setInt16(offset + 8, 200)
+    ..setUint32(record + 4, AppFonts.checksum(data, offset, length));
+}
+
+/// The offset of the table record of [tag] in [font].
+int _record(Uint8List font, String tag) {
+  final data = ByteData.sublistView(font);
+  for (int index = 0; index < data.getUint16(4); index += 1) {
+    final record = index * 16 + 12;
+    if (String.fromCharCodes(font, record, record + 4) == tag) return record;
+  }
+
+  return fail('no $tag table');
+}
+
+/// Measured on macOS (arm64), Flutter 3.47.6.
+const _withLineGapOnMacOS = [
+  '14.0 400 0: 0.0 13.8984375 172.251953125 18.0 13.671875 4.1015625',
+  '14.0 400 1: 0.0 31.8984375 169.50390625 18.0 13.671875 4.1015625',
+  '14.0 400 2: 0.0 49.8984375 108.8212890625 18.0 13.671875 4.1015625',
+];
+
+/// The offset of the `OS/2` table of [font].
+int _os2(Uint8List font) => _tables(font)['OS/2'] ?? fail('no OS/2 table');
+
+/// The USE_TYPO_METRICS bit of `OS/2` `fsSelection`.
+const _useTypoMetrics = 0x80;
 
 const _files = ['Roboto-Regular.ttf', 'Roboto-Medium.ttf', 'Roboto-Bold.ttf'];
 
@@ -61,16 +173,7 @@ String _path(String file) {
       Platform.environment['FLUTTER_ROOT'] ??
       fail('`flutter test` sets FLUTTER_ROOT');
 
-  return '$root/bin/cache/artifacts/material_fonts/$file';
-}
-
-Future<void> _load() async {
-  final loader = FontLoader('Roboto');
-  for (final file in _files) {
-    final bytes = withPortableLineMetrics(File(_path(file)).readAsBytesSync());
-    loader.addFont(Future.value(ByteData.sublistView(bytes)));
-  }
-  await loader.load();
+  return '$root/${AppFonts.sdkFonts}/$file';
 }
 
 /// The offsets of the tables of [font] by tag.
@@ -84,17 +187,18 @@ Map<String, int> _tables(Uint8List font) {
   };
 }
 
-/// Every line of [_sample] wrapped at 180 px in Roboto of [size] and [weight],
-/// as `size weight line: left baseline width height ascent descent`.
-List<String> _lines(double size, FontWeight weight) {
+/// Every line of [_sample] wrapped at 180 px in [family] (Roboto) of [size]
+/// and [weight], as `size weight line: left baseline width height ascent
+/// descent`.
+List<String> _lines(
+  double size,
+  FontWeight weight, {
+  String family = 'Roboto',
+}) {
   final painter = TextPainter(
     text: TextSpan(
       text: _sample,
-      style: TextStyle(
-        fontSize: size,
-        fontWeight: weight,
-        fontFamily: 'Roboto',
-      ),
+      style: TextStyle(fontSize: size, fontWeight: weight, fontFamily: family),
     ),
     textDirection: .ltr,
   )..layout(maxWidth: 180);

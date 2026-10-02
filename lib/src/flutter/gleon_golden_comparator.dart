@@ -19,12 +19,13 @@ import 'flutter_session.dart';
 /// [LocalFileComparator]), so golden files live exactly where they would
 /// without this package.
 class GleonGoldenComparator extends GoldenFileComparator {
-  /// Wraps [delegate]; [tolerance] and [masks] come from the matcher call.
-  /// [session] defaults to [FlutterSession.process].
+  /// Wraps [delegate]; [tolerance], [masks] and [textTolerance] come from
+  /// the matcher call. [session] defaults to [FlutterSession.process].
   GleonGoldenComparator(
     this.delegate, {
     this.tolerance,
     this.masks = const [],
+    this.textTolerance,
     GleonSession? session,
   }) : session = session ?? FlutterSession.process;
 
@@ -38,6 +39,9 @@ class GleonGoldenComparator extends GoldenFileComparator {
   /// Regions of the matcher call excluded from the comparison, in whole
   /// pixels of the golden.
   final List<PixelRegion> masks;
+
+  /// The text tolerance of the matcher call; null uses the golden's rule.
+  final TextTolerance? textTolerance;
 
   /// Workspace and environment of this process.
   final GleonSession session;
@@ -57,18 +61,38 @@ class GleonGoldenComparator extends GoldenFileComparator {
 
   @override
   Future<bool> compare(Uint8List imageBytes, Uri golden) async {
-    final local = delegate;
-    if (local is! LocalFileComparator) {
-      throw TestFailure(
-        'gleon: matchesGoldenFile needs the default LocalFileComparator, but '
-        'goldenFileComparator is ${local.runtimeType}. Custom comparators '
-        'are not supported yet.',
-      );
-    }
-    _run(local, golden, imageBytes);
+    _run(_local, golden, imageBytes);
 
     return true;
   }
+
+  /// Compares the raw straight RGBA8 [pixels] of a [width] x [height]
+  /// capture with [golden]; [textRegions] are the boxes of its text, in
+  /// pixels of the capture.
+  ///
+  /// Throws a [TestFailure] with the engine's message unless it passes.
+  void compareRaw(
+    Uri golden,
+    Uint8List pixels, {
+    required int width,
+    required int height,
+    List<PixelRegion> textRegions = const [],
+  }) => _run(
+    _local,
+    golden,
+    pixels,
+    rawSize: (height: height, width: width),
+    textRegions: textRegions,
+  );
+
+  LocalFileComparator get _local => switch (delegate) {
+    final LocalFileComparator local => local,
+    final other => throw TestFailure(
+      'gleon: matchesGoldenFile needs the default LocalFileComparator, but '
+      'goldenFileComparator is ${other.runtimeType}. Custom comparators '
+      'are not supported yet.',
+    ),
+  };
 
   /// One native call; throws a [TestFailure] with the engine's message
   /// unless the golden passes.
@@ -76,6 +100,8 @@ class GleonGoldenComparator extends GoldenFileComparator {
     LocalFileComparator local,
     Uri golden,
     Uint8List imageBytes, {
+    ({int height, int width})? rawSize,
+    List<PixelRegion> textRegions = const [],
     bool isUpdate = false,
   }) {
     final basedir = local.basedir;
@@ -86,10 +112,13 @@ class GleonGoldenComparator extends GoldenFileComparator {
       goldenUri: '$golden',
       failuresDir: Directory.fromUri(basedir.resolve('failures/')).path,
       candidate: imageBytes,
+      rawSize: rawSize,
       isUpdate: isUpdate,
       testName: FlutterSession.currentTestName,
       tolerance: tolerance,
       masks: masks,
+      textRegions: textRegions,
+      textTolerance: textTolerance,
     );
     final NativeOutcome(:console, :errorKind, :message, :verdict, :warning) =
         outcome;

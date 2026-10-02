@@ -34,6 +34,12 @@ const _unset = '';
 /// Matches a lowercase hex SHA-256.
 Matcher _isSha256() => matches(RegExp(r'^[0-9a-f]{64}$'));
 
+/// The `sha256` of a recorded image.
+String _shaOf(Object? image) => switch (image) {
+  {'sha256': final String sha256} => sha256,
+  _ => fail('no sha256 in the report'),
+};
+
 /// Runs [body] with `debugPrint` captured (reset to the test binding's
 /// override before the test ends, as the binding requires) and returns the
 /// printed lines.
@@ -50,11 +56,15 @@ Future<List<String>> _capturePrints(AsyncCallback body) async {
 }
 
 void main() {
-  testWidgets('identical: schema-valid case without metrics', (tester) async {
+  // Only the PNG bytes of the golden itself are identical: a widget is
+  // compared as raw pixels, and equal pixels are a match.
+  test('identical: schema-valid case without metrics', () async {
     final sandbox = WorkspaceSandbox.create(_yaml);
-    await tester.pumpWidget(const Swatch());
     final lines = await _capturePrints(
-      () => expectLater(Swatch.finder, sandbox.matcher(Swatch.golden)),
+      () => expectLater(
+        sandbox.goldenBytes(Swatch.golden),
+        sandbox.matcher(Swatch.golden),
+      ),
     );
     final report = sandbox.readCase('test/goldens/swatch');
 
@@ -70,7 +80,11 @@ void main() {
       ),
     );
     expect(report['golden'], isNot(contains('blob')), reason: 'PNG goldens');
-    expect(report['candidate'], containsPair('sha256', _isSha256()));
+    expect(
+      report['candidate'],
+      containsPair('sha256', _shaOf(report['golden'])),
+      reason: 'identical PNGs hash the same',
+    );
     expect(report.containsKey('metrics'), isFalse);
     expect(report.containsKey('artifacts'), isFalse, reason: 'a pass');
     expect(report.containsKey('run_id'), isFalse, reason: 'no GLEON_RUN_ID');
@@ -97,22 +111,6 @@ void main() {
     expect(
       lines.singleOrNull,
       startsWith('gleon = test/goldens/swatch.png  identical  '),
-    );
-  });
-
-  testWidgets('identical PNGs hash the same', (tester) async {
-    final sandbox = WorkspaceSandbox.create(_yaml);
-    await tester.pumpWidget(const Swatch());
-    await expectLater(Swatch.finder, sandbox.matcher(Swatch.golden));
-    final report = sandbox.readCase('test/goldens/swatch');
-    final golden = report['golden'];
-    final candidate = report['candidate'];
-
-    expect(
-      golden is Map &&
-          candidate is Map &&
-          golden['sha256'] == candidate['sha256'],
-      isTrue,
     );
   });
 
@@ -302,9 +300,10 @@ void main() {
   // not, and must name the test too.
   test('the test name is known for byte inputs outside runAsync', () async {
     final sandbox = WorkspaceSandbox.create(_yaml);
-    final bytes = File('${sandbox.root.path}/test/${Swatch.golden}')
-        .readAsBytesSync();
-    await expectLater(bytes, sandbox.matcher(Swatch.golden));
+    await expectLater(
+      sandbox.goldenBytes(Swatch.golden),
+      sandbox.matcher(Swatch.golden),
+    );
 
     expect(sandbox.readCase('test/goldens/swatch')['test'], {
       'name': 'the test name is known for byte inputs outside runAsync',
@@ -366,7 +365,7 @@ void main() {
 
       expect(
         sandbox.readCase('test/goldens/swatch'),
-        containsPair('outcome', 'identical'),
+        containsPair('outcome', 'match'),
       );
       expect(lines, isEmpty, reason: 'console: false still applies');
     });

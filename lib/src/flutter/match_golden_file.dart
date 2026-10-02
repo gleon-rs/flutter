@@ -19,9 +19,15 @@ import 'ignore_regions.dart';
 ///   (exact when omitted).
 /// * [ignoreRegions]: regions excluded from the comparison, in pixels of the
 ///   golden PNG (measure them on the golden file).
+/// * [textTolerance]: how much the text of a widget (a `Finder`) may deviate,
+///   see [TextTolerance], while everything else is compared under an exact
+///   or pixel [tolerance]. Null uses the `text:` of the golden's
+///   `.gleon/gleon.yaml` rule; without one, text is compared like
+///   everything else. Needs real fonts: `loadAppFonts`.
 ///
-/// Throws an [ArgumentError] for out-of-range tolerance values and invalid
-/// regions, and for a `key` that is neither a [String] nor a [Uri].
+/// Throws an [ArgumentError] for out-of-range tolerance values, invalid
+/// regions, a [textTolerance] with an SSIM [tolerance], and a `key` that is
+/// neither a [String] nor a [Uri].
 ///
 /// ```dart
 /// import "package:flutter/widgets.dart";
@@ -43,6 +49,7 @@ flutter_test.MatchesGoldenFile matchesGoldenFile(
   int? version,
   GoldenTolerance? tolerance,
   List<Rect>? ignoreRegions,
+  TextTolerance? textTolerance,
 }) {
   final uri = switch (key) {
     Uri() => key,
@@ -54,11 +61,20 @@ flutter_test.MatchesGoldenFile matchesGoldenFile(
     ),
   };
   tolerance?.validate();
+  textTolerance?.validate();
+  if (textTolerance != null && tolerance is SsimTolerance) {
+    throw ArgumentError.value(
+      textTolerance,
+      'textTolerance',
+      'applies to exact and pixel tolerances, not ssim',
+    );
+  }
 
   return GleonMatchesGoldenFile(
     uri,
     version,
     tolerance: tolerance,
     masks: IgnoreRegions.toMasks(ignoreRegions ?? const []),
+    textTolerance: textTolerance,
   );
 }
