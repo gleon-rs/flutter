@@ -50,13 +50,16 @@ void main() {
     expect(AppFonts.checksum(data, 1, 3), 0x02030400);
   });
 
-  test('a font with a truncated hhea table is kept as it is', () {
-    final font = File(_path('Roboto-Regular.ttf')).readAsBytesSync();
-    // The record's length: the line gap at bytes 8..10 would be beyond it.
-    ByteData.sublistView(font).setUint32(_record(font, 'hhea') + 12, 8);
+  // The record's length: hhea's line gap (bytes 8..10) and head's
+  // checkSumAdjustment (bytes 8..12) would be beyond it.
+  for (final table in ['hhea', 'head']) {
+    test('a font with a truncated $table table is kept as it is', () {
+      final font = File(_path('Roboto-Regular.ttf')).readAsBytesSync();
+      ByteData.sublistView(font).setUint32(_record(font, table) + 12, 8);
 
-    expect(AppFonts.withPortableLineMetrics(font), font);
-  });
+      expect(AppFonts.withPortableLineMetrics(font), font);
+    });
+  }
 
   testWidgets('Roboto lays text out alike on every OS', (tester) async {
     await tester.runAsync(loadAppFonts);

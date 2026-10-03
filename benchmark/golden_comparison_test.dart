@@ -188,13 +188,16 @@ void main() {
         environment: const GleonEnvironment(),
       ),
     );
-    final captures = [
-      for (final size in _sizes)
-        for (final scenario in const [_Scenario.identical, _Scenario.mismatch])
-          if (scenario.isPass || size.hasMismatch)
-            await _prepareCapture(dir, size, scenario),
-    ];
+    // Registered first: frames taken before a failing one are released too.
+    final captures = <_Capture>[];
     addTearDown(() => _dispose(captures));
+    for (final size in _sizes) {
+      for (final scenario in const [_Scenario.identical, _Scenario.mismatch]) {
+        if (scenario.isPass || size.hasMismatch) {
+          captures.add(await _prepareCapture(dir, size, scenario));
+        }
+      }
+    }
     // As above: each variant must end as its scenario expects, and measured
     // calls the same way.
     final expected = <String, ({String? flutter, String? gleon})>{};

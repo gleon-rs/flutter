@@ -16,6 +16,8 @@ import '../helpers/golden_sandbox.dart';
 void main() {
   setUpAll(loadAppFonts);
   GoldenSandbox.install();
+  final field = TextEditingController(text: 'Field ǺÅÉ gq');
+  tearDownAll(field.dispose);
 
   testWidgets('the golden recorded on macOS passes', (tester) async {
     await tester.pumpWidget(const Caption());
@@ -122,7 +124,7 @@ void main() {
         child: SizedBox(
           width: 300,
           child: TextField(
-            controller: TextEditingController(text: 'Field ǺÅÉ gq'),
+            controller: field,
             decoration: const InputDecoration(
               contentPadding: .symmetric(vertical: 12),
               border: .none,

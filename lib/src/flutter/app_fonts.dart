@@ -148,6 +148,7 @@ abstract final class AppFonts {
     if (hhea == null ||
         os2 == null ||
         head == null ||
+        head.length < 12 ||
         hhea.length < 10 ||
         hhea.offset + hhea.length > copy.length ||
         head.offset + 12 > copy.length ||
