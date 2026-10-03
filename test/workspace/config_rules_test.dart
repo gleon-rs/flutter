@@ -84,7 +84,9 @@ void main() {
         .matcher('masked/swatch.png')
         .matchAsync(Swatch.finder);
 
-    expect(message, contains('1 of 6000px'));
+    // Masked pixels are neither compared nor counted: 6000 minus the yaml
+    // mask's 500.
+    expect(message, contains('1 of 5500px'));
   });
 
   testWidgets('an invalid config fails with its path and the parser text', (

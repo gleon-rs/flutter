@@ -12,4 +12,5 @@ export 'package:flutter_test/flutter_test.dart' hide matchesGoldenFile;
 
 export 'src/core/compare/golden_tolerance.dart'
     show ExactTolerance, GoldenTolerance, PixelTolerance, SsimTolerance;
+export 'src/flutter/app_fonts.dart' show loadAppFonts;
 export 'src/flutter/match_golden_file.dart' show matchesGoldenFile;

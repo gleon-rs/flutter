@@ -52,6 +52,9 @@ void main() {
       '${const GoldenTolerance.pixel(maxDiffRatio: .nan)}',
       'pixel ≤ NaN%',
     );
+    expect(GoldenTolerance.describeText(1), 'text ignored');
+    expect(GoldenTolerance.describeText(0.0625), 'text ≤ 6.25% per tile');
+    expect(GoldenTolerance.describeText(0), 'text ≤ 0.00% per tile');
   });
 
   test('values compare by content', () {

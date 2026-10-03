@@ -41,3 +41,4 @@ CLAUDE.local.md
 /native/*
 !/native/gleon_ref
 /dist/
+.DS_Store

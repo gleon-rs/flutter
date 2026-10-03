@@ -58,10 +58,13 @@ abstract final class GleonFfi {
   )
   external static void sessionFree(Pointer<GleonSessionHandle> session);
 
-  /// `gleon_golden`: compares (mode 0) or writes (mode 1) one golden given
-  /// the packed call strings, with the tolerance code (0 from
-  /// `.gleon/gleon.yaml`, 1 exact, 2 pixel, 3 SSIM) and `[x, y, width,
-  /// height]` pixel masks. Never returns null; release with [resultFree].
+  /// `gleon_golden`: compares (mode 0) or writes (mode 1, PNG only) one
+  /// golden given the packed call strings and the candidate (format 0 PNG
+  /// bytes, 1 raw straight RGBA8 of width x height), with the tolerance code
+  /// (0 from `.gleon/gleon.yaml`, 1 exact, 2 pixel, 3 SSIM), `[x, y, width,
+  /// height]` pixel masks and text regions, and the text tolerance (NaN
+  /// from `.gleon/gleon.yaml`). Never returns null; release with
+  /// [resultFree].
   @Native<
     Pointer<GleonResult> Function(
       Pointer<GleonSessionHandle> session,
@@ -72,12 +75,18 @@ abstract final class GleonFfi {
       Size lengthsCount,
       Pointer<Uint8> candidate,
       Size candidateLength,
+      Uint8 candidateFormat,
+      Uint32 candidateWidth,
+      Uint32 candidateHeight,
       Uint8 toleranceKind,
       Double maxDiffRatio,
       Double minSimilarity,
       Double colorTolerance,
       Pointer<Uint32> masks,
       Size maskCount,
+      Pointer<Uint32> textRegions,
+      Size textRegionCount,
+      Double textTolerance,
     )
   >(symbol: 'gleon_golden', isLeaf: true)
   external static Pointer<GleonResult> golden(
@@ -89,12 +98,18 @@ abstract final class GleonFfi {
     int lengthsCount,
     Pointer<Uint8> candidate,
     int candidateLength,
+    int candidateFormat,
+    int candidateWidth,
+    int candidateHeight,
     int toleranceKind,
     double maxDiffRatio,
     double minSimilarity,
     double colorTolerance,
     Pointer<Uint32> masks,
     int maskCount,
+    Pointer<Uint32> textRegions,
+    int textRegionCount,
+    double textTolerance,
   );
 
   /// `gleon_result_summary`: the verdict and texts, borrowed from [result].

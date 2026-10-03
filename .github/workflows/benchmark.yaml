@@ -50,9 +50,11 @@ jobs:
         run: |
           flutter pub get
           flutter test benchmark/
-          dart run bench_press report --from-json build/benchmark/golden_comparison.json \
-            --title "Golden comparison on $TARGET" --output build/benchmark/golden_comparison.md
-          cat build/benchmark/golden_comparison.md >> "$GITHUB_STEP_SUMMARY"
+          for name in golden_comparison widget_capture; do
+            dart run bench_press report --from-json "build/benchmark/$name.json" \
+              --title "$name on $TARGET" --output "build/benchmark/$name.md"
+            cat "build/benchmark/$name.md" >> "$GITHUB_STEP_SUMMARY"
+          done
 
       - name: Upload results
         if: ${{ !cancelled() }}

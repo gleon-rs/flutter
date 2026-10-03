@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart' as flutter_test;
 
@@ -7,12 +9,15 @@ import '../core/compare/pixel_region.dart';
 import '../core/config/gleon_session.dart';
 import 'flutter_session.dart';
 import 'gleon_golden_comparator.dart';
+import 'text_regions.dart';
 
 /// The matcher created by `matchesGoldenFile`.
 ///
-/// Reuses Flutter's own [flutter_test.MatchesGoldenFile] for capturing,
-/// encoding, version handling and `--update-goldens`, and only swaps the
-/// comparison backend for the duration of the match.
+/// Reuses Flutter's own [flutter_test.MatchesGoldenFile] for version
+/// handling, `--update-goldens` and image or byte inputs, and only swaps the
+/// comparison backend for the duration of the match. A widget (a `Finder`) is
+/// captured like Flutter does, but compared as raw pixels with the boxes of
+/// its text: no PNG is encoded unless the golden fails.
 class GleonMatchesGoldenFile extends flutter_test.MatchesGoldenFile {
   /// Creates the matcher; prefer `matchesGoldenFile`, which validates the
   /// arguments.
@@ -21,6 +26,7 @@ class GleonMatchesGoldenFile extends flutter_test.MatchesGoldenFile {
     super.version, {
     this.tolerance,
     this.masks = const [],
+    this.textTolerance,
     this.session,
   });
 
@@ -30,6 +36,10 @@ class GleonMatchesGoldenFile extends flutter_test.MatchesGoldenFile {
 
   /// Regions excluded from the comparison, in whole pixels of the golden.
   final List<PixelRegion> masks;
+
+  /// The tolerance of text, a share of a tile (0.0–1.0); null means the
+  /// golden's `.gleon/gleon.yaml` rule, else 1 (text never fails).
+  final double? textTolerance;
 
   /// Workspace and environment; [FlutterSession.process] when null (tests
   /// inject their own).
@@ -59,22 +69,85 @@ class GleonMatchesGoldenFile extends flutter_test.MatchesGoldenFile {
         turn.original,
         tolerance: tolerance,
         masks: masks,
+        textTolerance: textTolerance,
         session: session,
       );
       turn.installed = comparator;
       flutter_test.goldenFileComparator = comparator;
 
-      return await super.matchAsync(item);
+      return await switch (item) {
+        final flutter_test.Finder finder
+            when !flutter_test.autoUpdateGoldenFiles =>
+          _matchWidget(finder, comparator),
+        _ => super.matchAsync(item),
+      };
     } finally {
       _Turn.finish(turn);
     }
   }
 
   @override
-  flutter_test.Description describe(flutter_test.Description description) =>
-      super
-          .describe(description)
-          .add(' (gleon ${tolerance ?? 'default tolerance'})');
+  flutter_test.Description describe(flutter_test.Description description) {
+    final text = switch (textTolerance) {
+      final share? => ', ${GoldenTolerance.describeText(share)}',
+      null => _noText,
+    };
+
+    return super
+        .describe(description)
+        .add(' (gleon ${tolerance ?? 'default tolerance'}$text)');
+  }
+
+  static const _noText = '';
+
+  /// Captures the widget of [finder] like Flutter's matcher and compares its
+  /// raw pixels and text regions; the same messages for a bad finder.
+  Future<String?> _matchWidget(
+    flutter_test.Finder finder,
+    GleonGoldenComparator comparator,
+  ) {
+    final found = finder.evaluate();
+    if (found.isEmpty) {
+      return .value('could not be rendered because no widget was found');
+    }
+    final element = found.singleOrNull;
+    if (element == null) return .value('matched too many widgets');
+    final golden = comparator.getTestUri(key, version);
+    final capture = flutter_test.captureImage(element);
+    // Before awaiting anything: the tree must be the one captured.
+    final textRegions = TextRegions.captured(element);
+
+    return flutter_test.TestWidgetsFlutterBinding.instance.runAsync<String?>(
+      () => _compareCapture(capture, golden, comparator, textRegions),
+    );
+  }
+
+  /// Compares the image of [capture] as raw pixels; a failure is the message.
+  static Future<String?> _compareCapture(
+    Future<ui.Image> capture,
+    Uri golden,
+    GleonGoldenComparator comparator,
+    List<PixelRegion> textRegions,
+  ) async {
+    final image = await capture;
+    try {
+      final pixels = await image.toByteData(format: .rawStraightRgba);
+      if (pixels == null) return 'could not read the pixels of the screenshot.';
+      comparator.compareRaw(
+        golden,
+        Uint8List.sublistView(pixels),
+        width: image.width,
+        height: image.height,
+        textRegions: textRegions,
+      );
+
+      return null;
+    } on flutter_test.TestFailure catch (error) {
+      return error.message;
+    } finally {
+      image.dispose();
+    }
+  }
 }
 
 /// One match's hold on `goldenFileComparator`: matches take turns, and each

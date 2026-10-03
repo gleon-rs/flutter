@@ -19,9 +19,17 @@ import 'ignore_regions.dart';
 ///   (exact when omitted).
 /// * [ignoreRegions]: regions excluded from the comparison, in pixels of the
 ///   golden PNG (measure them on the golden file).
+/// * [textTolerance]: how much the text of a widget (a `Finder`) may differ,
+///   while everything else is compared under an exact or pixel [tolerance]:
+///   the largest share (0.0–1.0) of differing pixels in any 16x16 tile of
+///   text. Null uses the `text_tolerance` of the golden's `.gleon/gleon.yaml`
+///   rule, else 1: text never fails, because operating systems rasterize
+///   glyphs differently, by more than a changed character differs. Lower it
+///   only for goldens of one OS (per-platform goldens).
 ///
-/// Throws an [ArgumentError] for out-of-range tolerance values and invalid
-/// regions, and for a `key` that is neither a [String] nor a [Uri].
+/// Throws an [ArgumentError] for out-of-range tolerance values, invalid
+/// regions, a [textTolerance] with an SSIM [tolerance], and a `key` that is
+/// neither a [String] nor a [Uri].
 ///
 /// ```dart
 /// import "package:flutter/widgets.dart";
@@ -43,6 +51,7 @@ flutter_test.MatchesGoldenFile matchesGoldenFile(
   int? version,
   GoldenTolerance? tolerance,
   List<Rect>? ignoreRegions,
+  double? textTolerance,
 }) {
   final uri = switch (key) {
     Uri() => key,
@@ -54,11 +63,20 @@ flutter_test.MatchesGoldenFile matchesGoldenFile(
     ),
   };
   tolerance?.validate();
+  if (textTolerance != null) GoldenTolerance.validateText(textTolerance);
+  if (textTolerance != null && tolerance is SsimTolerance) {
+    throw ArgumentError.value(
+      textTolerance,
+      'textTolerance',
+      'applies to exact and pixel tolerances, not ssim',
+    );
+  }
 
   return GleonMatchesGoldenFile(
     uri,
     version,
     tolerance: tolerance,
     masks: IgnoreRegions.toMasks(ignoreRegions ?? const []),
+    textTolerance: textTolerance,
   );
 }

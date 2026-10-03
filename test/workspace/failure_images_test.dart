@@ -35,7 +35,11 @@ void main() {
     final sandbox = WorkspaceSandbox.create(_yaml);
     await tester.pumpWidget(const Swatch(accent: Color(0xFF4CAF50)));
     await sandbox.matcher(Swatch.golden).matchAsync(Swatch.finder);
-    final artifacts = sandbox.readCase('test/goldens/swatch')['artifacts'];
+    final report = sandbox.readCase('test/goldens/swatch');
+    final artifacts = report['artifacts'];
+
+    // A widget is compared as raw pixels; its PNG is encoded for a failure.
+    expect(report['candidate'], containsPair('sha256', hasLength(64)));
 
     expect(artifacts, {
       'candidate':
@@ -53,6 +57,17 @@ void main() {
         reason: kind,
       );
     }
+  });
+
+  testWidgets('a pass compares raw pixels, encodes nothing', (tester) async {
+    final sandbox = WorkspaceSandbox.create(_yaml);
+    await tester.pumpWidget(const Swatch());
+    await expectLater(Swatch.finder, sandbox.matcher(Swatch.golden));
+    final report = sandbox.readCase('test/goldens/swatch');
+
+    expect(report, containsPair('outcome', 'match'));
+    expect(report['candidate'], {'height': 60, 'width': 100});
+    expect(report.containsKey('artifacts'), isFalse);
   });
 
   testWidgets('a pass removes earlier failure images', (tester) async {

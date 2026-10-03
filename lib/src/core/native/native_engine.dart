@@ -19,7 +19,7 @@ import 'native_outcome.dart';
 abstract final class NativeEngine {
   /// C contract version this Dart code understands (`ABI_VERSION` in
   /// `gleon-ffi`). Keep both in lockstep.
-  static const expectedAbiVersion = 7;
+  static const expectedAbiVersion = 9;
 
   /// Releases sessions that are garbage collected.
   static final sessionFinalizer = NativeFinalizer(
@@ -32,6 +32,12 @@ abstract final class NativeEngine {
   /// Asked once per process, on the first call.
   // ignore: avoid-explicit-type-declaration, not obvious from the initializer.
   static final int _abiVersion = loadAbiVersion(GleonFfi.abiVersion);
+
+  /// `gleon_golden` candidate format: PNG bytes.
+  static const _pngFormat = 0;
+
+  /// `gleon_golden` candidate format: raw straight RGBA8 pixels.
+  static const _rawFormat = 1;
 
   /// `gleon_session_new` flag: each golden belongs to the nearest directory
   /// above it with `.gleon/gleon.yaml`.
@@ -84,11 +90,14 @@ abstract final class NativeEngine {
     );
   }
 
-  /// Compares the PNG [candidate] with the golden file at [goldenPath] in
-  /// [session], or writes it there when [isUpdate]. [tolerance] null uses the
-  /// golden's `.gleon/gleon.yaml` rule, else exact; [masks] add to the
-  /// rule's. Failure artifacts go to [failuresDir]; [goldenUri] names the
-  /// golden in messages.
+  /// Compares [candidate] with the golden file at [goldenPath] in [session],
+  /// or writes it there when [isUpdate]. The candidate is PNG bytes, or the
+  /// raw straight RGBA8 pixels of an image of [rawSize] (never for an
+  /// update). [tolerance] null uses the golden's `.gleon/gleon.yaml` rule,
+  /// else exact; [masks] add to the rule's. [textRegions] (pixels of a raw
+  /// candidate) are compared under [textTolerance] (a share of a tile), null
+  /// the rule's, else 1 (text never fails). Failure
+  /// artifacts go to [failuresDir]; [goldenUri] names the golden in messages.
   ///
   /// The candidate is read in place by the native code; nothing is copied in.
   static NativeOutcome golden(
@@ -97,10 +106,13 @@ abstract final class NativeEngine {
     required String goldenUri,
     required String failuresDir,
     required Uint8List candidate,
+    ({int height, int width})? rawSize,
     bool isUpdate = false,
     String? testName,
     GoldenTolerance? tolerance,
     List<PixelRegion> masks = const [],
+    List<PixelRegion> textRegions = const [],
+    double? textTolerance,
   }) {
     final (strings, lengths) = _pack([
       goldenPath,
@@ -109,6 +121,7 @@ abstract final class NativeEngine {
       testName,
     ]);
     final flatMasks = _flat(masks);
+    final flatTextRegions = _flat(textRegions);
     final (kind, ratio, similarity, color) = _toleranceArguments(tolerance);
     final result = GleonFfi.golden(
       session.handle,
@@ -119,12 +132,18 @@ abstract final class NativeEngine {
       lengths.length,
       candidate.address,
       candidate.length,
+      rawSize == null ? _pngFormat : _rawFormat,
+      rawSize?.width ?? 0,
+      rawSize?.height ?? 0,
       kind,
       ratio,
       similarity,
       color,
       flatMasks.address,
       masks.length,
+      flatTextRegions.address,
+      textRegions.length,
+      textTolerance ?? .nan,
     );
     try {
       final GleonSummary(:console, :errorKind, :message, :verdict, :warning) =
@@ -192,10 +211,11 @@ abstract final class NativeEngine {
     ),
   };
 
-  /// [masks] as `[x, y, width, height]` quadruples.
-  static Uint32List _flat(List<PixelRegion> masks) {
-    final flat = Uint32List(masks.length * 4);
-    for (final (index, PixelRegion(:height, :width, :x, :y)) in masks.indexed) {
+  /// [regions] as `[x, y, width, height]` quadruples.
+  static Uint32List _flat(List<PixelRegion> regions) {
+    final flat = Uint32List(regions.length * 4);
+    for (final (index, PixelRegion(:height, :width, :x, :y))
+        in regions.indexed) {
       flat.setAll(index * 4, [x, y, width, height]);
     }
 

@@ -10,6 +10,8 @@ Matcher _throwsInvalid(String name, String message) => throwsA(
       .having((error) => error.message, 'reason', message),
 );
 
+const _ratio = 'must be between 0.0 and 1.0';
+
 void main() {
   test('rejects out-of-range pixel ratios', () {
     for (final ratio in [-0.1, 1.5, double.nan]) {
@@ -40,6 +42,45 @@ void main() {
         ),
         _throwsInvalid('colorTolerance', 'must be between 0 and 255'),
         reason: '$tolerance',
+      );
+    }
+  });
+
+  test('rejects out-of-range text tolerances', () {
+    for (final share in [-0.1, 1.5, double.nan]) {
+      expect(
+        () => matchesGoldenFile(Swatch.golden, textTolerance: share),
+        _throwsInvalid('textTolerance', _ratio),
+        reason: '$share',
+      );
+    }
+  });
+
+  test('a text tolerance needs an exact or pixel tolerance', () {
+    expect(
+      () => matchesGoldenFile(
+        Swatch.golden,
+        tolerance: const .ssim(),
+        textTolerance: 1,
+      ),
+      _throwsInvalid(
+        'textTolerance',
+        'applies to exact and pixel tolerances, not ssim',
+      ),
+    );
+    for (final tolerance in const <GoldenTolerance?>[
+      null,
+      .exact(),
+      .pixel(),
+    ]) {
+      expect(
+        () => matchesGoldenFile(
+          Swatch.golden,
+          tolerance: tolerance,
+          textTolerance: 0,
+        ),
+        returnsNormally,
+        reason: '${tolerance ?? 'the rule'}',
       );
     }
   });
@@ -105,6 +146,14 @@ void main() {
     expect(
       describe(matchesGoldenFile('goldens/a.png', tolerance: const .ssim())),
       endsWith('(gleon ssim ≥ 0.800, color ±8)'),
+    );
+    expect(
+      describe(matchesGoldenFile('goldens/a.png', textTolerance: 1)),
+      endsWith('(gleon default tolerance, text ignored)'),
+    );
+    expect(
+      describe(matchesGoldenFile('goldens/a.png', textTolerance: 0.1)),
+      endsWith('(gleon default tolerance, text ≤ 10.00% per tile)'),
     );
   });
 }

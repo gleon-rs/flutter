@@ -98,9 +98,28 @@ sealed class GoldenTolerance {
     return ratio > 0 && double.parse(text) == 0 ? '<0.0001' : text;
   }
 
+  /// Throws an [ArgumentError] unless [share], a `textTolerance`, is between
+  /// 0.0 and 1.0.
+  static void validateText(double share) => _checkRatio(share, 'textTolerance');
+
+  /// A `textTolerance` as in failure messages: `text ignored` at 1 (text
+  /// never fails), else e.g. `text ≤ 10.00% per tile`.
+  static String describeText(double share) =>
+      share >= 1 ? 'text ignored' : 'text \u2264 ${_percent(share)}% per tile';
+
   static void _checkRatio(double value, String name) {
     if (value.isNaN || value < 0 || value > 1) {
       throw ArgumentError.value(value, name, 'must be between 0.0 and 1.0');
+    }
+  }
+
+  static void _checkColor(double value) {
+    if (!value.isFinite || value < 0 || value > 255) {
+      throw ArgumentError.value(
+        value,
+        'colorTolerance',
+        'must be between 0 and 255',
+      );
     }
   }
 }
@@ -164,15 +183,7 @@ final class SsimTolerance extends GoldenTolerance {
   @override
   void validate() {
     GoldenTolerance._checkRatio(minSimilarity, 'minSimilarity');
-    if (!colorTolerance.isFinite ||
-        colorTolerance < 0 ||
-        colorTolerance > 255) {
-      throw ArgumentError.value(
-        colorTolerance,
-        'colorTolerance',
-        'must be between 0 and 255',
-      );
-    }
+    GoldenTolerance._checkColor(colorTolerance);
   }
 
   @override

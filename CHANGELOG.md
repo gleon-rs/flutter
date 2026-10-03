@@ -1,6 +1,15 @@
 ## 0.2.0 (unreleased)
 
-- The native engine does the whole job of a golden in one call (native ABI 7): it resolves the
+- Real text in goldens, one golden for every OS: `loadAppFonts()` loads the app's fonts and Roboto
+  (with line metrics aligned across operating systems). The text of a widget (its lines from the
+  render tree) never fails by default, because operating systems rasterize glyphs differently;
+  everything else is compared exactly. `textTolerance` (0.0–1.0, or `text_tolerance` of a
+  `.gleon/gleon.yaml` pixel rule) lowers that: the largest share of differing pixels in any 16x16
+  square of text. A `textTolerance` that cannot apply (an SSIM rule, a byte input) warns.
+- A widget is captured and compared as raw pixels (native ABI 9): no PNG is encoded unless the
+  golden fails. Its case reports are `match` (not `identical`) and have no candidate hash on a
+  pass; masks no longer count towards the compared pixels in pixel mode.
+- The native engine does the whole job of a golden in one call: it resolves the
   rule, compares, and writes failure artifacts, case reports and `--update-goldens` goldens
   itself; the package passes facts and gets back a verdict, an error kind and the texts.
 - Each golden belongs to the nearest directory above it with `.gleon/gleon.yaml`, not to the
