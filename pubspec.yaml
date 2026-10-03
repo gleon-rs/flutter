@@ -13,7 +13,7 @@ topics:
 
 environment:
   sdk: ^3.13.0
-  flutter: '>=3.47.0'
+  flutter: ">=3.47.0"
 
 # Runtime dependencies are only what the build hook and the re-exported
 # flutter_test need; the hook runs in the consumer's package graph.
@@ -31,7 +31,7 @@ dependencies:
   test_api: ^0.7.0
 
 dev_dependencies:
-  bench_press: ^0.4.0
+  bench_press: ^0.4.1
   dart_code_metrics_presets: ^2.33.0
   flutter_lints: ^6.0.0
   json_schema: ^5.2.2

@@ -9,8 +9,6 @@ void main() {
     expect(const PixelTolerance().maxDiffRatio, 0.01);
     expect(const SsimTolerance().minSimilarity, 0.8);
     expect(const SsimTolerance().colorTolerance, 8);
-    expect(const TextTolerance().colorTolerance, 24);
-    expect(const TextTolerance().maxDiffRatio, 0.1);
   });
 
   test('descriptions name the thresholds', () {
@@ -54,11 +52,9 @@ void main() {
       '${const GoldenTolerance.pixel(maxDiffRatio: .nan)}',
       'pixel ≤ NaN%',
     );
-    expect('${const TextTolerance()}', 'text color ±24, ≤ 10.00% per tile');
-    expect(
-      '${const TextTolerance(colorTolerance: 7.5, maxDiffRatio: 0.0625)}',
-      'text color ±7.5, ≤ 6.25% per tile',
-    );
+    expect(GoldenTolerance.describeText(1), 'text ignored');
+    expect(GoldenTolerance.describeText(0.0625), 'text ≤ 6.25% per tile');
+    expect(GoldenTolerance.describeText(0), 'text ≤ 0.00% per tile');
   });
 
   test('values compare by content', () {
@@ -87,11 +83,6 @@ void main() {
       const .pixel(maxDiffRatio: 0.2),
       equal: const PixelTolerance(maxDiffRatio: 0.2),
       different: const .pixel(maxDiffRatio: 0.3),
-    );
-    expectValueSemantics(
-      const TextTolerance(maxDiffRatio: 0.2),
-      equal: const TextTolerance(maxDiffRatio: 0.2),
-      different: const TextTolerance(colorTolerance: 8, maxDiffRatio: 0.2),
     );
   });
 }

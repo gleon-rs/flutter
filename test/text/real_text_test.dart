@@ -9,19 +9,17 @@ import 'package:gleon/src/flutter/text_regions.dart';
 import '../helpers/caption.dart';
 import '../helpers/golden_sandbox.dart';
 
-// The point of text regions: a golden with real fonts, recorded on macOS,
-// passes on every OS of CI (they only rasterize glyphs a little differently),
-// while every change a user could see still fails there.
+// A golden with real fonts, recorded on macOS, passes on every OS of CI: by
+// default text never fails (OSes rasterize glyphs differently), everything else
+// is exact. That is a trade-off: changes of text alone pass, unless a
+// `textTolerance` compares text (for goldens of one OS).
 void main() {
   setUpAll(loadAppFonts);
   GoldenSandbox.install();
 
   testWidgets('the golden recorded on macOS passes', (tester) async {
     await tester.pumpWidget(const Caption());
-    await expectLater(
-      Caption.finder,
-      matchesGoldenFile(Caption.golden, textTolerance: const TextTolerance()),
-    );
+    await expectLater(Caption.finder, matchesGoldenFile(Caption.golden));
   });
 
   testWidgets('text regions hug the text and skip the shapes', (tester) async {
@@ -41,27 +39,43 @@ void main() {
     expect(isCovered(const Offset(14, 34)), isTrue, reason: 'the heading');
   });
 
-  // Changes inside the text keep the layout: they fail on the text alone,
-  // every other pixel equal. The others move pixels outside the text too.
-  for (final (name, mutation, isTextOnly) in [
-    ('a digit of the same width', const Caption(digits: '0123456780'), true),
-    ('one word in a paragraph', const Caption(paragraph: _cancel), true),
-    ('a lighter text color', const Caption(color: .new(0xFF444444)), true),
-    ('a frame tight around text', const Caption(hasFrame: true), true),
-    ('a bolder weight', const Caption(weight: .w700), false),
-    ('a paragraph moved by 1px', const Caption(shift: 1), false),
+  // Changes of layout fail on the pixels around the text, whatever the text
+  // tolerance.
+  for (final (name, mutation) in [
+    ('a bolder weight', const Caption(weight: .w700)),
+    ('a paragraph moved by 1px', const Caption(shift: 1)),
   ]) {
     testWidgets('fails for $name', (tester) async {
       await tester.pumpWidget(mutation);
-      final message = await matchesGoldenFile(
+      final message = await matchesGoldenFile(Caption.golden)
+          .matchAsync(Caption.finder);
+
+      expect(message, contains('(gleon exact, text ignored)'));
+    });
+  }
+
+  // Changes of text alone keep the layout: by default they pass (the
+  // trade-off), with a text tolerance they fail on the text alone.
+  for (final (name, mutation) in [
+    ('a digit of the same width', const Caption(digits: '0123456780')),
+    ('one word in a paragraph', const Caption(paragraph: _cancel)),
+    ('a lighter text color', const Caption(color: .new(0xFF444444))),
+    ('a frame tight around text', const Caption(hasFrame: true)),
+  ]) {
+    testWidgets('passes by default, fails a text tolerance for $name', (
+      tester,
+    ) async {
+      await tester.pumpWidget(mutation);
+      final byDefault = await matchesGoldenFile(Caption.golden)
+          .matchAsync(Caption.finder);
+      final compared = await matchesGoldenFile(
         Caption.golden,
-        textTolerance: const TextTolerance(),
+        textTolerance: 0.1,
       ).matchAsync(Caption.finder);
 
-      expect(message, contains('gleon exact, text color'));
-      if (isTextOnly) {
-        expect(message, allOf(contains('(0 of'), contains('text up to')));
-      }
+      expect(byDefault, isNull);
+      // Only text failed: the reason names no other pixels.
+      expect(compared, contains('": text up to'));
     });
   }
 

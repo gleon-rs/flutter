@@ -37,9 +37,9 @@ class GleonMatchesGoldenFile extends flutter_test.MatchesGoldenFile {
   /// Regions excluded from the comparison, in whole pixels of the golden.
   final List<PixelRegion> masks;
 
-  /// The tolerance of text; null means the golden's `.gleon/gleon.yaml` rule,
-  /// else text is compared like everything else.
-  final TextTolerance? textTolerance;
+  /// The tolerance of text, a share of a tile (0.0–1.0); null means the
+  /// golden's `.gleon/gleon.yaml` rule, else 1 (text never fails).
+  final double? textTolerance;
 
   /// Workspace and environment; [FlutterSession.process] when null (tests
   /// inject their own).
@@ -87,13 +87,16 @@ class GleonMatchesGoldenFile extends flutter_test.MatchesGoldenFile {
   }
 
   @override
-  flutter_test.Description describe(flutter_test.Description description) =>
-      super
-          .describe(description)
-          .add(
-            ' (gleon ${tolerance ?? 'default tolerance'}'
-            '${textTolerance == null ? _noText : ', $textTolerance'})',
-          );
+  flutter_test.Description describe(flutter_test.Description description) {
+    final text = switch (textTolerance) {
+      final share? => ', ${GoldenTolerance.describeText(share)}',
+      null => _noText,
+    };
+
+    return super
+        .describe(description)
+        .add(' (gleon ${tolerance ?? 'default tolerance'}$text)');
+  }
 
   static const _noText = '';
 

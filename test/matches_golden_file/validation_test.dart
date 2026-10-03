@@ -11,7 +11,6 @@ Matcher _throwsInvalid(String name, String message) => throwsA(
 );
 
 const _ratio = 'must be between 0.0 and 1.0';
-const _color = 'must be between 0 and 255';
 
 void main() {
   test('rejects out-of-range pixel ratios', () {
@@ -48,16 +47,11 @@ void main() {
   });
 
   test('rejects out-of-range text tolerances', () {
-    for (final (name, tolerance, message) in [
-      ('maxDiffRatio', const TextTolerance(maxDiffRatio: -0.1), _ratio),
-      ('maxDiffRatio', const TextTolerance(maxDiffRatio: .nan), _ratio),
-      ('colorTolerance', const TextTolerance(colorTolerance: 256), _color),
-      ('colorTolerance', const TextTolerance(colorTolerance: .nan), _color),
-    ]) {
+    for (final share in [-0.1, 1.5, double.nan]) {
       expect(
-        () => matchesGoldenFile(Swatch.golden, textTolerance: tolerance),
-        _throwsInvalid(name, message),
-        reason: '$tolerance',
+        () => matchesGoldenFile(Swatch.golden, textTolerance: share),
+        _throwsInvalid('textTolerance', _ratio),
+        reason: '$share',
       );
     }
   });
@@ -67,7 +61,7 @@ void main() {
       () => matchesGoldenFile(
         Swatch.golden,
         tolerance: const .ssim(),
-        textTolerance: const TextTolerance(),
+        textTolerance: 1,
       ),
       _throwsInvalid(
         'textTolerance',
@@ -83,10 +77,7 @@ void main() {
         () => matchesGoldenFile(
           Swatch.golden,
           tolerance: tolerance,
-          textTolerance: const TextTolerance(
-            colorTolerance: 0,
-            maxDiffRatio: 1,
-          ),
+          textTolerance: 0,
         ),
         returnsNormally,
         reason: '${tolerance ?? 'the rule'}',
@@ -157,13 +148,12 @@ void main() {
       endsWith('(gleon ssim ≥ 0.800, color ±8)'),
     );
     expect(
-      describe(
-        matchesGoldenFile(
-          'goldens/a.png',
-          textTolerance: const TextTolerance(),
-        ),
-      ),
-      endsWith('(gleon default tolerance, text color ±24, ≤ 10.00% per tile)'),
+      describe(matchesGoldenFile('goldens/a.png', textTolerance: 1)),
+      endsWith('(gleon default tolerance, text ignored)'),
+    );
+    expect(
+      describe(matchesGoldenFile('goldens/a.png', textTolerance: 0.1)),
+      endsWith('(gleon default tolerance, text ≤ 10.00% per tile)'),
     );
   });
 }

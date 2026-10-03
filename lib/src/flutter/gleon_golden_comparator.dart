@@ -40,8 +40,9 @@ class GleonGoldenComparator extends GoldenFileComparator {
   /// pixels of the golden.
   final List<PixelRegion> masks;
 
-  /// The text tolerance of the matcher call; null uses the golden's rule.
-  final TextTolerance? textTolerance;
+  /// The text tolerance of the matcher call, a share of a tile (0.0–1.0);
+  /// null uses the golden's rule, else 1 (text never fails).
+  final double? textTolerance;
 
   /// Workspace and environment of this process.
   final GleonSession session;

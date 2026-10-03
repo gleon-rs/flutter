@@ -13,7 +13,7 @@ import 'package:gleon/src/flutter/app_fonts.dart';
 // font tables, which `loadAppFonts` aligns the fonts for.
 void main() {
   test('the Flutter SDK provides Roboto to tests', () {
-    for (final file in _files) {
+    for (final file in AppFonts.robotoFaces) {
       expect(File(_path(file)).existsSync(), isTrue, reason: file);
     }
   });

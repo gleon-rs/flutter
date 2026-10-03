@@ -45,9 +45,10 @@ Replace one import — everything else from `flutter_test` stays available:
 +import 'package:gleon/gleon.dart';
 ```
 
-Without extra parameters the behavior is identical to Flutter: exact comparison, goldens
-resolved relative to the test file, `flutter test --update-goldens` rewrites them, nothing is
-written when tests pass. If a file must keep both imports, add
+Without extra parameters the behavior is Flutter's, with one difference: exact comparison
+of everything but the text of a widget, which never fails by default (see
+[Real text](#real-text-one-golden-for-every-os)); goldens resolved relative to the test file,
+`flutter test --update-goldens` rewrites them, nothing is written when tests pass. If a file must keep both imports, add
 `hide matchesGoldenFile` to the `flutter_test` import.
 
 ## Tolerance
@@ -83,7 +84,7 @@ await expectLater(
 
 | Tolerance                                          | Meaning                                                                                                                  |
 | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `.exact()` (default)                               | Every pixel must be identical, like Flutter.                                                                             |
+| `.exact()` (default)                               | Every pixel must be identical, like Flutter (text: see `textTolerance`).                                                 |
 | `.pixel({maxDiffRatio = 0.01})`                    | At most this fraction (0.0–1.0) of pixels may differ.                                                                    |
 | `.ssim({minSimilarity = 0.8, colorTolerance = 8})` | Min local SSIM of every neighborhood (0.0–1.0) and tolerated deviation beyond the local 3x3 envelope (0–255); see below. |
 
@@ -124,36 +125,42 @@ Future<void> testExecutable(FutureOr<void> Function() testMain) async {
 
 Operating systems then lay text out alike (the fonts' Windows line metrics are aligned with the
 ones macOS and Linux use, so line heights on Windows can differ from the real app there), but
-rasterize glyphs a little differently. `textTolerance` accepts exactly that difference: the
-boxes of text of a captured widget are compared under it, everything else under the exact or
-pixel `tolerance`. The boxes come from the render tree: one per line of each paragraph and
-editable text, grown by an eighth of the line's height for ink beyond it (diacritics, negative
-letter spacing, outlined text), clipped like the text is, without `WidgetSpan`s:
+rasterize glyphs differently. Measured on CI, 40% or more of the pixels of a 16x16 square of
+text differ between macOS and Linux, more than a changed digit of the same width does (24%). No
+tolerance tells them apart, so there are two ways:
+
+1. **One golden for every OS (the default):** text never fails, everything else is compared
+   exactly. Changes that move anything (a longer word, another weight, a shifted line) still
+   fail; changes of text alone (a digit, a color) do not. That is the trade-off.
+2. **Exact text:** per-platform goldens, one per OS that renders differently, with the
+   [gleon CLI](https://github.com/gleon-rs/gleon) approving each from CI runs (coming to this
+   package; today goldens are single files).
+
+`textTolerance` (0.0–1.0, default 1) is the largest share of differing pixels allowed in any
+16x16 square of text; lower it to compare text, at your own risk on other operating systems:
 
 ```dart
 await expectLater(
   find.byType(MyWidget),
   matchesGoldenFile(
     'goldens/my_widget.png',
-    textTolerance: const TextTolerance(), // color ±24, ≤ 10% per tile
+    textTolerance: 0.1, // text compared: right for goldens of this OS only
   ),
 );
 ```
 
-Inside text a pixel counts as equal while no channel differs by more than `colorTolerance`
-(0–255), and text passes while every tile has at most `maxDiffRatio` (0.0–1.0) differing
-pixels (every 16x16 square of a text box, wherever it starts): rasterization noise is spread
-thin, a changed character is a dense cluster. On macOS a changed digit of the same width fails
-with 18% of a tile, a frame drawn tightly around text with 23%, and a word changed inside a
-paragraph, a lighter text color, a bolder weight or a paragraph moved by one pixel with 44–48%.
-The defaults are provisional until calibrated on the CI of every host.
+The boxes of text come from the render tree: one per line of each paragraph and editable text,
+grown by an eighth of the line's height for ink beyond it (diacritics, negative letter spacing,
+outlined text), clipped like the text is, without `WidgetSpan`s. On macOS, at 0.1, every
+mutation of the package tests fails (a changed digit with 24% of a square, a frame tight around
+text with 23%, the rest with 51% or more); at the default 1 only those that move pixels outside
+the text do.
 
 A widget (a `Finder`) is compared as raw pixels: no PNG is encoded unless the golden fails.
-Text regions apply to widgets only, with an exact or pixel tolerance (`ArgumentError` with
-`ssim`; a warning when an SSIM rule or a byte input leaves a `textTolerance` unused);
-`ignoreRegions` beat them, for unstable backgrounds under text. Without a `textTolerance`, the
-`text:` of the golden's `.gleon/gleon.yaml` rule applies, else text is compared like everything
-else.
+Text applies to widgets only, with an exact or pixel tolerance (`ArgumentError` with `ssim`; a
+warning when an SSIM rule or a byte input leaves a `textTolerance` unused); `ignoreRegions` beat
+it, for unstable backgrounds under text. Without a `textTolerance`, the `text_tolerance` of the
+golden's `.gleon/gleon.yaml` rule applies, else 1.
 
 Compared exactly, so different on other operating systems:
 
@@ -192,7 +199,7 @@ screenshots:
   - include: "test/**/*.png"
     mode: pixel
     diff: { threshold: 0.01 } # max fraction of differing pixels; 0 = exact
-    text: { color_tolerance: 24, max_diff_ratio: 0.1 } # pixel only, see Real text
+    text_tolerance: 1 # pixel only, see Real text (1: text never fails, the default)
 
 metrics:
   enabled: false
@@ -202,7 +209,7 @@ artifacts: .gleon/runs/latest/artifacts
 ```
 
 - **Priority:** the `tolerance` argument of a call beats the golden's rule, which beats exact;
-  `textTolerance` beats the rule's `text:`. Masks of the rule are added to the call's
+  `textTolerance` beats the rule's `text_tolerance`. Masks of the rule are added to the call's
   `ignoreRegions`.
 - A golden matched by `exclude` (or inside a directory the CLI never scans, such as `build/`) or
   by no rule is compared exactly, like without the file.
@@ -280,7 +287,8 @@ In CI, set `GLEON_RUN_ID` for the job, upload `.gleon/runs/` and pass the downlo
 to `--from` (`gleon report markdown --from <dir>/latest`, `gleon approve --from <dir>/latest`,
 one `--from` per job).
 The CLI can also keep goldens out of Git (content-addressed blobs with small JSON manifests) and
-manage per-platform baselines.
+manage per-platform baselines for its own screenshots; per-platform goldens for this package are
+coming.
 
 ## Performance
 
@@ -346,8 +354,8 @@ The defaults are calibrated on a corpus of benign rendering noise vs. regression
 ## Known PoC limitations
 
 - `ssim` fails when glyphs move by half a pixel or more — typical of different operating
-  systems' font engines. For one golden on every OS, use real fonts with a `textTolerance`
-  instead, or keep per-platform goldens (the gleon CLI manages those for you).
+  systems' font engines. For one golden on every OS, use real fonts with `exact` or `pixel`
+  instead (text never fails by default, see Real text).
 - `ssim` can pass a low-contrast color change of a one-pixel line. Use `exact`/`pixel` where every
   pixel matters.
 - Only Flutter's default `LocalFileComparator` is supported as the underlying golden store.
@@ -363,7 +371,7 @@ One package with a hard internal boundary:
 ```text
 lib/gleon.dart            exports only (flutter_test minus matchesGoldenFile, plus the gleon API)
 lib/src/core/             plain Dart: never imports Flutter (dart:ui, package:flutter*)
-  compare/                GoldenTolerance, TextTolerance, PixelRegion (the call's tolerances,
+  compare/                GoldenTolerance, PixelRegion (the call's tolerances,
                           masks and text regions)
   config/                 GleonIntegration (who calls), GleonSession (the native session)
   native/                 @Native leaf bindings, NativeEngine (ABI check, packing), verdicts,

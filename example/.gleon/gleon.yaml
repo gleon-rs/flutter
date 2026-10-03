@@ -7,19 +7,14 @@ screenshots:
   - include: "test/goldens/**/*.png"
     # Everything but text must match exactly: the tests load the app's real
     # fonts (`loadAppFonts` in test/flutter_test_config.dart), and the goldens
-    # are recorded on macOS. Other operating systems rasterize glyphs a little
-    # differently, only inside the boxes of text, which `text` tolerates: a
-    # text pixel is equal while no channel differs by more than
-    # `color_tolerance`, and text passes while every 16x16 tile has at most
-    # `max_diff_ratio` differing pixels (a changed digit is a dense cluster).
-    # Provisional values: calibrate them on the CI case reports of every host
-    # (`metrics-<target>` artifacts of the Flutter Check workflow).
+    # are recorded on macOS. Text never fails by default (`text_tolerance: 1`):
+    # other operating systems rasterize glyphs differently, by more than a
+    # changed digit differs, so one golden for every OS cannot compare text.
+    # A changed counter still fails when it changes the layout; exact text on
+    # every OS needs per-platform goldens.
     mode: pixel
     diff:
       threshold: 0
-    text:
-      color_tolerance: 24
-      max_diff_ratio: 0.1
 
 # Per-golden case reports in .gleon/runs/latest/cases/; CI turns them on with
 # GLEON_METRICS=1.

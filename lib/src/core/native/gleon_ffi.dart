@@ -62,7 +62,7 @@ abstract final class GleonFfi {
   /// golden given the packed call strings and the candidate (format 0 PNG
   /// bytes, 1 raw straight RGBA8 of width x height), with the tolerance code
   /// (0 from `.gleon/gleon.yaml`, 1 exact, 2 pixel, 3 SSIM), `[x, y, width,
-  /// height]` pixel masks and text regions, and the text tolerance (both NaN
+  /// height]` pixel masks and text regions, and the text tolerance (NaN
   /// from `.gleon/gleon.yaml`). Never returns null; release with
   /// [resultFree].
   @Native<
@@ -86,8 +86,7 @@ abstract final class GleonFfi {
       Size maskCount,
       Pointer<Uint32> textRegions,
       Size textRegionCount,
-      Double textColorTolerance,
-      Double textMaxDiffRatio,
+      Double textTolerance,
     )
   >(symbol: 'gleon_golden', isLeaf: true)
   external static Pointer<GleonResult> golden(
@@ -110,8 +109,7 @@ abstract final class GleonFfi {
     int maskCount,
     Pointer<Uint32> textRegions,
     int textRegionCount,
-    double textColorTolerance,
-    double textMaxDiffRatio,
+    double textTolerance,
   );
 
   /// `gleon_result_summary`: the verdict and texts, borrowed from [result].

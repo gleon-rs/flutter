@@ -13,7 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// The fonts are aligned to lay text out alike on every OS: Windows takes
 /// line heights from other font tables than macOS and Linux, which
 /// [AppFonts.withPortableLineMetrics] makes agree. Goldens therefore differ
-/// only in the rasterization of glyphs, which a `TextTolerance` tolerates.
+/// only in the rasterization of glyphs, inside the boxes of text.
 /// Line heights on Windows can differ from the real app there.
 ///
 /// Call it once, before the tests, from `test/flutter_test_config.dart`:
@@ -38,6 +38,22 @@ Future<void> loadAppFonts() => AppFonts._loaded ??= AppFonts._load();
 abstract final class AppFonts {
   /// Where the Flutter SDK keeps Material's fonts, relative to its root.
   static const sdkFonts = 'bin/cache/artifacts/material_fonts';
+
+  /// Roboto's faces in [sdkFonts].
+  static const robotoFaces = [
+    'Roboto-Thin.ttf',
+    'Roboto-ThinItalic.ttf',
+    'Roboto-Light.ttf',
+    'Roboto-LightItalic.ttf',
+    'Roboto-Regular.ttf',
+    'Roboto-Italic.ttf',
+    'Roboto-Medium.ttf',
+    'Roboto-MediumItalic.ttf',
+    'Roboto-Bold.ttf',
+    'Roboto-BoldItalic.ttf',
+    'Roboto-Black.ttf',
+    'Roboto-BlackItalic.ttf',
+  ];
 
   static Future<void>? _loaded;
 
@@ -82,11 +98,13 @@ abstract final class AppFonts {
     await loader.load();
   }
 
-  /// Every `Roboto-*.ttf` of the Flutter SDK.
+  /// The [robotoFaces] of the Flutter SDK.
   static List<File> get _sdkRoboto {
     final root = Platform.environment['FLUTTER_ROOT'];
-    final dir = root == null ? null : Directory('$root/$sdkFonts');
-    if (dir == null || !dir.existsSync()) {
+    final faces = root == null
+        ? const <File>[]
+        : [for (final face in robotoFaces) File('$root/$sdkFonts/$face')];
+    if (faces.isEmpty || !faces.every((face) => face.existsSync())) {
       throw StateError(
         'gleon: loadAppFonts found no Roboto in the Flutter SDK '
         '(FLUTTER_ROOT/$sdkFonts, FLUTTER_ROOT is ${root ?? 'not set'}). Run '
@@ -95,12 +113,7 @@ abstract final class AppFonts {
       );
     }
 
-    return [
-      for (final file in dir.listSync().whereType<File>())
-        if (file.uri.pathSegments.lastOrNull case final name?
-            when name.startsWith('Roboto-') && name.endsWith('.ttf'))
-          file,
-    ]..sort((a, b) => a.path.compareTo(b.path));
+    return faces;
   }
 
   /// A copy of the TrueType/OpenType [font] whose Windows and typographic

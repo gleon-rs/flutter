@@ -190,7 +190,7 @@ void main() {
       candidate: pixels,
       rawSize: (height: 60, width: 100),
       textRegions: const [PixelRegion(x: 0, y: 0, width: 10, height: 10)],
-      textTolerance: const TextTolerance(),
+      textTolerance: 0.1,
     );
 
     final short = compare(Uint8List(100 * 60 * 4 - 1));
@@ -199,7 +199,7 @@ void main() {
 
     final white = compare(Uint8List(100 * 60 * 4)..fillRange(0, 24000, 255));
     expect(white.verdict, NativeVerdict.mismatch);
-    expect(white.message, contains('text color'));
+    expect(white.message, contains('text ≤ 10.00% per tile'));
     expect(File('${dir.path}/failures/a-actual.png').existsSync(), isTrue);
   });
 }

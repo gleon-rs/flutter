@@ -105,7 +105,7 @@ final class WorkspaceSandbox {
     String key, {
     GoldenTolerance? tolerance,
     List<Rect> ignoreRegions = const [],
-    TextTolerance? textTolerance,
+    double? textTolerance,
     GleonSession? session,
   }) => .new(
     Uri.parse(key),
