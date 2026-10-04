@@ -79,8 +79,9 @@ jobs:
       - name: Example app
         working-directory: flutter/example
         env:
-          # Records a case report per golden (see example/.gleon/gleon.yaml): the cross-OS
-          # corpus for calibrating tolerances and text-aware comparison.
+          # Records a case report per golden (see example/.gleon/gleon.yaml): on hosts other than
+          # its fallback_platform they compare the macOS goldens and keep the candidates
+          # `gleon approve --from` turns into per-platform goldens.
           GLEON_METRICS: "1"
           # Stamps the reports of this run, so readers never mix them with another run's
           # (re-runs of failed jobs get their own attempt).
@@ -91,8 +92,8 @@ jobs:
           flutter analyze --fatal-infos
           flutter test
 
-      # Also after a failure: mismatches are the most useful calibration data. The whole run
-      # (`cases/` plus the failure images in `artifacts/`) is what `gleon approve --from` reads.
+      # Also after a failure. The whole run (`cases/` plus the kept candidates and failure
+      # images in `artifacts/`) is what `gleon approve --from` reads; kept for a week.
       # Missing reports are an error only when everything passed, so they never add a second
       # error to a failed run.
       - name: Upload metrics
@@ -102,6 +103,7 @@ jobs:
           name: metrics-${{ matrix.target }}
           path: flutter/example/.gleon/runs/latest/
           if-no-files-found: ${{ job.status == 'success' && 'error' || 'warn' }}
+          retention-days: 7
 
       - name: Upload coverage
         if: ${{ matrix.target == 'linux-x64' }}

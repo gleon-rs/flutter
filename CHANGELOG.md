@@ -1,14 +1,28 @@
 ## 0.2.0 (unreleased)
 
-- Real text in goldens, one golden for every OS: `loadAppFonts()` loads the app's fonts and Roboto
-  (with line metrics aligned across operating systems). The text of a widget (its lines from the
-  render tree) never fails by default, because operating systems rasterize glyphs differently;
-  everything else is compared exactly. `textTolerance` (0.0–1.0, or `text_tolerance` of a
-  `.gleon/gleon.yaml` pixel rule) lowers that: the largest share of differing pixels in any 16x16
-  square of text. A `textTolerance` that cannot apply (an SSIM rule, a byte input) warns.
-- A widget is captured and compared as raw pixels (native ABI 9): no PNG is encoded unless the
-  golden fails. Its case reports are `match` (not `identical`) and have no candidate hash on a
-  pass; masks no longer count towards the compared pixels in pixel mode.
+- Real text in goldens: `loadAppFonts()` loads the app's fonts and Roboto (with line metrics
+  aligned across operating systems), and the text of a widget (its lines from the render tree) is
+  judged by `textTolerance` (0.0–1.0, or `text_tolerance` of a `.gleon/gleon.yaml` pixel rule):
+  the largest share of differing pixels in any 16x16 square of text; everything else is compared
+  exactly. A `textTolerance` that cannot apply (an SSIM rule, a byte input) warns.
+- Platform-aware goldens: `fallback_platform` in `.gleon/gleon.yaml` names the platform the
+  goldens are recorded on (e.g. `macos-aarch64`; names no process reports, like `macos-arm64`, are
+  a config error). There their text is compared: the default `textTolerance` is 0.05. Every other
+  platform keeps its own goldens in `goldens/<os>-<arch>/` (`--update-goldens` writes them,
+  `gleon approve` from CI artifacts too, also of passes) and, until it has one, compares the
+  shared golden with text ignored by default (1, because operating systems rasterize glyphs
+  differently); its case report names the compared golden in `golden.fallback`, and a pass that
+  differs keeps its candidate. Without `fallback_platform`, or for a golden no rule matches, text
+  is ignored by default on every platform. An explicit `textTolerance` or rule `text_tolerance`
+  always applies (1 turns text off). Native ABI 10.
+- `--update-goldens` with a custom `goldenFileComparator` fails like a comparison instead of
+  writing the golden behind gleon's back. `GleonSession.dispose()` releases a native session at
+  once (garbage collection does not see its native memory).
+- `--update-goldens` reads `.gleon/gleon.yaml` first (an invalid one writes nothing) and reports
+  a failure to write a widget's golden as the test's failure message, like a comparison.
+- A widget is captured and compared as raw pixels: a PNG is encoded only to keep the candidate.
+  Its case reports are `match` (not `identical`) and have a candidate hash only when the PNG is
+  kept; masks no longer count towards the compared pixels in pixel mode.
 - The native engine does the whole job of a golden in one call: it resolves the
   rule, compares, and writes failure artifacts, case reports and `--update-goldens` goldens
   itself; the package passes facts and gets back a verdict, an error kind and the texts.
@@ -49,8 +63,7 @@
   unchanged goldens untouched. A failure without a diff image removes the stale diff of an earlier
   failure. Masks reaching beyond the image are reported as a warning, byte-identical goldens
   included.
-- The example's tolerance is calibrated on the CI metrics of every host (`min_similarity` 0.73,
-  `color_tolerance` 46 instead of the guessed 0.6 and 64).
+- The example compares exactly, with real fonts and `fallback_platform: macos-aarch64`.
 - Local native builds record the gleon commit they were made from; the hook accepts them only for
   the pinned commit. `bin/build_native.dart` refuses a checkout git cannot read, and one with
   uncommitted changes to the library's sources unless `--allow-dirty` is passed.

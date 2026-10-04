@@ -7,6 +7,7 @@ import 'package:gleon/src/core/config/gleon_session.dart';
 import 'package:gleon/src/flutter/gleon_golden_comparator.dart';
 
 import '../helpers/blob.dart';
+import '../helpers/golden_updates.dart';
 import '../helpers/swatch.dart';
 import '../helpers/workspace_sandbox.dart';
 
@@ -184,11 +185,10 @@ void main() {
 
   testWidgets('--update-goldens records an updated case', (tester) async {
     final sandbox = WorkspaceSandbox.create(_yaml);
-    addTearDown(() => autoUpdateGoldenFiles = false);
     await tester.pumpWidget(const Swatch(dot: Swatch.dotOffset));
-    autoUpdateGoldenFiles = true;
-    await expectLater(Swatch.finder, sandbox.matcher('goldens/new.png'));
-    autoUpdateGoldenFiles = false;
+    await withGoldenUpdates(
+      () => expectLater(Swatch.finder, sandbox.matcher('goldens/new.png')),
+    );
     final report = sandbox.readCase('test/goldens/new');
 
     expect(report, containsPair('outcome', 'updated'));

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:gleon/gleon.dart';
 
 import '../helpers/golden_sandbox.dart';
+import '../helpers/golden_updates.dart';
 import '../helpers/swatch.dart';
 
 void main() {
@@ -12,18 +13,17 @@ void main() {
     tester,
   ) async {
     final written = File('${GoldenSandbox.dir.path}/goldens/tmp_update.2.png');
-    addTearDown(() => autoUpdateGoldenFiles = false);
     await tester.pumpWidget(const Swatch(dot: Swatch.dotOffset));
-    autoUpdateGoldenFiles = true;
-    await expectLater(
-      Swatch.finder,
-      matchesGoldenFile(
-        'goldens/tmp_update.png',
-        version: 2,
-        tolerance: const .ssim(),
+    await withGoldenUpdates(
+      () => expectLater(
+        Swatch.finder,
+        matchesGoldenFile(
+          'goldens/tmp_update.png',
+          version: 2,
+          tolerance: const .ssim(),
+        ),
       ),
     );
-    autoUpdateGoldenFiles = false;
 
     expect(written.existsSync(), isTrue);
     expect(GoldenSandbox.failures.existsSync(), isFalse);

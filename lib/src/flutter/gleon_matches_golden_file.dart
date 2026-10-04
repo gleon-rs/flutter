@@ -14,10 +14,12 @@ import 'text_regions.dart';
 /// The matcher created by `matchesGoldenFile`.
 ///
 /// Reuses Flutter's own [flutter_test.MatchesGoldenFile] for version
-/// handling, `--update-goldens` and image or byte inputs, and only swaps the
-/// comparison backend for the duration of the match. A widget (a `Finder`) is
-/// captured like Flutter does, but compared as raw pixels with the boxes of
-/// its text: no PNG is encoded unless the golden fails.
+/// handling and image or byte inputs, and only swaps the comparison backend
+/// for the duration of the match. A widget (a `Finder`) is captured like
+/// Flutter does, but compared as raw pixels with the boxes of its text (a PNG
+/// is encoded only to keep it: for a failure, or a pass against another
+/// platform's golden with metrics on), and written by `--update-goldens`
+/// with the engine's failure as the message, like a comparison.
 class GleonMatchesGoldenFile extends flutter_test.MatchesGoldenFile {
   /// Creates the matcher; prefer `matchesGoldenFile`, which validates the
   /// arguments.
@@ -38,7 +40,8 @@ class GleonMatchesGoldenFile extends flutter_test.MatchesGoldenFile {
   final List<PixelRegion> masks;
 
   /// The tolerance of text, a share of a tile (0.0–1.0); null means the
-  /// golden's `.gleon/gleon.yaml` rule, else 1 (text never fails).
+  /// golden's `.gleon/gleon.yaml` rule, else the golden's default (see
+  /// `matchesGoldenFile`).
   final double? textTolerance;
 
   /// Workspace and environment; [FlutterSession.process] when null (tests
@@ -76,9 +79,7 @@ class GleonMatchesGoldenFile extends flutter_test.MatchesGoldenFile {
       flutter_test.goldenFileComparator = comparator;
 
       return await switch (item) {
-        final flutter_test.Finder finder
-            when !flutter_test.autoUpdateGoldenFiles =>
-          _matchWidget(finder, comparator),
+        final flutter_test.Finder finder => _matchWidget(finder, comparator),
         _ => super.matchAsync(item),
       };
     } finally {
@@ -101,7 +102,9 @@ class GleonMatchesGoldenFile extends flutter_test.MatchesGoldenFile {
   static const _noText = '';
 
   /// Captures the widget of [finder] like Flutter's matcher and compares its
-  /// raw pixels and text regions; the same messages for a bad finder.
+  /// raw pixels and text regions, or writes it (`--update-goldens`); the same
+  /// messages for a bad finder. A failure is the message in both modes
+  /// (Flutter's own update path would report it as a framework exception).
   Future<String?> _matchWidget(
     flutter_test.Finder finder,
     GleonGoldenComparator comparator,
@@ -113,13 +116,39 @@ class GleonMatchesGoldenFile extends flutter_test.MatchesGoldenFile {
     final element = found.singleOrNull;
     if (element == null) return .value('matched too many widgets');
     final golden = comparator.getTestUri(key, version);
+    final isUpdate = flutter_test.autoUpdateGoldenFiles;
+    // Before capturing (nothing to dispose if it throws) and before awaiting
+    // anything: the tree must be the one captured.
+    final textRegions = isUpdate
+        ? const <PixelRegion>[]
+        : TextRegions.captured(element);
     final capture = flutter_test.captureImage(element);
-    // Before awaiting anything: the tree must be the one captured.
-    final textRegions = TextRegions.captured(element);
 
     return flutter_test.TestWidgetsFlutterBinding.instance.runAsync<String?>(
-      () => _compareCapture(capture, golden, comparator, textRegions),
+      () => isUpdate
+          ? _updateCapture(capture, golden, comparator)
+          : _compareCapture(capture, golden, comparator, textRegions),
     );
+  }
+
+  /// Writes the image of [capture] as [golden]; a failure is the message.
+  static Future<String?> _updateCapture(
+    Future<ui.Image> capture,
+    Uri golden,
+    GleonGoldenComparator comparator,
+  ) async {
+    final image = await capture;
+    try {
+      final png = await image.toByteData(format: .png);
+      if (png == null) return 'could not encode the screenshot.';
+      await comparator.update(golden, Uint8List.sublistView(png));
+
+      return null;
+    } on flutter_test.TestFailure catch (error) {
+      return error.message;
+    } finally {
+      image.dispose();
+    }
   }
 
   /// Compares the image of [capture] as raw pixels; a failure is the message.

@@ -34,8 +34,24 @@ final class GleonSession implements Finalizable {
     );
   }
 
-  /// The native session, released when this object is garbage collected.
+  /// The native session, released by [dispose] or when this object is
+  /// garbage collected.
   final Pointer<GleonSessionHandle> handle;
+
+  bool _isDisposed = false;
+
+  /// Whether [dispose] released the native session.
+  bool get isDisposed => _isDisposed;
+
+  /// Releases the native session (its workspaces and configs) now instead of
+  /// at garbage collection, which does not see native memory; a second call
+  /// does nothing. Comparing with a disposed session throws a [StateError].
+  void dispose() {
+    if (_isDisposed) return;
+    _isDisposed = true;
+    NativeEngine.sessionFinalizer.detach(this);
+    GleonFfi.sessionFree(handle);
+  }
 }
 
 /// The environment variables of the native engine, given instead of the

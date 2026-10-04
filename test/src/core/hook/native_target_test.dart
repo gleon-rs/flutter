@@ -2,6 +2,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gleon/src/core/hook/native_target.dart';
 
 void main() {
+  test('gleon names every target like Rust std::env::consts', () {
+    expect(
+      {for (final target in NativeTarget.values) target.gleonPlatform},
+      {'linux-aarch64', 'linux-x86_64', 'macos-aarch64', 'windows-x86_64'},
+    );
+    expect(NativeTarget.host, isNotNull, reason: 'tests run on a target');
+  });
+
   test('windows builds link the C runtime statically in every setup', () {
     const flag = '-C target-feature=+crt-static';
     const windows = NativeTarget.windowsX64;
