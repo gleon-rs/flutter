@@ -86,6 +86,36 @@ void main() {
     );
   });
 
+  test('a disposed session is released once and never used again', () {
+    final session = GleonSession(
+      integration: const GleonIntegration(
+        tool: 'gleon_flutter',
+        toolVersion: '0.1.0',
+        goldenArtifact: '{name}_masterImage.png',
+        candidateArtifact: '{name}_testImage.png',
+        diffArtifact: '{name}_gleonDiff.png',
+      ),
+      hasWorkspaces: false,
+      environment: const GleonEnvironment(),
+    );
+    // A second call does nothing.
+    for (int call = 0; call < 2; call += 1) {
+      session.dispose();
+    }
+
+    expect(session.isDisposed, isTrue);
+    expect(
+      () => NativeEngine.golden(
+        session,
+        goldenPath: 'a.png',
+        goldenUri: 'a.png',
+        failuresDir: 'failures/',
+        candidate: Uint8List(0),
+      ),
+      throwsA(isA<StateError>()),
+    );
+  });
+
   test('invalid session inputs fail every call as invalid input', () {
     final session = GleonSession(
       integration: const GleonIntegration(

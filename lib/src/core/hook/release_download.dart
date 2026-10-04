@@ -159,17 +159,16 @@ final class _Release {
     final checksumsUrl = url.resolve(ReleaseDownload.checksumsFileName);
     final key = sha256.convert(utf8.encode(checksumsUrl.toString()));
     final file = File.fromUri(cacheDir.uri.resolve('checksums/$key.txt'));
-    if (file.existsSync()) {
-      if (!isRefresh) {
-        final content = await file.readAsString();
+    // A refresh replaces the cached list atomically below: deleting it first
+    // would let a concurrent build find no list at all.
+    if (!isRefresh && file.existsSync()) {
+      final content = await file.readAsString();
 
-        return (
-          file: file,
-          hashes: ReleaseDownload.parseChecksums(content),
-          isCached: true,
-        );
-      }
-      await file.delete();
+      return (
+        file: file,
+        hashes: ReleaseDownload.parseChecksums(content),
+        isCached: true,
+      );
     }
     final bytes = await _download(checksumsUrl);
     final hashes = ReleaseDownload.parseChecksums(

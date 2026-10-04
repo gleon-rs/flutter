@@ -12,7 +12,9 @@ import 'ignore_regions.dart';
 /// optional `version`, and a `Finder`, `ui.Image`, `Future<ui.Image>`,
 /// `List<int>` or `Future<List<int>>` as the actual value — and behaves the
 /// same by default (exact comparison, goldens resolved relative to the test
-/// file, `--update-goldens` rewrites them).
+/// file, `--update-goldens` rewrites them; with a `fallback_platform` in
+/// `.gleon/gleon.yaml`, platforms other than it keep their own goldens in
+/// `<os>-<arch>/` beside them, see the README's "Real text").
 ///
 /// Additional parameters:
 /// * [tolerance]: how much the image may deviate, see [GoldenTolerance]
@@ -23,9 +25,13 @@ import 'ignore_regions.dart';
 ///   while everything else is compared under an exact or pixel [tolerance]:
 ///   the largest share (0.0–1.0) of differing pixels in any 16x16 tile of
 ///   text. Null uses the `text_tolerance` of the golden's `.gleon/gleon.yaml`
-///   rule, else 1: text never fails, because operating systems rasterize
-///   glyphs differently, by more than a changed character differs. Lower it
-///   only for goldens of one OS (per-platform goldens).
+///   rule, else the golden's default: 0.05 for a golden recorded on this
+///   platform (the `fallback_platform`'s shared one, or this platform's own
+///   `<os>-<arch>/` one), else 1, so text never fails, because operating
+///   systems rasterize glyphs differently, by more than a changed character
+///   differs. A value set here always applies: 1 turns text comparison off on
+///   the goldens' platform too. Byte and image inputs have no text boxes:
+///   their text is compared like every other pixel.
 ///
 /// Throws an [ArgumentError] for out-of-range tolerance values, invalid
 /// regions, a [textTolerance] with an SSIM [tolerance], and a `key` that is

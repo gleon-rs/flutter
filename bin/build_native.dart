@@ -20,7 +20,6 @@
 /// strict-dependencies check forbids dev_dependencies in `bin/`.
 library;
 
-import 'dart:ffi' show Abi;
 import 'dart:io';
 import 'dart:isolate';
 
@@ -74,10 +73,7 @@ Future<void> main(List<String> args) async {
     );
   }
 
-  // `Abi` names are `<os>_<arch>`, like target keys with an underscore.
-  final host = NativeTarget.byKey(
-    Abi.current().toString().replaceAll('_', '-'),
-  );
+  final host = NativeTarget.host;
   for (final target in _targets(options.keys, host)) {
     final library = await _build(repo, target, host: host);
     final bytes = await library.readAsBytes();
@@ -193,6 +189,9 @@ Future<File> _build(
   };
 
   await _run('rustup', ['target', 'add', rustTriple], repo, isOptional: true);
+  // Explicit: a `CARGO_TARGET_DIR` or `build.target-dir` would build
+  // elsewhere, and an old library left in `target/` would be copied instead.
+  final targetDir = Directory.fromUri(repo.uri.resolve('target/'));
   await _run(
     'cargo',
     [
@@ -203,12 +202,14 @@ Future<File> _build(
       SourceBuild.crate,
       '--target',
       rustTriple,
+      '--target-dir',
+      targetDir.path,
     ],
     repo,
     environment: target.cargoEnvironment(Platform.environment),
   );
   final library = File.fromUri(
-    repo.uri.resolve('target/$rustTriple/release/$libFileName'),
+    targetDir.uri.resolve('$rustTriple/release/$libFileName'),
   );
   if (!library.existsSync()) {
     _fail('cargo succeeded but ${library.path} is missing.');

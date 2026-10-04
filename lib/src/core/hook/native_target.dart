@@ -1,6 +1,8 @@
 // Targets share OS, arch and library file names by design.
 // ignore_for_file: avoid-duplicate-constant-values
 
+import 'dart:ffi' show Abi;
+
 /// A host platform the `gleon-ffi` library is built and released for.
 ///
 /// Plain Dart (no Flutter imports): used by `hook/build.dart`,
@@ -78,6 +80,14 @@ enum NativeTarget {
   /// Stable identifier, e.g. `macos-arm64` (directory in `native/`).
   String get key => '$os-$arch';
 
+  /// The name gleon gives this platform (Rust's `std::env::consts` names),
+  /// e.g. `macos-aarch64`: the directory of its own goldens beside the shared
+  /// ones, and the `fallback_platform` that names it.
+  String get gleonPlatform => switch (rustTriple.split('-')) {
+    [final rustArch, ...] => '$os-$rustArch',
+    _ => key,
+  };
+
   /// Flat, unique file name of this target's GitHub Release asset, e.g.
   /// `libgleon_ffi-macos-arm64.dylib`.
   String get assetName =>
@@ -113,11 +123,11 @@ enum NativeTarget {
   static String get keys => values.map((target) => target.key).join(', ');
 
   /// Looks up a target by [key] (`<os>-<arch>`), or returns null.
-  static NativeTarget? byKey(String key) {
-    for (final target in values) {
-      if (target.key == key) return target;
-    }
+  static NativeTarget? byKey(String key) =>
+      values.where((target) => target.key == key).firstOrNull;
 
-    return null;
-  }
+  /// The target of the running process, or null: [Abi] names are
+  /// `<os>_<arch>`, like [key] with an underscore.
+  static NativeTarget? get host =>
+      byKey(Abi.current().toString().replaceAll('_', '-'));
 }

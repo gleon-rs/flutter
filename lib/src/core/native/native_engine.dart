@@ -19,7 +19,7 @@ import 'native_outcome.dart';
 abstract final class NativeEngine {
   /// C contract version this Dart code understands (`ABI_VERSION` in
   /// `gleon-ffi`). Keep both in lockstep.
-  static const expectedAbiVersion = 9;
+  static const expectedAbiVersion = 10;
 
   /// Releases sessions that are garbage collected.
   static final sessionFinalizer = NativeFinalizer(
@@ -96,8 +96,10 @@ abstract final class NativeEngine {
   /// update). [tolerance] null uses the golden's `.gleon/gleon.yaml` rule,
   /// else exact; [masks] add to the rule's. [textRegions] (pixels of a raw
   /// candidate) are compared under [textTolerance] (a share of a tile), null
-  /// the rule's, else 1 (text never fails). Failure
-  /// artifacts go to [failuresDir]; [goldenUri] names the golden in messages.
+  /// the rule's, else the golden's default (see `matchesGoldenFile`). With a
+  /// `fallback_platform`, the engine may compare or write this platform's own
+  /// golden beside [goldenPath] instead. Failure artifacts go to
+  /// [failuresDir]; [goldenUri] names the golden in messages.
   ///
   /// The candidate is read in place by the native code; nothing is copied in.
   static NativeOutcome golden(
@@ -123,6 +125,9 @@ abstract final class NativeEngine {
     final flatMasks = _flat(masks);
     final flatTextRegions = _flat(textRegions);
     final (kind, ratio, similarity, color) = _toleranceArguments(tolerance);
+    if (session.isDisposed) {
+      throw StateError('gleon: the session was disposed.');
+    }
     final result = GleonFfi.golden(
       session.handle,
       isUpdate ? 1 : 0,

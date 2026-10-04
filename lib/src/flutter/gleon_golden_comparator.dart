@@ -16,8 +16,9 @@ import 'flutter_session.dart';
 /// case reports and (`--update-goldens`) the golden itself.
 ///
 /// Golden paths come from the comparator it wraps (normally Flutter's
-/// [LocalFileComparator]), so golden files live exactly where they would
-/// without this package.
+/// [LocalFileComparator]), so golden files live where they would without this
+/// package; with a `fallback_platform` in `.gleon/gleon.yaml`, other
+/// platforms keep their own goldens beside them, in `<os>-<arch>/`.
 class GleonGoldenComparator extends GoldenFileComparator {
   /// Wraps [delegate]; [tolerance], [masks] and [textTolerance] come from
   /// the matcher call. [session] defaults to [FlutterSession.process].
@@ -41,7 +42,8 @@ class GleonGoldenComparator extends GoldenFileComparator {
   final List<PixelRegion> masks;
 
   /// The text tolerance of the matcher call, a share of a tile (0.0–1.0);
-  /// null uses the golden's rule, else 1 (text never fails).
+  /// null uses the golden's rule, else the golden's default (see
+  /// `matchesGoldenFile`).
   final double? textTolerance;
 
   /// Workspace and environment of this process.
@@ -50,15 +52,12 @@ class GleonGoldenComparator extends GoldenFileComparator {
   @override
   Uri getTestUri(Uri key, int? version) => delegate.getTestUri(key, version);
 
+  /// Writes [imageBytes] as [golden] through the engine; like [compare], a
+  /// custom comparator fails (it would write the golden behind gleon's back:
+  /// no per-platform golden, no case report).
   @override
-  Future<void> update(Uri golden, Uint8List imageBytes) async {
-    final local = delegate;
-    if (local is LocalFileComparator) {
-      _run(local, golden, imageBytes, isUpdate: true);
-    } else {
-      await local.update(golden, imageBytes);
-    }
-  }
+  Future<void> update(Uri golden, Uint8List imageBytes) async =>
+      _run(_local, golden, imageBytes, isUpdate: true);
 
   @override
   Future<bool> compare(Uint8List imageBytes, Uri golden) async {

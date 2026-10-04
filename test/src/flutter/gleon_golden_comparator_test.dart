@@ -51,16 +51,25 @@ void main() {
   });
 
   group('GleonGoldenComparator', () {
-    test('updates through a custom comparator are delegated to it', () async {
+    test('updates through a custom comparator fail like comparisons', () async {
       final custom = _RecordingComparator();
       final comparator = GleonGoldenComparator(
         custom,
         session: sessionWithoutWorkspace(),
       );
       final bytes = Uint8List.fromList(const [1, 2, 3]);
-      await comparator.update(Uri.parse('goldens/a.png'), bytes);
 
-      expect(custom.updates, [(Uri.parse('goldens/a.png'), bytes)]);
+      await expectLater(
+        comparator.update(Uri.parse('goldens/a.png'), bytes),
+        throwsA(
+          isA<TestFailure>().having(
+            (failure) => failure.message,
+            'message',
+            contains('Custom comparators are not supported yet.'),
+          ),
+        ),
+      );
+      expect(custom.updates, isEmpty, reason: 'nothing written behind gleon');
       expect(
         comparator.getTestUri(Uri.parse('a.png'), 2),
         Uri.parse('a.2.png'),

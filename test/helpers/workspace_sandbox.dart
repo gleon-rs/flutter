@@ -6,6 +6,7 @@ import 'dart:ui';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gleon/src/core/compare/golden_tolerance.dart';
 import 'package:gleon/src/core/config/gleon_session.dart';
+import 'package:gleon/src/core/hook/native_target.dart';
 import 'package:gleon/src/flutter/flutter_session.dart';
 import 'package:gleon/src/flutter/gleon_matches_golden_file.dart';
 import 'package:gleon/src/flutter/ignore_regions.dart';
@@ -35,7 +36,7 @@ final class WorkspaceSandbox {
           .resolveSymbolicLinksSync(),
     );
     Directory('${root.path}/.gleon').createSync();
-    File('${root.path}/.gleon/gleon.yaml').writeAsStringSync(yaml);
+    _writeConfig(root, yaml);
     const source = GoldenSandbox.source;
     final goldens = {
       'goldens/blob.png': 'blob.png',
@@ -85,17 +86,18 @@ final class WorkspaceSandbox {
   /// `GLEON_ARTIFACTS_DIR` and `GLEON_RUN_ID` (unset by default, whatever the
   /// environment of the test run); its goldens under [root] belong to this
   /// workspace.
-  // ignore: prefer-static-method, reads as this workspace's session in tests.
   GleonSession session({
     String metrics = '',
     String artifactsDir = '',
     String runId = '',
-  }) => .new(
-    integration: FlutterSession.integration,
-    environment: GleonEnvironment(
-      metrics: metrics,
-      artifactsDir: artifactsDir,
-      runId: runId,
+  }) => _disposedWithTest(
+    .new(
+      integration: FlutterSession.integration,
+      environment: GleonEnvironment(
+        metrics: metrics,
+        artifactsDir: artifactsDir,
+        runId: runId,
+      ),
     ),
   );
 
@@ -132,19 +134,45 @@ final class WorkspaceSandbox {
     return json;
   }
 
+  /// Replaces `.gleon/gleon.yaml` with [yaml] (the engine reads it again).
+  void writeConfig(String yaml) => _writeConfig(root, yaml);
+
   void _dispose() {
     goldenFileComparator = _original;
     root.deleteSync(recursive: true);
   }
 }
 
+/// The name gleon gives this platform: the directory of its own goldens, and
+/// the `fallback_platform` naming it.
+String get hostPlatform =>
+    (NativeTarget.host ?? fail('tests run on a native target')).gleonPlatform;
+
+/// A platform other than this one.
+String get foreignPlatform =>
+    hostPlatform == 'linux-x86_64' ? 'windows-x86_64' : 'linux-x86_64';
+
+void _writeConfig(Directory root, String yaml) =>
+    File('${root.path}/.gleon/gleon.yaml').writeAsStringSync(yaml);
+
 /// A session without a workspace and the given `GLEON_METRICS` value (unset
 /// by default, like the other variables).
-GleonSession sessionWithoutWorkspace({String metrics = ''}) => .new(
-  integration: FlutterSession.integration,
-  hasWorkspaces: false,
-  environment: GleonEnvironment(metrics: metrics),
-);
+GleonSession sessionWithoutWorkspace({String metrics = ''}) =>
+    _disposedWithTest(
+      .new(
+        integration: FlutterSession.integration,
+        hasWorkspaces: false,
+        environment: GleonEnvironment(metrics: metrics),
+      ),
+    );
+
+/// [session], released when the running test ends instead of at garbage
+/// collection.
+GleonSession _disposedWithTest(GleonSession session) {
+  addTearDown(session.dispose);
+
+  return session;
+}
 
 /// Validates [json] against [caseSchema] when a gleon checkout is present.
 void expectMatchesCaseSchema(Map<String, Object?> json) {

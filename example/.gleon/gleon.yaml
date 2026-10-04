@@ -3,15 +3,15 @@
 # that pass no `tolerance`.
 required_version: ">=0.1.0"
 
+# The goldens in test/goldens/ are recorded on an Apple silicon Mac: there
+# their text is compared too; other platforms keep their own goldens in
+# test/goldens/<os>-<arch>/ (see "Real text" in the package README).
+fallback_platform: macos-aarch64
+
 screenshots:
   - include: "test/goldens/**/*.png"
     # Everything but text must match exactly: the tests load the app's real
-    # fonts (`loadAppFonts` in test/flutter_test_config.dart), and the goldens
-    # are recorded on macOS. Text never fails by default (`text_tolerance: 1`):
-    # other operating systems rasterize glyphs differently, by more than a
-    # changed digit differs, so one golden for every OS cannot compare text.
-    # A changed counter still fails when it changes the layout; exact text on
-    # every OS needs per-platform goldens.
+    # fonts (`loadAppFonts` in test/flutter_test_config.dart).
     mode: pixel
     diff:
       threshold: 0

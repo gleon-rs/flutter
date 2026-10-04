@@ -1,7 +1,26 @@
+import 'dart:ffi' show Abi;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gleon/src/core/hook/native_target.dart';
 
 void main() {
+  test('gleon names every target like Rust std::env::consts', () {
+    expect(
+      {for (final target in NativeTarget.values) target.gleonPlatform},
+      {'linux-aarch64', 'linux-x86_64', 'macos-aarch64', 'windows-x86_64'},
+    );
+  });
+
+  test('the host is the target of its ABI, none for an unsupported one', () {
+    const targets = {
+      Abi.linuxArm64: NativeTarget.linuxArm64,
+      Abi.linuxX64: NativeTarget.linuxX64,
+      Abi.macosArm64: NativeTarget.macosArm64,
+      Abi.windowsX64: NativeTarget.windowsX64,
+    };
+    expect(NativeTarget.host, targets[Abi.current()]);
+  });
+
   test('windows builds link the C runtime statically in every setup', () {
     const flag = '-C target-feature=+crt-static';
     const windows = NativeTarget.windowsX64;
