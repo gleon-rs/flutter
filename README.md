@@ -49,7 +49,8 @@ Without extra parameters the behavior is Flutter's, with one difference: exact c
 of everything but the text of a widget, which never fails by default unless `.gleon/gleon.yaml`
 names the platform the goldens are recorded on (see [Real text](#real-text)); goldens resolved
 relative to the test file, `flutter test --update-goldens` rewrites them, nothing is written when
-tests pass. If a file must keep both imports, add
+tests pass unless metrics are on (case reports, and the candidate of a pass that differs from
+another platform's golden; see [Metrics](#metrics)). If a file must keep both imports, add
 `hide matchesGoldenFile` to the `flutter_test` import.
 
 ## Tolerance
@@ -337,7 +338,8 @@ The CLI can also keep goldens out of Git (content-addressed blobs with small JSO
 
 A widget golden (a `Finder`), from the captured frame to the verdict: Flutter encodes the frame
 as a PNG and compares it with its comparator (a pass short-cuts on equal bytes); gleon passes the
-frame's raw pixels and encodes a PNG only to keep it (a failure). Rendering the frame is the same for both
+frame's raw pixels and encodes a PNG only to keep it (a failure, or with metrics a pass that
+differs from another platform's golden). Rendering the frame is the same for both
 and not measured. Exact, no `.gleon/` workspace; Apple M3 Max, macOS, Flutter 3.47.6, mean
 latency with [bench_press](https://pub.dev/packages/bench_press):
 
