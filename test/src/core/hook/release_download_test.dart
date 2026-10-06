@@ -20,10 +20,12 @@ void main() {
 
   Future<File> fetch(
     Uri releaseUrl, {
+    String packageVersion = '1.0.0',
     Duration redirectTimeout = const .new(seconds: 30),
     Duration bodyTimeout = const .new(minutes: 3),
   }) => ReleaseDownload.fetchLibrary(
     releaseUrl: releaseUrl,
+    packageVersion: packageVersion,
     target: target,
     cacheDir: cache ?? .systemTemp,
     redirectTimeout: redirectTimeout,
@@ -76,6 +78,8 @@ void main() {
       files?.map((file) => file.path),
       everyElement(isNot(endsWith('.so'))),
     );
+    // A list just downloaded is not asked for again.
+    expect(server.hits[ReleaseDownload.checksumsFileName], 1);
   });
 
   test('a missing release explains how to proceed', () async {
@@ -85,7 +89,12 @@ void main() {
     await expectLater(
       fetch(server.url),
       throwsDownload(
-        allOf(contains('HTTP 404'), contains('ffi_path'), contains('ref')),
+        allOf(
+          contains('HTTP 404'),
+          contains('`release_url` user-define (${server.url})'),
+          contains('gleon 1.0.0'),
+          contains('ffi_path'),
+        ),
       ),
     );
   });
@@ -118,6 +127,68 @@ void main() {
 
     expect(fetched.readAsBytesSync(), library);
     expect(hits[ReleaseDownload.checksumsFileName], 2);
+  });
+
+  group('a mirror kept across upgrades', () {
+    final upgraded = List<int>.generate(4096, (i) => i % 241);
+    final upgradedHash = sha256.convert(upgraded).toString();
+    final upgradedSums = '$upgradedHash  ${target.assetName}\n'.codeUnits;
+
+    Future<ReleaseServer> mirror() async {
+      final server = await ReleaseServer.start({
+        ReleaseDownload.checksumsFileName: sums,
+        target.assetName: library,
+      });
+      addTearDown(server.close);
+      final fetched = await fetch(server.url);
+      expect(fetched.readAsBytesSync(), library);
+
+      return server;
+    }
+
+    test('serves the release of the new version', () async {
+      final ReleaseServer(:files, :hits, :url) = await mirror();
+      files
+        ..[ReleaseDownload.checksumsFileName] = upgradedSums
+        ..[target.assetName] = upgraded;
+
+      final fetched = await fetch(url, packageVersion: '1.1.0');
+      expect(fetched.readAsBytesSync(), upgraded);
+      expect(hits[ReleaseDownload.checksumsFileName], 2);
+    });
+
+    test('reloads a cached list that disagrees with the library', () async {
+      final ReleaseServer(:files, :hits, :url) = await mirror();
+      // The cached library is gone, and the mirror changed in place.
+      Directory('${(cache ?? fail('no cache')).path}/$hash')
+          .deleteSync(recursive: true);
+      files
+        ..[ReleaseDownload.checksumsFileName] = upgradedSums
+        ..[target.assetName] = upgraded;
+
+      final fetched = await fetch(url);
+      expect(fetched.readAsBytesSync(), upgraded);
+      expect(hits[ReleaseDownload.checksumsFileName], 2);
+    });
+
+    test('names release_url when the library still disagrees', () async {
+      final ReleaseServer(:files, :hits, :url) = await mirror();
+      Directory('${(cache ?? fail('no cache')).path}/$hash')
+          .deleteSync(recursive: true);
+      files[target.assetName] = upgraded;
+
+      await expectLater(
+        fetch(url),
+        throwsDownload(
+          allOf(
+            contains('checksum mismatch'),
+            contains(ReleaseDownload.checksumsFileName),
+            contains('`release_url`'),
+          ),
+        ),
+      );
+      expect(hits[ReleaseDownload.checksumsFileName], 2);
+    });
   });
 
   test('parses sha256sum output and pubspec versions', () {

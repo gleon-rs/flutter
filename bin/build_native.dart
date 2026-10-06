@@ -12,18 +12,25 @@
 /// Maintainers and CI only; package consumers never need Rust. Requirements:
 /// rustup (the toolchain comes from the gleon repo's `rust-toolchain.toml`).
 /// Cross builds, used only for local convenience (CI builds every target
-/// natively): Linux targets from other hosts via `cargo zigbuild`
-/// (`brew install zig cargo-zigbuild`), Windows targets from other hosts via
-/// `cargo xwin` (`cargo install --locked cargo-xwin`).
+/// natively): Linux targets of another OS or architecture via
+/// `cargo zigbuild` (`brew install zig cargo-zigbuild`), Windows targets from
+/// other hosts via `cargo xwin` (`cargo install --locked cargo-xwin`); macOS
+/// only on macOS. `--target all` builds every target this host can.
+///
+/// A library is replaced atomically, and its stamp (the gleon commit it was
+/// built from) is written only after it, so an interrupted build leaves no
+/// stamp, which the hook refuses while `native/gleon_ref` exists.
 ///
 /// Only `dart:*`, `crypto` and this package may be imported here: pub's
 /// strict-dependencies check forbids dev_dependencies in `bin/`.
 library;
 
+import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
 import 'package:crypto/crypto.dart';
+import 'package:gleon/src/core/hook/atomic_write.dart';
 import 'package:gleon/src/core/hook/native_target.dart';
 import 'package:gleon/src/core/hook/source_build.dart';
 
@@ -38,8 +45,8 @@ String get _usage =>
     '''
 Usage: dart bin/build_native.dart [options]
 
-  --target <key>      host (default), all, or one of: ${NativeTarget.keys}.
-                      Repeatable.
+  --target <key>      host (default), all (every target this host can
+                      build), or one of: ${NativeTarget.keys}. Repeatable.
   --gleon-repo <dir>  gleon checkout (default: \$GLEON_REPO, else ../gleon).
   --dist <dir>        also copy each library there under its release asset
                       name.
@@ -51,6 +58,18 @@ Usage: dart bin/build_native.dart [options]
 
 Future<void> main(List<String> args) async {
   final options = _parse(args);
+  final host = NativeTarget.host;
+  final hostOs = Platform.operatingSystem;
+  final List<NativeTarget> targets;
+  try {
+    targets = NativeTarget.resolveKeys(
+      options.keys,
+      hostOs: hostOs,
+      host: host,
+    );
+  } on FormatException catch (error) {
+    _fail(error.message);
+  }
   final packageRoot = await _packageRoot();
   final repo = Directory(
     options.repo ??
@@ -72,30 +91,51 @@ Future<void> main(List<String> args) async {
       'user-define instead.',
     );
   }
-
-  final host = NativeTarget.host;
-  for (final target in _targets(options.keys, host)) {
-    final library = await _build(repo, target, host: host);
-    final bytes = await library.readAsBytes();
-    final targetDir = packageRoot.resolve('native/${target.key}/');
-    final outputs = [
-      File.fromUri(targetDir.resolve(target.libFileName)),
-      if (options.dist case final dist?)
-        File.fromUri(Directory(dist).absolute.uri.resolve(target.assetName)),
-    ];
-    for (final output in outputs) {
-      await output.parent.create(recursive: true);
-      await output.writeAsBytes(bytes, flush: true);
-    }
-    // Records the commit this build was made from; the hook rejects the
-    // library unless native/gleon_ref pins it.
-    await File.fromUri(targetDir.resolve(NativeTarget.pinFileName))
-        .writeAsString('$builtFrom\n');
-    stdout.writeln(
-      '${target.key}: ${sha256.convert(bytes)}  '
-      '${outputs.map((file) => file.path).join(', ')}',
+  for (final target in targets) {
+    final subcommand =
+        target.cargoSubcommand(hostOs: hostOs, host: host) ??
+        _fail('${target.key} cannot be built here.');
+    final library = await _build(repo, target, subcommand);
+    await _install(
+      library,
+      target,
+      packageRoot: packageRoot,
+      dist: options.dist,
+      builtFrom: builtFrom,
     );
   }
+}
+
+/// Copies the built [library] of [target] into `native/<target>/` of
+/// [packageRoot] (and [dist] under its release asset name) and stamps it
+/// with the commit it was [builtFrom].
+Future<void> _install(
+  File library,
+  NativeTarget target, {
+  required Uri packageRoot,
+  required String? dist,
+  required String builtFrom,
+}) async {
+  final bytes = await library.readAsBytes();
+  final targetDir = packageRoot.resolve('native/${target.key}/');
+  // Records the commit this build was made from; the hook rejects the
+  // library unless native/gleon_ref pins it. Removed first, so a library
+  // replaced by an interrupted build is never accepted under an old stamp.
+  final stamp = File.fromUri(targetDir.resolve(NativeTarget.pinFileName));
+  if (stamp.existsSync()) await stamp.delete();
+  final outputs = [
+    File.fromUri(targetDir.resolve(target.libFileName)),
+    if (dist != null)
+      File.fromUri(Directory(dist).absolute.uri.resolve(target.assetName)),
+  ];
+  for (final output in outputs) {
+    await AtomicWrite.bytes(output, bytes);
+  }
+  await AtomicWrite.bytes(stamp, utf8.encode('$builtFrom\n'));
+  stdout.writeln(
+    '${target.key}: ${sha256.convert(bytes)}  '
+    '${outputs.map((file) => file.path).join(', ')}',
+  );
 }
 
 _Options _parse(List<String> args) {
@@ -145,27 +185,6 @@ String _value(Iterator<String> rest) {
       : _fail('$flag needs a value.\n\n$_usage');
 }
 
-List<NativeTarget> _targets(List<String> keys, NativeTarget? host) =>
-    <NativeTarget>{
-      for (final key in keys)
-        ...switch (key) {
-          'all' => NativeTarget.values,
-          'host' => [
-            host ??
-                _fail(
-                  'this host is not a supported target (${NativeTarget.keys}).',
-                ),
-          ],
-          _ => [
-            NativeTarget.byKey(key) ??
-                _fail(
-                  'unknown target $key (expected host, all, '
-                  '${NativeTarget.keys}).',
-                ),
-          ],
-        },
-    }.toList();
-
 Future<Uri> _packageRoot() async {
   final lib = await Isolate.resolvePackageUri(.parse('package:gleon/'));
   if (lib == null) _fail('run this from the gleon package directory.');
@@ -173,20 +192,13 @@ Future<Uri> _packageRoot() async {
   return lib.resolve('../');
 }
 
+/// Builds [target] in [repo] with the cargo [subcommand] this host needs.
 Future<File> _build(
   Directory repo,
-  NativeTarget target, {
-  required NativeTarget? host,
-}) async {
-  final NativeTarget(:key, :libFileName, :os, :rustTriple) = target;
-  // Plain cargo within one OS; the cross-linking wrapper for Linux or Windows
-  // targets built elsewhere. The macOS SDK only exists on macOS.
-  final subcommand = switch (target) {
-    _ when os == host?.os => ['build'],
-    .linuxArm64 || .linuxX64 => ['zigbuild'],
-    .windowsX64 => ['xwin', 'build'],
-    .macosArm64 => _fail('$key can only be built on macOS.'),
-  };
+  NativeTarget target,
+  List<String> subcommand,
+) async {
+  final NativeTarget(:libFileName, :rustTriple) = target;
 
   await _run('rustup', ['target', 'add', rustTriple], repo, isOptional: true);
   // Explicit: a `CARGO_TARGET_DIR` or `build.target-dir` would build

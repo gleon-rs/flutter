@@ -3,9 +3,8 @@
 # that pass no `tolerance`.
 required_version: ">=0.1.0"
 
-# The goldens in test/goldens/ are recorded on an Apple silicon Mac: there
-# their text is compared too; other platforms keep their own goldens in
-# test/goldens/<os>-<arch>/ (see "Real text" in the package README).
+# The goldens in test/goldens/ are recorded on an Apple silicon Mac (see
+# "Real text" in the package README).
 fallback_platform: macos-aarch64
 
 screenshots:

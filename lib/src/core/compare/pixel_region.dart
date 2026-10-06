@@ -14,6 +14,20 @@ final class PixelRegion {
     required this.height,
   });
 
+  /// The whole pixels covering the rectangle from ([left], [top]) to
+  /// ([right], [bottom]), which must be finite: its edges rounded outwards.
+  factory PixelRegion.outwards({
+    required double left,
+    required double top,
+    required double right,
+    required double bottom,
+  }) {
+    final x = left.floor();
+    final y = top.floor();
+
+    return .new(x: x, y: y, width: right.ceil() - x, height: bottom.ceil() - y);
+  }
+
   /// Left edge.
   final int x;
 

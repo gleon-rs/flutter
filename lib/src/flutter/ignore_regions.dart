@@ -31,9 +31,7 @@ abstract final class IgnoreRegions {
             '$maxCoordinate',
       );
     }
-    final x = left.floor();
-    final y = top.floor();
 
-    return .new(x: x, y: y, width: right.ceil() - x, height: bottom.ceil() - y);
+    return .outwards(left: left, top: top, right: right, bottom: bottom);
   }
 }

@@ -96,9 +96,9 @@ abstract final class NativeEngine {
   /// update). [tolerance] null uses the golden's `.gleon/gleon.yaml` rule,
   /// else exact; [masks] add to the rule's. [textRegions] (pixels of a raw
   /// candidate) are compared under [textTolerance] (a share of a tile), null
-  /// the rule's, else the golden's default (see `matchesGoldenFile`). With a
-  /// `fallback_platform`, the engine may compare or write this platform's own
-  /// golden beside [goldenPath] instead. Failure artifacts go to
+  /// the rule's, else the golden's default (see `matchesGoldenFile`). The
+  /// engine may compare or write this platform's own golden beside
+  /// [goldenPath] instead (`fallback_platform`). Failure artifacts go to
   /// [failuresDir]; [goldenUri] names the golden in messages.
   ///
   /// The candidate is read in place by the native code; nothing is copied in.
@@ -194,8 +194,12 @@ abstract final class NativeEngine {
   static void checkAbiVersion(int abiVersion) {
     if (abiVersion != expectedAbiVersion) {
       throw StateError(
-        'gleon: native library ABI version $abiVersion does not match the '
-        'Dart package ($expectedAbiVersion). Rebuild the native library.',
+        'gleon: native library ABI version $abiVersion does not match this '
+        'version of the package (ABI $expectedAbiVersion). The library comes '
+        'from the `ffi_path` user-define, a `release_url` mirror, a '
+        '`gleon_repo` checkout or `native/<target>/` of the package: point '
+        'the user-define at the library of this package version, or rebuild '
+        'it (`dart bin/build_native.dart`).',
       );
     }
   }

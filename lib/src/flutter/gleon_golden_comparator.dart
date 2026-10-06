@@ -17,8 +17,7 @@ import 'flutter_session.dart';
 ///
 /// Golden paths come from the comparator it wraps (normally Flutter's
 /// [LocalFileComparator]), so golden files live where they would without this
-/// package; with a `fallback_platform` in `.gleon/gleon.yaml`, other
-/// platforms keep their own goldens beside them, in `<os>-<arch>/`.
+/// package (per-platform goldens: see the README's "Real text").
 class GleonGoldenComparator extends GoldenFileComparator {
   /// Wraps [delegate]; [tolerance], [masks] and [textTolerance] come from
   /// the matcher call. [session] defaults to [FlutterSession.process].

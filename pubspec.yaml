@@ -1,6 +1,6 @@
 name: gleon
 description: Drop-in matchesGoldenFile for Flutter tests with pixel and SSIM tolerance and ignore regions, powered by a Rust engine.
-version: 0.1.0
+version: 0.2.0
 repository: https://github.com/gleon-rs/flutter
 issue_tracker: https://github.com/gleon-rs/flutter/issues
 

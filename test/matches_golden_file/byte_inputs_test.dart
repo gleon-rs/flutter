@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:gleon/gleon.dart';
 
 import '../helpers/golden_sandbox.dart';
+import '../helpers/golden_updates.dart';
 import '../helpers/swatch.dart';
 
 void main() {
@@ -67,25 +68,67 @@ void main() {
     expect(goldenFileComparator, same(before));
   });
 
-  test('an abandoned match gives the comparator back when its test ends', () {
+  test('a match never replaces goldenFileComparator', () async {
     final before = goldenFileComparator;
-    // Tear-downs run last in, first out: this one runs after the match's.
-    addTearDown(() => expect(goldenFileComparator, same(before)));
-    // Like a match of a timed-out test: it never reaches its `finally`.
-    unawaited(
-      matchesGoldenFile(Swatch.golden)
-          .matchAsync(Completer<List<int>>().future),
-    );
+    final bytes = Completer<List<int>>();
+    final pending = matchesGoldenFile(Swatch.golden).matchAsync(bytes.future);
 
-    expect(goldenFileComparator, isNot(same(before)));
+    expect(goldenFileComparator, same(before));
+    bytes.complete(
+      File('${GoldenSandbox.dir.path}/${Swatch.golden}').readAsBytesSync(),
+    );
+    expect(await pending, isNull);
   });
 
-  // Would hang until the test times out if the abandoned turn were kept.
-  test('a match after an abandoned one does not wait for it', () async {
+  // Like a match abandoned by a timed-out test that goes on during the next
+  // test, which installed another comparator and runs with --update-goldens.
+  test('a late match keeps its own comparator and update flag', () async {
+    final golden = File('${GoldenSandbox.dir.path}/${Swatch.golden}');
+    final original = golden.readAsBytesSync();
+    final bytes = Completer<List<int>>();
+    final pending = matchesGoldenFile(Swatch.golden).matchAsync(bytes.future);
+    final spy = _SpyComparator();
+    goldenFileComparator = spy;
+    // ignore: avoid-unnecessary-local-variable, restored after the test.
+    final wasUpdating = autoUpdateGoldenFiles;
+    addTearDown(() => autoUpdateGoldenFiles = wasUpdating);
+    autoUpdateGoldenFiles = true;
+    // Another image than the golden: compared, it fails; written, it would
+    // replace the golden.
+    bytes.complete(
+      File('${GoldenSandbox.source}/caption.png').readAsBytesSync(),
+    );
+
+    expect(await pending, isNotNull);
+    expect(spy.calls, isEmpty);
+    final after = await golden.readAsBytes();
+    expect(after, original);
+  });
+
+  test('a byte update that fails is the failure message', () async {
     final bytes = File('${GoldenSandbox.dir.path}/${Swatch.golden}')
         .readAsBytesSync();
+    goldenFileComparator = _SpyComparator();
 
-    await expectLater(bytes, matchesGoldenFile(Swatch.golden));
+    final message = await withGoldenUpdates(
+      () => matchesGoldenFile(Swatch.golden).matchAsync(bytes),
+    );
+    expect(message, contains('needs the default LocalFileComparator'));
+  });
+
+  test('other inputs fail like Flutter', () async {
+    for (final input in <Object?>['goldens/swatch.png', null]) {
+      await expectLater(
+        matchesGoldenFile(Swatch.golden).matchAsync(input),
+        throwsA(
+          isA<AssertionError>().having(
+            (error) => error.message,
+            'message',
+            contains('must provide a Finder, Image'),
+          ),
+        ),
+      );
+    }
   });
 
   test('keys with spaces and nested folders resolve like Flutter', () async {
@@ -112,4 +155,20 @@ void main() {
 
     expect(await Zone.root.run(() => matcher.matchAsync(bytes)), isNull);
   });
+}
+
+/// Records every call; a match must never reach it.
+final class _SpyComparator extends GoldenFileComparator {
+  final calls = <String>[];
+
+  @override
+  Future<bool> compare(Uint8List imageBytes, Uri golden) async {
+    calls.add('compare $golden');
+
+    return true;
+  }
+
+  @override
+  Future<void> update(Uri golden, Uint8List imageBytes) async =>
+      calls.add('update $golden');
 }

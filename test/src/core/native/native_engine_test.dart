@@ -20,7 +20,7 @@ void main() {
         isA<StateError>().having(
           (error) => error.message,
           'message',
-          contains('Rebuild the native library'),
+          allOf(contains('release_url'), contains('ffi_path')),
         ),
       ),
     );

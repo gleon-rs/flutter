@@ -80,8 +80,7 @@ jobs:
         working-directory: flutter/example
         env:
           # Records a case report per golden (see example/.gleon/gleon.yaml): on hosts other than
-          # its fallback_platform they compare the macOS goldens and keep the candidates
-          # `gleon approve --from` turns into per-platform goldens.
+          # its fallback_platform they compare the macOS goldens with text ignored.
           GLEON_METRICS: "1"
           # Stamps the reports of this run, so readers never mix them with another run's
           # (re-runs of failed jobs get their own attempt).
@@ -91,6 +90,15 @@ jobs:
           dart format --output=none --set-exit-if-changed .
           flutter analyze --fatal-infos
           flutter test
+
+      # Proves the platform-aware goldens: macOS compared its own goldens with text, every other
+      # host fell back to them (a silent fallback to one shared golden would pass otherwise).
+      - name: Check the example's case reports
+        env:
+          GLEON_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          dart bin/check_cases.dart example/.gleon/runs/latest \
+            --fallback-platform macos-aarch64 --min-cases 2 --outcome match --run-id "$GLEON_RUN_ID"
 
       # Also after a failure. The whole run (`cases/` plus the kept candidates and failure
       # images in `artifacts/`) is what `gleon approve --from` reads; kept for a week.
@@ -203,6 +211,25 @@ jobs:
           # Every golden of the example was read, and none failed.
           grep -Eq 'tests="[1-9][0-9]*" failures="0" errors="0"' build/gleon/junit.xml
 
+      # The per-platform loop end to end: this host fell back to the macOS goldens, so
+      # `gleon approve` records its own goldens from the run, and the next run compares them.
+      - name: Approve this platform's goldens and compare with them
+        working-directory: flutter/example
+        env:
+          GLEON_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          gleon approve
+          test -f test/goldens/linux-x86_64/counter_initial.png
+          test -f test/goldens/linux-x86_64/counter_three_taps.png
+          GLEON_RUN_ID="$GLEON_RUN_ID-own" gleon test -- flutter test
+
+      - name: Check the rerun compared the own goldens
+        env:
+          GLEON_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}-own
+        run: |
+          dart bin/check_cases.dart example/.gleon/runs/latest \
+            --own --min-cases 2 --outcome match --run-id "$GLEON_RUN_ID"
+
   quality:
     name: Quality gates
     # Validated on the pull request; a merge to main does not change the result.
@@ -240,6 +267,31 @@ jobs:
         run: |
           flutter pub get
           (cd example && flutter pub get)
+
+      - name: Read the gleon pin
+        id: pin
+        run: echo "gleon_ref=$(tr -d '[:space:]' < native/gleon_ref)" >> "$GITHUB_OUTPUT"
+
+      # NATIVE_LICENSES.md must list the crates the pinned gleon-ffi links.
+      - name: Check out gleon
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: gleon-rs/gleon
+          ref: ${{ steps.pin.outputs.gleon_ref }}
+          path: gleon
+          persist-credentials: false
+
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@ecabd13d1c56bd1345c230e542e9144811ad706f # v2.0.0
+        with:
+          rust-src-dir: gleon
+          cache: false
+          build-warnings: warn
+
+      - name: Native licenses
+        run: |
+          (cd ../gleon && rustup toolchain install)
+          dart bin/native_licenses.dart --gleon-repo ../gleon --check
 
       - name: Publish dry run
         run: dart pub publish --dry-run

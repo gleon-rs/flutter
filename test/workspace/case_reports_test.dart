@@ -8,6 +8,7 @@ import 'package:gleon/src/flutter/gleon_golden_comparator.dart';
 
 import '../helpers/blob.dart';
 import '../helpers/golden_updates.dart';
+import '../helpers/prints.dart';
 import '../helpers/swatch.dart';
 import '../helpers/workspace_sandbox.dart';
 
@@ -41,27 +42,12 @@ String _shaOf(Object? image) => switch (image) {
   _ => fail('no sha256 in the report'),
 };
 
-/// Runs [body] with `debugPrint` captured (reset to the test binding's
-/// override before the test ends, as the binding requires) and returns the
-/// printed lines.
-Future<List<String>> _capturePrints(AsyncCallback body) async {
-  final lines = <String>[];
-  debugPrint = (message, {wrapWidth}) => lines.add(message ?? '(null)');
-  try {
-    await body();
-  } finally {
-    debugPrint = TestWidgetsFlutterBinding.instance.debugPrintOverride;
-  }
-
-  return lines;
-}
-
 void main() {
   // Only the PNG bytes of the golden itself are identical: a widget is
   // compared as raw pixels, and equal pixels are a match.
   test('identical: schema-valid case without metrics', () async {
     final sandbox = WorkspaceSandbox.create(_yaml);
-    final lines = await _capturePrints(
+    final lines = await capturePrints(
       () => expectLater(
         sandbox.goldenBytes(Swatch.golden),
         sandbox.matcher(Swatch.golden),
@@ -115,10 +101,31 @@ void main() {
     );
   });
 
+  testWidgets('an image is compared as raw pixels: a match', (tester) async {
+    final sandbox = WorkspaceSandbox.create(_yaml);
+    await tester.pumpWidget(const Swatch());
+    final image =
+        await tester.runAsync(
+          () => captureImage(
+            Swatch.finder.evaluate().singleOrNull ?? fail('no swatch'),
+          ),
+        ) ??
+        fail('no image captured');
+    addTearDown(image.dispose);
+    await capturePrints(
+      () => expectLater(image, sandbox.matcher(Swatch.golden)),
+    );
+
+    expect(
+      sandbox.readCase('test/goldens/swatch'),
+      containsPair('outcome', 'match'),
+    );
+  });
+
   testWidgets('match: headroom metrics and a console line', (tester) async {
     final sandbox = WorkspaceSandbox.create(_yaml);
     await tester.pumpWidget(const Blob(offset: 0.3));
-    final lines = await _capturePrints(
+    final lines = await capturePrints(
       () => expectLater(Blob.finder, sandbox.matcher(Blob.golden)),
     );
     final report = sandbox.readCase('test/goldens/blob');
@@ -205,7 +212,7 @@ void main() {
     Future<void> match() async => results.add(
       await sandbox.matcher('goldens/new/swatch.png').matchAsync(Swatch.finder),
     );
-    final lines = await _capturePrints(match);
+    final lines = await capturePrints(match);
     final report = sandbox.readCase('test/goldens/new/swatch');
 
     // Word for word the failure of Flutter's own comparator.
@@ -242,7 +249,7 @@ void main() {
     final sandbox = WorkspaceSandbox.create(_yaml);
     // Masks apply only to differing images: the dot inside the mask differs.
     await tester.pumpWidget(const Swatch(dot: Offset(96, 5)));
-    final lines = await _capturePrints(
+    final lines = await capturePrints(
       () => expectLater(
         Swatch.finder,
         sandbox.matcher(
@@ -262,7 +269,7 @@ void main() {
   testWidgets('several warnings print one line each', (tester) async {
     final sandbox = WorkspaceSandbox.create(_yaml);
     await tester.pumpWidget(const Swatch(dot: Offset(96, 5)));
-    final lines = await _capturePrints(
+    final lines = await capturePrints(
       () => expectLater(
         Swatch.finder,
         sandbox.matcher(
@@ -285,7 +292,7 @@ void main() {
       ..parent.createSync(recursive: true)
       ..createSync();
     await tester.pumpWidget(const Swatch());
-    final lines = await _capturePrints(
+    final lines = await capturePrints(
       () => expectLater(Swatch.finder, sandbox.matcher(Swatch.golden)),
     );
 
@@ -353,7 +360,7 @@ void main() {
     testWidgets('enables metrics a disabled yaml does not', (tester) async {
       final sandbox = WorkspaceSandbox.create(_disabledYaml);
       await tester.pumpWidget(const Swatch());
-      final lines = await _capturePrints(
+      final lines = await capturePrints(
         () => expectLater(
           Swatch.finder,
           sandbox.matcher(
@@ -403,7 +410,7 @@ void main() {
     ) async {
       final sandbox = WorkspaceSandbox.create(_yaml);
       await tester.pumpWidget(const Swatch());
-      Future<List<String>> run(GleonSession session) => _capturePrints(
+      Future<List<String>> run(GleonSession session) => capturePrints(
         () => expectLater(
           Swatch.finder,
           sandbox.matcher(Swatch.golden, session: session),

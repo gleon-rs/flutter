@@ -44,6 +44,136 @@ void main() {
     );
   });
 
+  test('windows builds keep the target and build rustflags', () {
+    const targetFlags = 'CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS';
+    const windows = NativeTarget.windowsX64;
+    expect(windows.cargoEnvironment(const {targetFlags: '-D warnings'}), {
+      targetFlags: '-D warnings -C target-feature=+crt-static',
+    });
+    // The target's flags beat `build.rustflags`, so they carry those too.
+    expect(
+      windows.cargoEnvironment(const {
+        'CARGO_BUILD_RUSTFLAGS': '-C debuginfo=1',
+      }),
+      {targetFlags: '-C debuginfo=1 -C target-feature=+crt-static'},
+    );
+    // Like cargo: with both, the build's flags are not used.
+    expect(
+      windows.cargoEnvironment(const {
+        'CARGO_BUILD_RUSTFLAGS': '-C debuginfo=1',
+        targetFlags: '-D warnings',
+      }),
+      {targetFlags: '-D warnings -C target-feature=+crt-static'},
+    );
+  });
+
+  test('the hook names the targets it has no library for', () {
+    expect(NativeTarget.requested('linux', 'arm64'), NativeTarget.linuxArm64);
+    expect(
+      () => NativeTarget.requested('android', 'arm64'),
+      throwsA(
+        isA<UnsupportedError>().having(
+          (error) => error.message,
+          'message',
+          allOf(contains('android/arm64'), contains(NativeTarget.keys)),
+        ),
+      ),
+    );
+  });
+
+  group('build_native targets', () {
+    List<String> keys(
+      List<String> requested, {
+      required String hostOs,
+      required NativeTarget? host,
+    }) => [
+      for (final target in NativeTarget.resolveKeys(
+        requested,
+        hostOs: hostOs,
+        host: host,
+      ))
+        target.key,
+    ];
+
+    Map<String, List<String>?> subcommands(String hostOs, NativeTarget host) =>
+        {
+          for (final target in NativeTarget.values)
+            target.key: target.cargoSubcommand(hostOs: hostOs, host: host),
+        };
+
+    test('macOS builds everything, Linux and Windows through wrappers', () {
+      expect(subcommands('macos', .macosArm64), {
+        'linux-arm64': ['zigbuild'],
+        'linux-x64': ['zigbuild'],
+        'macos-arm64': ['build'],
+        'windows-x64': ['xwin', 'build'],
+      });
+      expect(keys(['all'], hostOs: 'macos', host: .macosArm64), [
+        'linux-arm64',
+        'linux-x64',
+        'macos-arm64',
+        'windows-x64',
+      ]);
+    });
+
+    test('Linux builds the other architecture with zigbuild', () {
+      expect(subcommands('linux', .linuxX64), {
+        'linux-arm64': ['zigbuild'],
+        'linux-x64': ['build'],
+        'macos-arm64': null,
+        'windows-x64': ['xwin', 'build'],
+      });
+      expect(subcommands('linux', .linuxArm64)['linux-arm64'], ['build']);
+      expect(keys(['all'], hostOs: 'linux', host: .linuxArm64), [
+        'linux-arm64',
+        'linux-x64',
+        'windows-x64',
+      ]);
+    });
+
+    test('Windows builds itself with cargo and Linux with zigbuild', () {
+      expect(subcommands('windows', .windowsX64), {
+        'linux-arm64': ['zigbuild'],
+        'linux-x64': ['zigbuild'],
+        'macos-arm64': null,
+        'windows-x64': ['build'],
+      });
+    });
+
+    test('keys keep their order once each', () {
+      expect(
+        keys(['host', 'linux-arm64', 'all'], hostOs: 'linux', host: .linuxX64),
+        ['linux-x64', 'linux-arm64', 'windows-x64'],
+      );
+    });
+
+    test('every target is checked before anything is built', () {
+      Matcher throwsFormat(String message) => throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          contains(message),
+        ),
+      );
+      expect(
+        () => keys(
+          ['linux-x64', 'macos-arm64'],
+          hostOs: 'linux',
+          host: .linuxX64,
+        ),
+        throwsFormat('macos-arm64 can only be built on macos'),
+      );
+      expect(
+        () => keys(['host'], hostOs: 'macos', host: null),
+        throwsFormat('this host is not a supported target'),
+      );
+      expect(
+        () => keys(['macos-x64'], hostOs: 'macos', host: .macosArm64),
+        throwsFormat('unknown target macos-x64'),
+      );
+    });
+  });
+
   test('target keys match code_assets and dart:ffi naming', () {
     expect(NativeTarget.byKey('macos-arm64'), NativeTarget.macosArm64);
     expect(NativeTarget.byKey('windows-x64'), NativeTarget.windowsX64);

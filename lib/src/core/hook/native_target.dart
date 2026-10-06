@@ -97,9 +97,10 @@ enum NativeTarget {
   /// [parent] environment.
   ///
   /// Windows libraries link the C runtime statically, so they load without the
-  /// Visual C++ redistributable. Cargo ignores per-target rustflags whenever
-  /// `CARGO_ENCODED_RUSTFLAGS` or `RUSTFLAGS` is set, so the flag is appended
-  /// to whichever of those takes effect.
+  /// Visual C++ redistributable. Cargo takes rustflags from one source only
+  /// (`CARGO_ENCODED_RUSTFLAGS`, else `RUSTFLAGS`, else the target's, else
+  /// `build.rustflags`), so the flag is appended to whichever takes effect;
+  /// the build's flags move to the target's, which beats them.
   Map<String, String> cargoEnvironment(Map<String, String> parent) {
     if (os != windowsX64.os) return const {};
     const flag = '-C target-feature=+crt-static';
@@ -115,12 +116,89 @@ enum NativeTarget {
       return {'RUSTFLAGS': '$rustflags $flag'.trim()};
     }
     final triple = rustTriple.toUpperCase().replaceAll('-', '_');
+    final targetFlags = 'CARGO_TARGET_${triple}_RUSTFLAGS';
+    final inherited = parent[targetFlags] ?? parent['CARGO_BUILD_RUSTFLAGS'];
 
-    return {'CARGO_TARGET_${triple}_RUSTFLAGS': flag};
+    return {
+      targetFlags: [?inherited, flag].join(' ').trim(),
+    };
+  }
+
+  /// The `cargo` subcommand that builds this target on a host running
+  /// [hostOs] (`Platform.operatingSystem`) whose target is [host], or null
+  /// when that host cannot: plain cargo within one OS, the cross-linking
+  /// wrappers for Linux (`cargo zigbuild`) or Windows (`cargo xwin`) targets
+  /// built elsewhere; the macOS SDK only exists on macOS.
+  List<String>? cargoSubcommand({
+    required String hostOs,
+    required NativeTarget? host,
+  }) => switch (this) {
+    _ when this == host => const ['build'],
+    macosArm64 => hostOs == os ? const ['build'] : null,
+    windowsX64 => hostOs == os ? const ['build'] : const ['xwin', 'build'],
+    linuxArm64 || linuxX64 => const ['zigbuild'],
+  };
+
+  /// Whether a host running [hostOs] whose target is [host] can build this
+  /// target (see [cargoSubcommand]).
+  bool isBuildableOn({required String hostOs, required NativeTarget? host}) =>
+      cargoSubcommand(hostOs: hostOs, host: host) != null;
+
+  /// The targets named by [requested] keys (`host`, `all` or a target key),
+  /// without duplicates, in order; `all` is every target this host can
+  /// build (see [cargoSubcommand]).
+  ///
+  /// Throws a [FormatException] for an unknown key, `host` on an unsupported
+  /// host, or a target this host cannot build, before anything is built.
+  static List<NativeTarget> resolveKeys(
+    List<String> requested, {
+    required String hostOs,
+    required NativeTarget? host,
+  }) {
+    final targets = <NativeTarget>{
+      for (final key in requested)
+        ...switch (key) {
+          'all' => values.where(
+            (target) => target.isBuildableOn(hostOs: hostOs, host: host),
+          ),
+          'host' => [
+            host ??
+                (throw FormatException(
+                  'this host is not a supported target ($keys).',
+                )),
+          ],
+          _ => [
+            byKey(key) ??
+                (throw FormatException(
+                  'unknown target $key (expected host, all, $keys).',
+                )),
+          ],
+        },
+    };
+    for (final target in targets) {
+      if (!target.isBuildableOn(hostOs: hostOs, host: host)) {
+        throw FormatException(
+          '${target.key} can only be built on ${target.os}.',
+        );
+      }
+    }
+
+    return targets.toList();
   }
 
   /// All target keys, comma-separated (for messages).
   static String get keys => values.map((target) => target.key).join(', ');
+
+  /// The target the hooks runner asks for: [os] and [arch] are the names of
+  /// `code_assets`' `OS` and `Architecture`.
+  ///
+  /// Throws an [UnsupportedError] for a target without a library.
+  static NativeTarget requested(String os, String arch) =>
+      byKey('$os-$arch') ??
+      (throw UnsupportedError(
+        'gleon: no native library for $os/$arch. Supported hosts for '
+        '`flutter test`: $keys. Web and on-device tests are not supported.',
+      ));
 
   /// Looks up a target by [key] (`<os>-<arch>`), or returns null.
   static NativeTarget? byKey(String key) =>

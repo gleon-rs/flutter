@@ -45,12 +45,10 @@ Replace one import — everything else from `flutter_test` stays available:
 +import 'package:gleon/gleon.dart';
 ```
 
-Without extra parameters the behavior is Flutter's, with one difference: exact comparison
-of everything but the text of a widget, which never fails by default unless `.gleon/gleon.yaml`
-names the platform the goldens are recorded on (see [Real text](#real-text)); goldens resolved
-relative to the test file, `flutter test --update-goldens` rewrites them, nothing is written when
-tests pass unless metrics are on (case reports, and the candidate of a pass that differs from
-another platform's golden; see [Metrics](#metrics)). If a file must keep both imports, add
+Without extra parameters the behavior is Flutter's: exact comparison, goldens resolved relative
+to the test file, `flutter test --update-goldens` rewrites them, and nothing is written when
+tests pass unless metrics are on (see [Metrics](#metrics)). The one difference is the text of a
+widget, see [Real text](#real-text). If a file must keep both imports, add
 `hide matchesGoldenFile` to the `flutter_test` import.
 
 ## Tolerance
@@ -140,8 +138,8 @@ match). Then a golden `goldens/a.png` compares in one of three ways:
    across its versions (a pixel per square, measured between macOS 15 on CI and macOS 26), a
    changed digit differs by 24%.
 2. **On another platform with its own golden** `goldens/<os>-<arch>/a.png`: compared like the
-   first. `--update-goldens` on that platform writes this file and never the shared one, and
-   `gleon approve` writes it from the CI artifacts of that platform (see below).
+   first. `flutter test --update-goldens` on that platform writes this file and never the shared
+   one (see [Recording per-platform goldens](#recording-per-platform-goldens)).
 3. **On another platform without its own golden yet:** the shared golden, with text ignored by
    default (everything else is compared exactly). Changes that move anything (a longer word,
    another weight, a shifted line) still fail; changes of text alone (a digit, a color) do not.
@@ -150,6 +148,14 @@ match). Then a golden `goldens/a.png` compares in one of three ways:
 Without `fallback_platform` nobody knows where the goldens were recorded, so every platform
 compares them the third way. The test name, rules and failure files use `goldens/a.png` on
 every platform.
+
+### Recording per-platform goldens
+
+Run `flutter test --update-goldens` on the platform whose goldens you want: locally, in Docker
+for Linux (`linux-aarch64` on Apple silicon, `linux-x86_64` with `--platform linux/amd64`), or
+in a CI job you start by hand on each OS that uploads its `goldens/<os>-<arch>/` directories for
+you to commit. On the goldens' own platform it rewrites the shared goldens; on every other one it
+writes only that platform's own.
 
 `textTolerance` (0.0–1.0, or `text_tolerance` of the golden's rule) is the largest share of
 differing pixels allowed in any 16x16 square of text. Unset, it depends on the golden: 0.05 in
@@ -174,10 +180,11 @@ mutation of the package tests fails (a changed digit with 24% of a square, a fra
 text with 23%, the rest with 51% or more); with text ignored only those that move pixels outside
 the text do.
 
-A widget (a `Finder`) is compared as raw pixels: a PNG is encoded only to keep the candidate, for
-a failure or a recorded pass that differs from another platform's golden (see below).
-Text applies to widgets only, with an exact or pixel tolerance (`ArgumentError` with `ssim`; a
-warning when an SSIM rule or a byte input leaves a `textTolerance` unused); `ignoreRegions` beat
+A widget (a `Finder`) or a `ui.Image` is compared as raw pixels: a PNG is encoded only to keep
+the candidate, for a failure or a recorded pass that differs from another platform's golden (see
+[Metrics](#metrics)). Text applies to widgets only, with an exact or pixel tolerance
+(`ArgumentError` with `ssim`; a warning when an SSIM rule, a byte or an image input leaves a
+`textTolerance` unused); `ignoreRegions` beat
 it, for unstable backgrounds under text. Without a `textTolerance`, the `text_tolerance` of the
 golden's `.gleon/gleon.yaml` rule applies, else the golden's default (0.05 or 1, see above).
 Byte and image inputs (`Uint8List`, `ui.Image`) have no text boxes: their text is compared like
@@ -252,15 +259,14 @@ artifacts: .gleon/runs/latest/artifacts
 
 A failing golden covered by a rule also keeps its images in the workspace's artifacts directory,
 `<artifacts>/<test name>/golden.png`, `candidate.png` and `diff.png` (a missing golden keeps its
-candidate only, ready to approve with the gleon CLI), and its case report (see
+candidate only), and its case report (see
 [Metrics](#metrics)), with or without metrics; when the golden passes again, the images are
 removed and so is the report (with metrics, the report of the pass replaces it, and a pass that
-differs from another platform's golden keeps its `candidate.png` for `gleon approve`). The directory
+differs from another platform's golden keeps its `candidate.png`). The directory
 is `.gleon/runs/latest/artifacts` unless
 `artifacts:` or the environment variable `GLEON_ARTIFACTS_DIR` (which beats the file) names
 another directory under `.gleon/runs/` outside `latest/` (any other value fails every golden), so
-the images are always ignored by Git and removed by `gleon clean` (which leaves the goldens
-alone unless asked with `--screenshots`). To keep them on a RAM disk,
+the images are always ignored by Git. To keep them on a RAM disk,
 link `.gleon/runs` there. The `failures/` files next to the test are written as before.
 
 ## Metrics
@@ -298,48 +304,15 @@ cannot be read or written is recorded as an `io` error.
 Use them to set tolerances from measurements instead of guesses, e.g. by collecting the reports
 from CI runs on every OS.
 
-### Reports, history and approvals with the gleon CLI
-
-The [gleon CLI](https://github.com/gleon-rs/gleon) reads these case reports as one run, no
-`gleon diff` needed:
-
-```sh
-gleon test -- flutter test   # one run: sets GLEON_RUN_ID and GLEON_METRICS=1, records run.json
-gleon report markdown        # the PR comment of the run; also html, junit, json
-gleon dashboard              # adds the run to .gleon/history.json and renders dashboard.html
-gleon approve                # writes the candidates of failed goldens to their PNG files
-                             # (and, with fallback_platform, this platform's own goldens)
-```
-
-`gleon test` passes the test command's exit code through; on Windows it finds `flutter.bat`.
-Without it, the CLI picks the run of `GLEON_RUN_ID`, else the run of the newest report; reports
-without a run id are read together, with a warning that they may mix runs, and after a plain
-`flutter test` without metrics only the failures are there (approving works, the totals don't).
-In CI, set `GLEON_RUN_ID` for the job, upload `.gleon/runs/latest` per job and pass the
-downloaded directory to `--from` (`gleon report markdown --from <dir>`, `gleon approve --from
-<dir>`, one `--from` per job).
-With `fallback_platform`, a CI matrix records the goldens of every other OS: run the tests with
-`GLEON_METRICS=1`, upload `.gleon/runs/latest` per OS, then approve the downloaded runs
-together. Every golden compared with the shared one is approvable even when it passes (a pass that
-differs keeps its candidate; one without differences is copied from the shared golden), and each
-case report names its platform's own golden, so the runs never conflict. A plain `gleon approve`
-therefore records this platform's own golden for every such case, not only the failures; name
-goldens to approve fewer:
-
-```sh
-gleon approve --from metrics-linux-x64 --from metrics-linux-arm64 --from metrics-windows-x64
-# writes test/goldens/{linux-x86_64,linux-aarch64,windows-x86_64}/<name>.png
-gleon approve --from metrics-linux-x64 test/goldens/a.png   # one golden, by the printed path
-```
-
-The CLI can also keep goldens out of Git (content-addressed blobs with small JSON manifests).
+The case reports are the result format of the [gleon CLI](https://github.com/gleon-rs/gleon),
+which can turn them into reports of a run.
 
 ## Performance
 
 A widget golden (a `Finder`), from the captured frame to the verdict: Flutter encodes the frame
 as a PNG and compares it with its comparator (a pass short-cuts on equal bytes); gleon passes the
 frame's raw pixels and encodes a PNG only to keep it (a failure, or with metrics a pass that
-differs from another platform's golden). Rendering the frame is the same for both
+differs from another platform's golden); a `ui.Image` goes the same way. Rendering the frame is the same for both
 and not measured. Exact, no `.gleon/` workspace; Apple M3 Max, macOS, Flutter 3.47.6, mean
 latency with [bench_press](https://pub.dev/packages/bench_press):
 
@@ -355,7 +328,7 @@ Encoding the PNG is most of Flutter's cost. The 390x844 and 1170x2532 passes res
 11.4x with 95% confidence intervals within ±1%; gleon's other samples (sub-millisecond, or
 writing files) varied too much for bench_press to resolve a ratio.
 
-One golden comparison of PNG bytes (byte and `ui.Image` inputs), Flutter's own comparator
+One golden comparison of PNG bytes (byte inputs), Flutter's own comparator
 (`LocalFileComparator`, behind `flutter_test`'s `matchesGoldenFile`) against gleon, with the same
 golden file and candidate bytes. Measured inside `flutter test`, where golden tests run, with
 [bench_press](https://pub.dev/packages/bench_press) (mean latency; every ratio has a 95% confidence
@@ -427,7 +400,8 @@ lib/src/flutter/          the Flutter layer: matchesGoldenFile, the widget captu
                           regions, the comparator, loadAppFonts, FlutterSession (this package
                           as an integration)
 hook/build.dart           thin build hook on top of lib/src/core/hook/
-bin/                      maintainer scripts (dart:io + crypto only), run with plain `dart`
+bin/                      maintainer scripts (dart:* + crypto only), run with plain `dart`:
+                          build_native, native_licenses, check_cases (CI)
 ```
 
 The native engine (`gleon-ffi`) does the whole job of a golden: it finds the workspace, resolves
@@ -492,17 +466,37 @@ The native code (`gleon-engine`, `gleon-model`, `gleon-ffi`) lives in the
 Build the library for this machine into `native/<target>/` (the hook prefers it over downloading):
 
 ```sh
-dart bin/build_native.dart                 # host; --target all cross-builds on macOS
+dart bin/build_native.dart                 # host; --target all: every target this host can
 ```
 
-Use plain `dart`, not `dart run`: `dart run` executes the build hook first. Cross builds need
-`cargo-zigbuild` (Linux) and `cargo-xwin` (Windows); CI builds every target natively. A build
+Use plain `dart`, not `dart run`: `dart run` executes the build hook first. `--target all` builds
+all four targets on macOS and all but macOS elsewhere; Linux targets of another OS or
+architecture need `cargo-zigbuild`, Windows from macOS or Linux `cargo-xwin`. CI builds every
+target natively. A library is replaced atomically and stamped only after it. A build
 records the gleon commit it was made from, and the hook uses it only while `native/gleon_ref` pins
 that commit. To try an unmerged engine change on top of the pinned commit, build with
 `--allow-dirty` (and rebuild after every change: the hook cannot tell two dirty builds apart); to
-test another checkout, use the `gleon_repo` user-define.
+test another checkout, use the `gleon_repo` user-define. That build runs inside Flutter's hooks
+runner, which passes on only part of the environment: `RUSTFLAGS` and `RUSTC_WRAPPER` never
+reach it, and `CARGO_*`/`RUSTUP_*` only from Flutter 3.49. Use `CARGO_BUILD_RUSTFLAGS` /
+`CARGO_BUILD_RUSTC_WRAPPER` (Flutter 3.49+), a `.cargo/config.toml` in the checkout, or
+`bin/build_native.dart`, which sees the whole environment.
 
-Releasing: bump `version` in `pubspec.yaml` and `CHANGELOG.md`, update `native/gleon_ref` if the
-engine changed, and push the tag `vX.Y.Z`. The release workflow builds and tests all targets on
+`NATIVE_LICENSES.md` lists every crate linked into the library with its license texts. After
+moving `native/gleon_ref`, regenerate it (CI checks it):
+
+```sh
+dart bin/native_licenses.dart              # --check: fail when it is stale
+```
+
+Releasing: bump `version` in `pubspec.yaml`, `FlutterSession.packageVersion` and `CHANGELOG.md`,
+update `native/gleon_ref` (and `NATIVE_LICENSES.md`) if the engine changed, and push the tag
+`vX.Y.Z`. The release workflow builds and tests all targets on
 their own OS, attaches the libraries and `SHA256SUMS.txt` to an immutable GitHub Release, and then
 verifies the download path on every OS.
+
+## License
+
+This package is MIT licensed (see `LICENSE`). Its native library is built from the gleon crates
+`gleon-engine`, `gleon-model` and `gleon-ffi` (MIT OR Apache-2.0) and the third-party crates
+listed with their license texts in [NATIVE_LICENSES.md](NATIVE_LICENSES.md).
