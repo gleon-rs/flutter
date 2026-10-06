@@ -48,6 +48,26 @@ void main() {
     expect(_regions(tester), isEmpty);
   });
 
+  testWidgets('text sent to infinity has no region', (tester) async {
+    // A perspective with w = 0 everywhere: no transformed line is finite.
+    final degenerate = Matrix4.identity()..setEntry(3, 3, 0);
+    await tester.pumpWidget(
+      _Boundary(
+        Column(
+          children: [
+            Transform(
+              transform: degenerate,
+              child: const Text('far', style: _style),
+            ),
+            const Text('near', style: _style),
+          ],
+        ),
+      ),
+    );
+
+    expect(_regions(tester), hasLength(1));
+  });
+
   testWidgets('editable text has a region', (tester) async {
     final controller = TextEditingController(text: 'ab');
     final focusNode = FocusNode();

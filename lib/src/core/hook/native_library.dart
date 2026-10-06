@@ -30,7 +30,12 @@ import 'user_defines.dart';
 ///       release_url: https://mirror/v1.2.3/  # download from a mirror
 /// ```
 ///
-/// Source builds are never a silent fallback: failures are actionable errors.
+/// The first that applies wins: `release_url` only says where step 4
+/// downloads from, so a library in `native/<target>/` (a local build, the
+/// pub.dev archive) is used before it. Source builds are never a silent
+/// fallback: failures are actionable errors, and a path user-define set to
+/// anything but a path is one too.
+///
 /// Plain Dart (no Flutter imports): used by the build hook and tested
 /// directly.
 final class NativeLibrary {
@@ -64,7 +69,7 @@ final class NativeLibrary {
   Future<({List<Uri> dependencies, Uri library})> resolve({
     ProcessRunner runProcess = Process.run,
   }) async {
-    if (userDefines.path('ffi_path') case final override?) {
+    if (_path('ffi_path') case final override?) {
       if (!File.fromUri(override).existsSync()) {
         throw StateError(
           'gleon: user-define `ffi_path` points to a missing file: '
@@ -74,7 +79,7 @@ final class NativeLibrary {
 
       return (dependencies: [override], library: override);
     }
-    if (userDefines.path('gleon_repo') case final gleonRepo?) {
+    if (_path('gleon_repo') case final gleonRepo?) {
       return await SourceBuild.run(
         repoRoot: gleonRepo,
         targetDir: sharedOutputDir.resolve('cargo/'),
@@ -87,17 +92,35 @@ final class NativeLibrary {
     return await _prebuilt();
   }
 
+  /// The path the user-define [key] holds, or null when it is not set.
+  ///
+  /// Throws a [StateError] for a value that is set but not a path (a
+  /// number, a list), which would otherwise fall through silently.
+  Uri? _path(String key) {
+    final path = userDefines.path(key);
+    final value = userDefines[key];
+    if (path == null && value != null) {
+      throw StateError('gleon: user-define `$key` must be a path, got $value');
+    }
+
+    return path;
+  }
+
   Future<({List<Uri> dependencies, Uri library})> _prebuilt() async {
-    // A new local build must re-run the hook, so depend on the directory.
+    const pinFile = NativeTarget.pinFileName;
     final nativeDir = packageRoot.resolve('native/');
-    final bundled = File.fromUri(
-      nativeDir.resolve('${target.key}/${target.libFileName}'),
-    );
+    final targetDir = nativeDir.resolve('${target.key}/');
+    final bundled = File.fromUri(targetDir.resolve(target.libFileName));
+    final pin = File.fromUri(nativeDir.resolve(pinFile));
+    final stamp = File.fromUri(targetDir.resolve(pinFile));
+    // Present or not: the hooks runner hashes a directory by its direct
+    // children only and re-runs the hook when a missing file appears, so a
+    // later local build (or a moved pin) is seen in either branch.
+    final inputs = [nativeDir, bundled.uri, pin.uri, stamp.uri];
     if (bundled.existsSync()) {
-      return (
-        dependencies: [nativeDir, bundled.uri, ..._rejectStaleBuild(nativeDir)],
-        library: bundled.uri,
-      );
+      _rejectStaleBuild(pin: pin, stamp: stamp, targetDir: targetDir);
+
+      return (dependencies: inputs, library: bundled.uri);
     }
     final pubspec = packageRoot.resolve('pubspec.yaml');
     final version =
@@ -106,7 +129,7 @@ final class NativeLibrary {
         ) ??
         (throw StateError('gleon: no `version` in ${pubspec.toFilePath()}'));
     final releaseUrl = switch (userDefines['release_url']) {
-      final String url => Uri.parse(url.endsWith('/') ? url : '$url/'),
+      final String url => _releaseUrl(url),
       null => ReleaseDownload.defaultUrl(version),
       final other => throw StateError(
         'gleon: user-define `release_url` must be a string, got $other',
@@ -121,7 +144,7 @@ final class NativeLibrary {
       );
 
       return (
-        dependencies: [nativeDir, pubspec, library.uri],
+        dependencies: [...inputs, pubspec, library.uri],
         library: library.uri,
       );
     } on NativeDownloadException catch (error, stackTrace) {
@@ -130,16 +153,32 @@ final class NativeLibrary {
     }
   }
 
-  /// A local build records the gleon commit it was made from (see
-  /// `bin/build_native.dart`); a build of another commit, or of an old pin
-  /// after the pin moved, would silently test another engine. The pub.dev
-  /// archive ships no pin, so no check. Returns the files checked.
-  List<Uri> _rejectStaleBuild(Uri nativeDir) {
-    const pinFile = NativeTarget.pinFileName;
-    final pin = File.fromUri(nativeDir.resolve(pinFile));
-    if (!pin.existsSync()) return const [];
-    final targetDir = nativeDir.resolve('${target.key}/');
-    final stamp = File.fromUri(targetDir.resolve(pinFile));
+  /// The `release_url` [url] as the directory its files are resolved in.
+  ///
+  /// Throws a [StateError] for a query or fragment: resolving the checksum
+  /// list and the assets against the URL would drop them.
+  static Uri _releaseUrl(String url) {
+    final uri = Uri.parse(url);
+    if (uri.hasQuery || uri.hasFragment) {
+      throw StateError(
+        'gleon: user-define `release_url` must not have a query or fragment '
+        '(the files are resolved against it), got $url',
+      );
+    }
+
+    return uri.path.endsWith('/') ? uri : uri.replace(path: '${uri.path}/');
+  }
+
+  /// A local build records the gleon commit it was made from in its
+  /// [stamp] (see `bin/build_native.dart`); a build of another commit, or of
+  /// an old [pin] after the pin moved, would silently test another engine.
+  /// The pub.dev archive ships no pin, so no check.
+  static void _rejectStaleBuild({
+    required File pin,
+    required File stamp,
+    required Uri targetDir,
+  }) {
+    if (!pin.existsSync()) return;
     final pinned = pin.readAsStringSync().trim();
     final builtFrom = stamp.existsSync()
         ? stamp.readAsStringSync().trim()
@@ -147,13 +186,12 @@ final class NativeLibrary {
     if (!NativeTarget.isBuildOfPin(builtFrom, pinned)) {
       throw StateError(
         'gleon: ${Directory.fromUri(targetDir).path} was built from gleon '
-        '${builtFrom ?? '(unknown)'}, but native/$pinFile pins $pinned. '
-        'Rebuild it from the pinned commit with `dart bin/build_native.dart`, '
-        'build from any checkout with the `gleon_repo` user-define, or delete '
-        'that directory to download the released library.',
+        '${builtFrom ?? '(unknown)'}, but native/${NativeTarget.pinFileName} '
+        'pins $pinned. Rebuild it from the pinned commit with '
+        '`dart bin/build_native.dart`, build from any checkout with the '
+        '`gleon_repo` user-define, or delete that directory to download the '
+        'released library.',
       );
     }
-
-    return [pin.uri, stamp.uri];
   }
 }

@@ -29,7 +29,8 @@ class GleonGoldenComparator extends GoldenFileComparator {
     GleonSession? session,
   }) : session = session ?? FlutterSession.process;
 
-  /// The comparator that was installed before (owns paths).
+  /// The comparator `goldenFileComparator` held when the match started
+  /// (owns paths).
   final GoldenFileComparator delegate;
 
   /// The tolerance of the matcher call; null uses the golden's rule, else
@@ -88,8 +89,12 @@ class GleonGoldenComparator extends GoldenFileComparator {
     final LocalFileComparator local => local,
     final other => throw TestFailure(
       'gleon: matchesGoldenFile needs the default LocalFileComparator, but '
-      'goldenFileComparator is ${other.runtimeType}. Custom comparators '
-      'are not supported yet.',
+      'goldenFileComparator is ${other.runtimeType}; custom comparators are '
+      'not supported. Either remove the custom goldenFileComparator (e.g. '
+      'from test/flutter_test_config.dart), or compare these goldens with '
+      "flutter_test's own matcher: "
+      "import 'package:flutter_test/flutter_test.dart' as ft; "
+      'and call ft.matchesGoldenFile(...).',
     ),
   };
 

@@ -65,7 +65,15 @@ void main() {
           isA<TestFailure>().having(
             (failure) => failure.message,
             'message',
-            contains('Custom comparators are not supported yet.'),
+            allOf(
+              contains('needs the default LocalFileComparator'),
+              contains('_RecordingComparator'),
+              // The ways out: no custom comparator, or Flutter's matcher.
+              contains('remove the custom goldenFileComparator'),
+              contains('flutter_test_config.dart'),
+              contains("import 'package:flutter_test/flutter_test.dart' as ft"),
+              contains('ft.matchesGoldenFile'),
+            ),
           ),
         ),
       );

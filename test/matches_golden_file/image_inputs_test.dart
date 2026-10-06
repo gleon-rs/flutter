@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:gleon/gleon.dart';
@@ -37,6 +38,63 @@ void main() {
     );
 
     expect(await matchesGoldenFile(Swatch.golden).matchAsync(capture), isNull);
+    // Like a ui.Image, the captured image stays its owner's to dispose.
+    final owned = await capture;
+    expect(owned.debugDisposed, isFalse);
+    owned.dispose();
+  });
+
+  testWidgets('an image may differ within the tolerance', (tester) async {
+    final image = await swatch(tester, dot: Swatch.dotOffset);
+    final matcher = matchesGoldenFile(
+      Swatch.golden,
+      tolerance: const .pixel(maxDiffRatio: 0.001),
+    );
+
+    expect(await matcher.matchAsync(image), isNull);
+  });
+
+  testWidgets('an image may differ in its ignore regions', (tester) async {
+    final image = await swatch(tester, dot: Swatch.dotOffset);
+    final matcher = matchesGoldenFile(
+      Swatch.golden,
+      ignoreRegions: [Swatch.dotOffset & const ui.Size.square(1)],
+    );
+
+    expect(await matcher.matchAsync(image), isNull);
+  });
+
+  testWidgets('a version names the golden of an image', (tester) async {
+    final image = await swatch(tester);
+    final matcher = matchesGoldenFile('goldens/versioned.png', version: 2);
+
+    expect(await withGoldenUpdates(() => matcher.matchAsync(image)), isNull);
+    expect(await matcher.matchAsync(image), isNull);
+    final sandbox = '${GoldenSandbox.dir.path}/goldens';
+    expect(File('$sandbox/versioned.2.png').existsSync(), isTrue);
+    expect(File('$sandbox/versioned.png').existsSync(), isFalse);
+  });
+
+  testWidgets('a custom comparator fails images, never throws', (tester) async {
+    final image = await swatch(tester);
+    // ignore: avoid-unnecessary-local-variable, captures the value to restore.
+    final original = goldenFileComparator;
+    addTearDown(() => goldenFileComparator = original);
+    final custom = _CustomComparator();
+    goldenFileComparator = custom;
+    final matcher = matchesGoldenFile(Swatch.golden);
+
+    for (final input in <Object>[image, Future.value(image)]) {
+      expect(
+        await matcher.matchAsync(input),
+        contains('needs the default LocalFileComparator'),
+      );
+      expect(
+        await withGoldenUpdates(() => matcher.matchAsync(input)),
+        contains('needs the default LocalFileComparator'),
+      );
+    }
+    expect(custom.calls, isEmpty);
   });
 
   testWidgets('a changed pixel fails with the failure images', (tester) async {
@@ -74,4 +132,21 @@ void main() {
       contains(contains('the text tolerance of golden "goldens/swatch.png"')),
     );
   });
+}
+
+/// A comparator other than Flutter's [LocalFileComparator] that records
+/// every call; a match must never reach it.
+final class _CustomComparator extends GoldenFileComparator {
+  final calls = <String>[];
+
+  @override
+  Future<bool> compare(Uint8List imageBytes, Uri golden) async {
+    calls.add('compare $golden');
+
+    return true;
+  }
+
+  @override
+  Future<void> update(Uri golden, Uint8List imageBytes) async =>
+      calls.add('update $golden');
 }

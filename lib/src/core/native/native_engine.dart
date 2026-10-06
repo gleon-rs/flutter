@@ -178,11 +178,13 @@ abstract final class NativeEngine {
     } on ArgumentError catch (error, stackTrace) {
       Error.throwWithStackTrace(
         StateError(
-          'gleon: the native library was not loaded ($error). It is provided '
-          'by the build hook of the gleon package for `flutter test` on macOS '
-          'arm64, Linux and Windows x64 (not web or devices); run the tests '
-          'with `flutter test` and see the package README for the `ffi_path` '
-          'and `gleon_repo` user-defines.',
+          'gleon: the native library was not loaded ($error). The build '
+          'hook of the gleon package provides it for host `flutter test` on '
+          'macOS arm64, Linux x64/arm64 and Windows x64 only: app builds for '
+          'devices (Android, iOS) and other targets get none, and web cannot '
+          'load it. Run golden tests with `flutter test` on such a host, and '
+          'see the package README for the `ffi_path` and `gleon_repo` '
+          'user-defines.',
         ),
         stackTrace,
       );

@@ -38,6 +38,7 @@ void main() {
           'message',
           allOf(
             contains('native library was not loaded'),
+            contains('app builds for devices'),
             contains('ffi_path'),
           ),
         ),

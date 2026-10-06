@@ -189,16 +189,13 @@ enum NativeTarget {
   /// All target keys, comma-separated (for messages).
   static String get keys => values.map((target) => target.key).join(', ');
 
-  /// The target the hooks runner asks for: [os] and [arch] are the names of
-  /// `code_assets`' `OS` and `Architecture`.
+  /// The target the hooks runner asks for, or null when it has no library:
+  /// [os] and [arch] are the names of `code_assets`' `OS` and `Architecture`.
   ///
-  /// Throws an [UnsupportedError] for a target without a library.
-  static NativeTarget requested(String os, String arch) =>
-      byKey('$os-$arch') ??
-      (throw UnsupportedError(
-        'gleon: no native library for $os/$arch. Supported hosts for '
-        '`flutter test`: $keys. Web and on-device tests are not supported.',
-      ));
+  /// Flutter runs the build hooks of dev_dependencies for every non-release
+  /// build, so an app built for a device (Android, iOS) asks too: it gets no
+  /// library instead of a failing build.
+  static NativeTarget? requested(String os, String arch) => byKey('$os-$arch');
 
   /// Looks up a target by [key] (`<os>-<arch>`), or returns null.
   static NativeTarget? byKey(String key) =>

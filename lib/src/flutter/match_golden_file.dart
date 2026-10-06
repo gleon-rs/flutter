@@ -3,6 +3,7 @@ import 'dart:ui' show Rect;
 import 'package:flutter_test/flutter_test.dart' as flutter_test;
 
 import '../core/compare/golden_tolerance.dart';
+import '../core/compare/tolerances.dart';
 import 'gleon_matches_golden_file.dart';
 import 'ignore_regions.dart';
 
@@ -65,8 +66,8 @@ flutter_test.MatchesGoldenFile matchesGoldenFile(
       'Unexpected type for golden file: ${key.runtimeType}',
     ),
   };
-  tolerance?.validate();
-  if (textTolerance != null) GoldenTolerance.validateText(textTolerance);
+  if (tolerance != null) Tolerances.validate(tolerance);
+  if (textTolerance != null) Tolerances.validateText(textTolerance);
   if (textTolerance != null && tolerance is SsimTolerance) {
     throw ArgumentError.value(
       textTolerance,

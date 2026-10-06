@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart' as flutter_test;
 
 import '../core/compare/golden_tolerance.dart';
 import '../core/compare/pixel_region.dart';
+import '../core/compare/tolerances.dart';
 import '../core/config/gleon_session.dart';
 import 'flutter_session.dart';
 import 'gleon_golden_comparator.dart';
@@ -83,7 +84,7 @@ class GleonMatchesGoldenFile extends flutter_test.MatchesGoldenFile {
   @override
   flutter_test.Description describe(flutter_test.Description description) {
     final text = switch (textTolerance) {
-      final share? => ', ${GoldenTolerance.describeText(share)}',
+      final share? => ', ${Tolerances.describeText(share)}',
       null => _noText,
     };
 
@@ -107,10 +108,11 @@ class GleonMatchesGoldenFile extends flutter_test.MatchesGoldenFile {
       };
 
   /// Compares PNG [bytes] with [golden], or writes them; a failure is the
-  /// message in both modes.
+  /// message in both modes. A [Uint8List] is passed as is: the native call
+  /// reads it in place, synchronously, before anything else can change it.
   static Future<String?> _matchBytes(List<int> bytes, _Golden golden) async {
     final (:comparator, :isUpdate, :uri) = golden;
-    final png = Uint8List.fromList(bytes);
+    final png = bytes is Uint8List ? bytes : Uint8List.fromList(bytes);
     try {
       if (isUpdate) {
         await comparator.update(uri, png);
@@ -193,7 +195,8 @@ class GleonMatchesGoldenFile extends flutter_test.MatchesGoldenFile {
   /// Writes [image] as [golden].
   static Future<String?> _update(ui.Image image, _Golden golden) async {
     final png = await image.toByteData(format: .png);
-    if (png == null) return 'could not encode the screenshot.';
+    // Flutter's own message.
+    if (png == null) return 'could not encode screenshot.';
     await golden.comparator.update(golden.uri, Uint8List.sublistView(png));
 
     return null;

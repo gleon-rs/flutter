@@ -1,17 +1,25 @@
 /// Writes `NATIVE_LICENSES.md`: the licenses of everything statically linked
-/// into the `gleon-ffi` library this package ships, for every target.
+/// into the `gleon-ffi` library this package ships, for every target, at the
+/// gleon commit `native/gleon_ref` pins.
 ///
 /// ```sh
-/// dart bin/native_licenses.dart [--gleon-repo <dir>] [--check]
+/// dart bin/native_licenses.dart [--gleon-repo <dir>] [--commit <sha>] [--check]
 /// ```
 ///
 /// The crates come from `cargo tree` of `gleon-ffi` per target (normal
 /// dependencies, no proc-macros or build scripts: only what ends up in the
 /// library), their licenses from `cargo metadata` and the license files in
-/// each crate. A crate without license files must offer a license that needs
-/// no notice (Zlib, Unlicense, 0BSD, CC0-1.0, BSL-1.0 or MIT-0). The Rust
-/// standard library is listed too. `--check` fails when the file is stale
-/// (CI); run without it after moving `native/gleon_ref`.
+/// each crate (see `LicenseCrate` in `lib/src/core/tooling/`). A crate
+/// without license files must offer a license that needs no notice (Zlib,
+/// Unlicense, 0BSD, CC0-1.0, BSL-1.0 or MIT-0). The Rust standard library is
+/// listed too. `--check` fails when the file is stale (CI); run without it
+/// after moving `native/gleon_ref`.
+///
+/// The file names the pinned commit it was generated for, and the gleon repo
+/// must be at that commit: its `git rev-parse HEAD`, or for a tree without
+/// git (`git archive <pin> | tar -x -C <dir>`, which leaves the sibling
+/// checkout alone) the `--commit` the tree was exported from. So `--check`
+/// fails after a pin move until the file is regenerated.
 ///
 /// Run it with plain `dart` (see `build_native.dart`); needs cargo and the
 /// gleon repo's toolchain. Only `dart:*` and this package may be imported
@@ -20,339 +28,181 @@ library;
 
 import 'dart:convert';
 import 'dart:io';
-import 'dart:isolate';
-import 'dart:math' show max;
 
 import 'package:gleon/src/core/hook/native_target.dart';
 
-const _usage = r'''
+import 'src/cli.dart';
+import 'src/license_crate.dart';
+import 'src/native_build.dart';
+import 'src/native_licenses.dart';
+
+const _cli = Cli('native_licenses', r'''
 Usage: dart bin/native_licenses.dart [options]
 
   --gleon-repo <dir>  gleon checkout (default: $GLEON_REPO, else ../gleon).
+  --commit <sha>      the commit a gleon tree without git was exported from
+                      (e.g. by `git archive`); a git checkout's own HEAD is
+                      used otherwise.
   --check             fail if NATIVE_LICENSES.md is not up to date.
   -h, --help          show this help.
-''';
+''');
 
 const _outputName = 'NATIVE_LICENSES.md';
 
 Future<void> main(List<String> args) async {
-  final options = _Options.parse(args);
-  final packageRoot = await _packageRoot();
-  final repo = Directory(
-    options.repo ??
+  final (:commit, :isCheck, :repo) = _parse(args);
+  final packageRoot = await _cli.packageRoot();
+  final gleon = Directory(
+    repo ??
         Platform.environment['GLEON_REPO'] ??
         packageRoot.resolve('../gleon').toFilePath(),
   ).absolute;
-  final crates = await _Crate.linked(repo);
-  final missing = [
-    for (final crate in crates)
-      if (crate.texts.isEmpty && crate.noticeFree == null) crate.label,
-  ];
-  if (missing.isNotEmpty) {
-    _fail(
+  final pin = await File.fromUri(
+    packageRoot.resolve('native/${NativeTarget.pinFileName}'),
+  ).readAsString();
+  final gleonCommit = await _commitOf(gleon, given: commit);
+  if (gleonCommit != pin.trim()) {
+    _cli.fail(
+      '${gleon.path} is at $gleonCommit, but native/'
+      '${NativeTarget.pinFileName} pins ${pin.trim()}: check out the pinned '
+      'commit, or pass --gleon-repo with a tree of it.',
+    );
+  }
+  final licenses = NativeLicenses(
+    await _linked(gleon),
+    gleonCommit: gleonCommit,
+  );
+  if (licenses.unlicensed case final missing when missing.isNotEmpty) {
+    _cli.fail(
       'no license files, and no license that needs no notice, in: '
       '${missing.join(', ')}. Add their texts by hand to this script.',
     );
   }
-  final content = _NativeLicenses(crates).markdown;
+  final content = licenses.markdown;
   final output = File.fromUri(packageRoot.resolve(_outputName));
-  if (!options.isCheck) {
+  if (!isCheck) {
     await output.writeAsString(content);
-    stdout.writeln('${output.path}: ${crates.length} crates.');
+    stdout.writeln('${output.path}: gleon $gleonCommit.');
 
     return;
   }
   final current = output.existsSync() ? await output.readAsString() : null;
   if (current != content) {
-    _fail(
-      '$_outputName is not up to date with the crates of gleon-ffi: run '
-      '`dart bin/native_licenses.dart` and commit the result.',
+    _cli.fail(
+      '$_outputName is not up to date with the crates of gleon-ffi at '
+      '$gleonCommit: run `dart bin/native_licenses.dart` and commit the '
+      'result.',
     );
   }
-  stdout.writeln('$_outputName is up to date (${crates.length} crates).');
+  stdout.writeln('$_outputName is up to date (gleon $gleonCommit).');
 }
 
-/// The Markdown of the licenses of the linked crates and the Rust standard
-/// library.
-final class _NativeLicenses {
-  _NativeLicenses(List<_Crate> crates) : _crates = [...crates, _std];
+({String? commit, bool isCheck, String? repo}) _parse(List<String> args) {
+  String? commit;
+  String? repo;
+  bool isCheck = false;
+  final rest = args.iterator;
+  while (rest.moveNext()) {
+    switch (rest.current) {
+      case '--gleon-repo':
+        repo = _cli.value(rest);
 
-  /// The standard library is linked into every Rust binary.
-  static const _std = _Crate(
-    license: 'MIT OR Apache-2.0',
-    name: 'Rust standard library',
-    repository: 'https://github.com/rust-lang/rust',
-    texts: [_rustStd],
-    version: '(toolchain)',
-  );
+      case '--commit':
+        commit = _cli.value(rest);
 
-  final List<_Crate> _crates;
+      case '--check':
+        isCheck = true;
 
-  /// A table of the crates, then each distinct license text once, with the
-  /// crates it belongs to.
-  String get markdown {
-    final out = StringBuffer()
-      ..writeln('# Licenses of the native library')
-      ..writeln()
-      ..writeln(
-        'The `gleon-ffi` library of this package is built from the gleon '
-        'crates `gleon-engine`, `gleon-model` and `gleon-ffi` (MIT OR '
-        'Apache-2.0) and links the crates below and the Rust standard '
-        'library statically. Generated by `dart bin/native_licenses.dart`; '
-        'do not edit.',
-      )
-      ..writeln()
-      ..writeln('| Crate | Version | License | Source |')
-      ..writeln('| --- | --- | --- | --- |')
-      ..writeAll(_crates.map(_row))
-      ..writeln()
-      ..writeln('## License texts');
-    for (final MapEntry(key: text, value: labels) in _byText().entries) {
-      final fence = '`' * _fenceLength(text);
-      out
-        ..writeln()
-        ..writeln('### ${labels.join(', ')}')
-        ..writeln()
-        ..writeln('${fence}text')
-        ..writeln(text)
-        ..writeln(fence);
+      case '-h' || '--help':
+        _cli.help();
+
+      case final other:
+        _cli.failUsage('unknown argument $other.');
     }
-
-    return out.toString();
   }
 
-  /// The table row of [crate].
-  static String _row(_Crate crate) {
-    final _Crate(:license, :name, :noticeFree, :repository, :texts, :version) =
-        crate;
-    final shown = texts.isEmpty
-        ? '$license (${noticeFree ?? license}, which needs no notice)'
-        : license;
-
-    return '| $name | $version | $shown | ${repository ?? '-'} |\n';
-  }
-
-  /// The crates of each distinct license text, in order.
-  Map<String, List<String>> _byText() {
-    final byText = <String, List<String>>{};
-    for (final crate in _crates) {
-      for (final text in crate.texts) {
-        byText[text] = [...?byText[text], crate.label];
-      }
-    }
-
-    return byText;
-  }
-
-  /// A fence longer than any run of backticks in [text].
-  static int _fenceLength(String text) =>
-      RegExp('`+')
-          .allMatches(text)
-          .map((run) => run[0]?.length ?? 0)
-          .fold(3, (longest, length) => max(longest, length + 1));
+  return (commit: commit, isCheck: isCheck, repo: repo);
 }
 
-/// The command line.
-final class _Options {
-  const _Options({required this.isCheck, required this.repo});
-
-  factory _Options.parse(List<String> args) {
-    String? repo;
-    bool isCheck = false;
-    final rest = args.iterator;
-    while (rest.moveNext()) {
-      switch (rest.current) {
-        case '--gleon-repo':
-          repo = _value(rest);
-
-        case '--check':
-          isCheck = true;
-
-        case '-h' || '--help':
-          stdout.write(_usage);
-          exit(0);
-
-        case final other:
-          _fail('unknown argument $other.\n\n$_usage');
-      }
+/// The commit of the gleon tree [repo]: its git HEAD when [repo] is the top
+/// of a git checkout, else the [given] `--commit`. A checkout with
+/// uncommitted changes to the inputs of the library (`Cargo.lock`, the
+/// manifests and sources of its crates) is refused: its crates are not the
+/// commit's.
+Future<String> _commitOf(Directory repo, {required String? given}) async {
+  final head = await _gitHead(repo);
+  if (head != null && given != null && head != given) {
+    _cli.fail('${repo.path} is at $head, not --commit $given.');
+  }
+  if (head != null) {
+    final state = await NativeBuild.checkoutState(repo.uri);
+    if (state?.isDirty ?? false) {
+      _cli.fail(
+        '${repo.path} has uncommitted changes to the inputs of the library: '
+        'its crates are not those of $head. Commit or stash them.',
+      );
     }
-
-    return _Options(isCheck: isCheck, repo: repo);
   }
 
-  /// Whether to compare instead of writing.
-  final bool isCheck;
-
-  /// The gleon checkout, if given.
-  final String? repo;
+  return head ??
+      given ??
+      _cli.fail(
+        'cannot read the commit of ${repo.path} with git; for a tree '
+        'exported without git, pass the commit it came from as --commit.',
+      );
 }
 
-/// A crate linked into the library, with its license texts.
-final class _Crate {
-  const _Crate({
-    required this.license,
-    required this.name,
-    required this.repository,
-    required this.texts,
-    required this.version,
-  });
-
-  /// The SPDX expression.
-  final String license;
-
-  /// The crate name.
-  final String name;
-
-  /// Where its source lives, if known.
-  final String? repository;
-
-  /// Its license files, verbatim (line ends normalized).
-  final List<String> texts;
-
-  /// The crate version.
-  final String version;
-
-  /// The licenses that need no notice in a binary.
-  static const _noticeFree = {
-    '0BSD',
-    'BSL-1.0',
-    'CC0-1.0',
-    'MIT-0',
-    'Unlicense',
-    'Zlib',
-  };
-
-  /// License files in a crate's root.
-  static final _licenseFile = RegExp(
-    '^(licen[cs]e|copying|notice|unlicense)',
-    caseSensitive: false,
-  );
-
-  /// `name version`.
-  String get label => '$name $version';
-
-  /// The license of the expression that needs no notice, if any.
-  String? get noticeFree => license
-      .split(RegExp(r'\s+OR\s+|/'))
-      .map((option) => option.trim())
-      .where(_noticeFree.contains)
-      .firstOrNull;
-
-  /// The crates linked into `gleon-ffi` for any target, sorted.
-  static Future<List<_Crate>> linked(Directory repo) async {
-    final ids = <String>{
-      for (final target in NativeTarget.values)
-        ...await _tree(repo, target.rustTriple),
-    };
-    final metadata = json.decode(
-      await _cargo(repo, ['metadata', '--format-version', '1', '--locked']),
-    );
-    final packages = switch (metadata) {
-      {'packages': final List<Object?> list} => list,
-      _ => _fail('cargo metadata printed no packages.'),
-    };
-    final linked = [
-      for (final package in packages)
-        if (_Crate.of(package) case final found? when ids.contains(found.label))
-          found,
-    ]..sort((a, b) => a.label.compareTo(b.label));
-    if (linked.length != ids.length) {
-      final labels = {for (final crate in linked) crate.label};
-      _fail('cargo metadata lacks ${ids.difference(labels).join(', ')}.');
-    }
-
-    return linked;
+/// HEAD of the git checkout whose top directory is [repo], or null (no git,
+/// no checkout, or [repo] inside another repository).
+Future<String?> _gitHead(Directory repo) async {
+  final ProcessResult result;
+  try {
+    const revParse = ['rev-parse', '--show-toplevel', 'HEAD'];
+    result = await Process.run('git', revParse, workingDirectory: repo.path);
+  } on ProcessException {
+    return null;
+  }
+  if (result.exitCode != 0) return null;
+  final lines = const LineSplitter().convert(result.stdout.toString());
+  if (lines case [final top, final head]
+      when Directory(top).resolveSymbolicLinksSync() ==
+          repo.resolveSymbolicLinksSync()) {
+    return head;
   }
 
-  /// `name version` of every crate `cargo tree` links for [triple].
-  static Future<Set<String>> _tree(Directory repo, String triple) async {
-    final output = await _cargo(repo, [
-      'tree',
-      '--locked',
-      '-p',
-      'gleon-ffi',
-      '-e',
-      'normal,no-proc-macro',
-      '--target',
-      triple,
-      '--prefix',
-      'none',
-      '--format',
-      '{p}',
-    ]);
-    final crate = RegExp(r'^(\S+) v(\S+)', multiLine: true);
+  return null;
+}
 
-    return {
-      for (final RegExpMatch(:group) in crate.allMatches(output))
-        if ((group(1), group(2)) case (final name?, final version?))
-          '$name $version',
-    };
-  }
-
-  /// The crate a `cargo metadata` [package] describes, or null.
-  static _Crate? of(Object? package) => switch (package) {
-    {
-      'license': final String license,
-      'manifest_path': final String manifest,
-      'name': final String name,
-      'version': final String version,
-    } =>
-      .new(
-        license: license.trim(),
-        name: name,
-        repository: package['repository']?.toString(),
-        texts: _texts(File(manifest).parent, package['license_file']),
-        version: version,
+/// The crates linked into `gleon-ffi` for any target, sorted.
+Future<List<LicenseCrate>> _linked(Directory repo) async {
+  final labels = <String>{
+    for (final target in NativeTarget.values)
+      ...LicenseCrate.treeLabels(
+        await _cargo(repo, [
+          'tree',
+          '--locked',
+          '-p',
+          'gleon-ffi',
+          '-e',
+          'normal,no-proc-macro',
+          '--target',
+          target.rustTriple,
+          '--prefix',
+          'none',
+          '--format',
+          '{p}',
+        ]),
       ),
-    _ => null,
   };
-
-  /// The license files of the crate in [root], and its [licenseFile].
-  static List<String> _texts(Directory root, Object? licenseFile) {
-    final files = <String>{
-      for (final file in root.listSync().whereType<File>())
-        if (_licenseFile.hasMatch(file.uri.pathSegments.lastOrNull ?? _none))
-          file.path,
-      if (licenseFile case final String relative)
-        File('${root.path}/$relative').path,
-    }.toList()..sort();
-
-    return [
-      for (final path in files)
-        File(path).readAsStringSync().replaceAll('\r\n', '\n').trimRight(),
-    ];
+  final metadata = json.decode(
+    await _cargo(repo, ['metadata', '--format-version', '1', '--locked']),
+  );
+  try {
+    return LicenseCrate.linked(metadata, labels);
+  } on FormatException catch (error) {
+    _cli.fail(error.message);
   }
 }
-
-const _none = '';
-
-/// The MIT license of the Rust standard library.
-const _rustStd = '''
-Copyright (c) The Rust Project Contributors
-
-Permission is hereby granted, free of charge, to any
-person obtaining a copy of this software and associated
-documentation files (the "Software"), to deal in the
-Software without restriction, including without
-limitation the rights to use, copy, modify, merge,
-publish, distribute, sublicense, and/or sell copies of
-the Software, and to permit persons to whom the Software
-is furnished to do so, subject to the following
-conditions:
-
-The above copyright notice and this permission notice
-shall be included in all copies or substantial portions
-of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
-ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
-TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
-PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
-SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
-IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-DEALINGS IN THE SOFTWARE.''';
 
 /// Runs cargo in [repo] (its pinned toolchain) and returns its output.
 Future<String> _cargo(Directory repo, List<String> args) async {
@@ -360,33 +210,11 @@ Future<String> _cargo(Directory repo, List<String> args) async {
   try {
     result = await Process.run('cargo', args, workingDirectory: repo.path);
   } on ProcessException {
-    _fail('`cargo` was not found on PATH.');
+    _cli.fail('`cargo` was not found on PATH.');
   }
   if (result.exitCode != 0) {
-    _fail('`cargo ${args.join(' ')}` failed:\n${result.stderr}');
+    _cli.fail('`cargo ${args.join(' ')}` failed:\n${result.stderr}');
   }
 
   return result.stdout.toString();
-}
-
-Future<Uri> _packageRoot() async {
-  final lib = await Isolate.resolvePackageUri(.parse('package:gleon/'));
-  if (lib == null) _fail('run this from the gleon package directory.');
-
-  return lib.resolve('../');
-}
-
-/// The value following the flag that [rest] is at.
-String _value(Iterator<String> rest) {
-  final flag = rest.current;
-
-  return rest.moveNext()
-      // ignore: use-existing-variable, `moveNext` advanced to the value.
-      ? rest.current
-      : _fail('$flag needs a value.\n\n$_usage');
-}
-
-Never _fail(String message) {
-  stderr.writeln('native_licenses: $message');
-  exit(64);
 }

@@ -67,18 +67,19 @@ void main() {
     );
   });
 
-  test('the hook names the targets it has no library for', () {
+  test('the hook asks for a library of supported targets only', () {
     expect(NativeTarget.requested('linux', 'arm64'), NativeTarget.linuxArm64);
-    expect(
-      () => NativeTarget.requested('android', 'arm64'),
-      throwsA(
-        isA<UnsupportedError>().having(
-          (error) => error.message,
-          'message',
-          allOf(contains('android/arm64'), contains(NativeTarget.keys)),
-        ),
-      ),
-    );
+    expect(NativeTarget.requested('macos', 'arm64'), NativeTarget.macosArm64);
+    // Flutter runs the hooks of dev_dependencies for app builds too: those
+    // get no library instead of a failing build.
+    for (final (os, arch) in [
+      ('android', 'arm64'),
+      ('ios', 'arm64'),
+      ('linux', 'riscv64'),
+      ('macos', 'x64'),
+    ]) {
+      expect(NativeTarget.requested(os, arch), isNull, reason: '$os-$arch');
+    }
   });
 
   group('build_native targets', () {

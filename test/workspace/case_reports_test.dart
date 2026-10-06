@@ -437,7 +437,9 @@ void main() {
   test(
     'the committed schema rejects an off-contract case',
     _expectSchemaRejectsOffContractCases,
-    skip: caseSchema == null ? 'needs a gleon checkout at ../gleon' : null,
+    skip: caseSchema == null
+        ? 'needs a gleon checkout at ../gleon with the pinned commit $gleonPin'
+        : null,
   );
 }
 

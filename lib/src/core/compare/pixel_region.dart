@@ -15,13 +15,20 @@ final class PixelRegion {
   });
 
   /// The whole pixels covering the rectangle from ([left], [top]) to
-  /// ([right], [bottom]), which must be finite: its edges rounded outwards.
+  /// ([right], [bottom]): its edges rounded outwards.
+  ///
+  /// The edges must be finite and non-negative (asserted): callers validate
+  /// them (`ignoreRegions`) or clip them to the image (text regions).
   factory PixelRegion.outwards({
     required double left,
     required double top,
     required double right,
     required double bottom,
   }) {
+    assert(
+      [left, top, right, bottom].every((edge) => edge.isFinite && edge >= 0),
+      'edges must be finite and non-negative: $left, $top, $right, $bottom',
+    );
     final x = left.floor();
     final y = top.floor();
 

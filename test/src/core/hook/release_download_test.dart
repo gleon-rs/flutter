@@ -275,6 +275,38 @@ void main() {
     expect(server.hits['stored.so'], 1);
   });
 
+  test('follows a redirect to another host', () async {
+    // GitHub redirects release assets to its storage host.
+    final storage = await ReleaseServer.start({'stored.so': library});
+    addTearDown(storage.close);
+    final server = await ReleaseServer.start(
+      {ReleaseDownload.checksumsFileName: sums},
+      redirects: {target.assetName: '${storage.url.resolve('stored.so')}'},
+    );
+    addTearDown(server.close);
+
+    final fetched = await fetch(server.url);
+    expect(fetched.readAsBytesSync(), library);
+    expect(storage.hits, {'stored.so': 1});
+  });
+
+  test('concurrent builds share one verified library', () async {
+    final server = await ReleaseServer.start({
+      ReleaseDownload.checksumsFileName: sums,
+      target.assetName: library,
+    });
+    addTearDown(server.close);
+
+    final fetched = await Future.wait([fetch(server.url), fetch(server.url)]);
+    expect({for (final file in fetched) file.path}, hasLength(1));
+    expect(fetched.firstOrNull?.readAsBytesSync(), library);
+    final leftovers = cache
+        ?.listSync(recursive: true)
+        .whereType<File>()
+        .where((file) => file.path.endsWith('.tmp'));
+    expect(leftovers, isEmpty);
+  });
+
   test('a checksum list without checksums is rejected', () async {
     final server = await ReleaseServer.start({
       ReleaseDownload.checksumsFileName: 'not a list'.codeUnits,

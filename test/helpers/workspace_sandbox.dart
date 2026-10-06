@@ -14,7 +14,14 @@ import 'package:json_schema/json_schema.dart';
 
 import 'golden_sandbox.dart';
 
-/// `case.v2.json` of a sibling gleon checkout (as in CI), or null.
+/// The gleon commit `native/gleon_ref` pins.
+// ignore: avoid-explicit-type-declaration, not obvious from the initializer.
+final String gleonPin = File('native/gleon_ref').readAsStringSync().trim();
+
+/// `case.v2.json` of the pinned commit ([gleonPin]) in a sibling gleon
+/// checkout (`../gleon`, as in CI), or null without that checkout or commit.
+/// Read from git, not the working tree: the checkout may be at another
+/// commit.
 // ignore: avoid-explicit-type-declaration, not obvious from the initializer.
 final JsonSchema? caseSchema = _loadCaseSchema();
 
@@ -184,7 +191,19 @@ void expectMatchesCaseSchema(Map<String, Object?> json) {
 }
 
 JsonSchema? _loadCaseSchema() {
-  final file = File('../gleon/gleon-model/schema/case.v2.json');
+  final ProcessResult shown;
+  try {
+    shown = Process.runSync('git', [
+      '-C',
+      '../gleon',
+      'show',
+      '$gleonPin:gleon-model/schema/case.v2.json',
+    ]);
+  } on ProcessException {
+    return null;
+  }
 
-  return file.existsSync() ? JsonSchema.create(file.readAsStringSync()) : null;
+  return shown.exitCode == 0
+      ? JsonSchema.create(shown.stdout.toString())
+      : null;
 }

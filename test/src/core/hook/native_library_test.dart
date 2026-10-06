@@ -7,6 +7,7 @@ import 'package:gleon/src/core/hook/native_target.dart';
 import 'package:gleon/src/core/hook/release_download.dart';
 import 'package:gleon/src/core/hook/user_defines.dart';
 
+import '../../../helpers/fake_cargo.dart';
 import '../../../helpers/release_server.dart';
 
 void main() {
@@ -55,22 +56,50 @@ void main() {
     return library.uri;
   }
 
+  /// What a bundled library depends on, present or not: `native/`, the
+  /// library, the pin and the library's stamp.
+  List<Uri> bundleInputs() => [
+    dir('package/native'),
+    dir('package/native').resolve('$key/$libFileName'),
+    dir('package/native').resolve('gleon_ref'),
+    dir('package/native').resolve('$key/gleon_ref'),
+  ];
+
   Future<({List<Uri> dependencies, Uri library})> resolve(
     Uri packageRoot, {
     Map<String, Object> userDefines = const {},
     Map<String, String> environment = const {},
-    _FakeCargo? cargo,
+    FakeCargo? cargo,
+    NativeTarget requested = target,
   }) => NativeLibrary(
     packageRoot: packageRoot,
     userDefines: _MapUserDefines(userDefines),
     sharedOutputDir: dir('shared'),
-    target: target,
+    target: requested,
     environment: environment,
-  ).resolve(runProcess: (cargo ?? .never).run);
+  ).resolve(runProcess: (cargo ?? FakeCargo.never()).run);
 
-  Matcher throwsState(Matcher message) => throwsA(
+  Matcher throwsState(Object message) => throwsA(
     isA<StateError>().having((error) => error.message, 'message', message),
   );
+
+  for (final define in ['ffi_path', 'gleon_repo']) {
+    for (final value in <Object>[
+      42,
+      ['a.so'],
+    ]) {
+      test('$define must be a path, not $value', () async {
+        bundle();
+
+        await expectLater(
+          resolve(package(), userDefines: {define: value}),
+          throwsState(
+            'gleon: user-define `$define` must be a path, got $value',
+          ),
+        );
+      });
+    }
+  }
 
   group('ffi_path', () {
     test('wins over a checkout and a bundled library', () async {
@@ -99,29 +128,70 @@ void main() {
     });
   });
 
-  test('gleon_repo builds the checkout, before a bundled library', () async {
-    write('gleon/Cargo.toml', '[workspace]');
-    write('gleon/gleon-ffi/Cargo.toml', '[package]');
-    write('gleon/gleon-ffi/src/lib.rs', '// Rust');
-    write('bin/${Platform.isWindows ? 'cargo.exe' : 'cargo'}');
-    bundle();
-    final cargo = _FakeCargo();
+  group('gleon_repo', () {
+    /// A gleon checkout and a cargo on `PATH`; the environment to find it.
+    Map<String, String> checkout() {
+      write('gleon/Cargo.toml', '[workspace]');
+      write('gleon/gleon-ffi/Cargo.toml', '[package]');
+      write('gleon/gleon-ffi/src/lib.rs', '// Rust');
+      write('bin/${Platform.isWindows ? 'cargo.exe' : 'cargo'}');
 
-    final (:dependencies, :library) = await resolve(
-      package(),
-      userDefines: {'gleon_repo': '${tempPath()}/gleon'},
-      environment: {'PATH': '${tempPath()}/bin'},
-      cargo: cargo,
+      return {'PATH': '${tempPath()}/bin'};
+    }
+
+    test(
+      'builds the checkout, before a bundled library and a mirror',
+      () async {
+        final environment = checkout();
+        bundle();
+        final cargo = FakeCargo();
+
+        final (:dependencies, :library) = await resolve(
+          package(),
+          userDefines: {
+            'gleon_repo': '${tempPath()}/gleon',
+            // Never asked: the download fails the test (no server).
+            'release_url': 'http://127.0.0.1:9/v1.0.0/',
+          },
+          environment: environment,
+          cargo: cargo,
+        );
+        expect(
+          library,
+          dir('shared').resolve('cargo/$rustTriple/release/$libFileName'),
+        );
+        expect(cargo.calls, hasLength(1));
+        expect(
+          dependencies.map((uri) => uri.pathSegments.lastOrNull),
+          containsAll(['Cargo.toml', 'lib.rs']),
+        );
+      },
     );
-    expect(
-      library,
-      dir('shared').resolve('cargo/$rustTriple/release/$libFileName'),
-    );
-    expect(cargo.calls, hasLength(1));
-    expect(
-      dependencies.map((uri) => uri.pathSegments.lastOrNull),
-      containsAll(['Cargo.toml', 'lib.rs']),
-    );
+
+    test('passes the environment on to cargo', () async {
+      const windows = NativeTarget.windowsX64;
+      final cargo = FakeCargo();
+
+      await resolve(
+        package(),
+        userDefines: {'gleon_repo': '${tempPath()}/gleon'},
+        environment: {...checkout(), 'CARGO_BUILD_RUSTFLAGS': '-C debuginfo=1'},
+        cargo: cargo,
+        requested: windows,
+      );
+      expect(cargo.environments, [
+        windows.cargoEnvironment(const {
+          'CARGO_BUILD_RUSTFLAGS': '-C debuginfo=1',
+        }),
+      ]);
+      expect(
+        cargo.environments.singleOrNull,
+        containsPair(
+          'CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS',
+          '-C debuginfo=1 -C target-feature=+crt-static',
+        ),
+      );
+    });
   });
 
   group('a bundled library', () {
@@ -130,7 +200,7 @@ void main() {
 
       final (:dependencies, :library) = await resolve(package());
       expect(library, bundled);
-      expect(dependencies, [dir('package/native'), bundled]);
+      expect(dependencies, bundleInputs());
     });
 
     for (final stamp in [pin, '$pin${NativeTarget.dirtySuffix}']) {
@@ -148,6 +218,17 @@ void main() {
         );
       });
     }
+
+    test('wins over release_url', () async {
+      final bundled = bundle();
+
+      final (dependencies: _, :library) = await resolve(
+        package(),
+        // Never asked: the download fails the test (no server).
+        userDefines: {'release_url': 'http://127.0.0.1:9/v1.0.0/'},
+      );
+      expect(library, bundled);
+    });
 
     test('of another commit is refused with what to do', () async {
       bundle(stamp: 'e957394', pinned: pin);
@@ -206,12 +287,26 @@ void main() {
         );
         expect(File.fromUri(fetched).readAsBytesSync(), library);
         expect(dependencies, [
-          dir('package/native'),
+          ...bundleInputs(),
           packageRoot.resolve('pubspec.yaml'),
           fetched,
         ]);
       });
     }
+
+    test('happens with a pin but no bundled library', () async {
+      final server = await mirror();
+      write('package/native/gleon_ref', '$pin\n');
+
+      final (:dependencies, library: fetched) = await resolve(
+        package(),
+        userDefines: {'release_url': '${server.url}'},
+      );
+      expect(File.fromUri(fetched).readAsBytesSync(), library);
+      // The hooks runner hashes directories non-recursively and re-runs the
+      // hook when a missing file appears: a later local build is seen.
+      expect(dependencies, containsAll(bundleInputs()));
+    });
 
     test('names release_url when the mirror lacks the release', () async {
       final server = await ReleaseServer.start(const {});
@@ -222,6 +317,24 @@ void main() {
         throwsState(allOf(contains('HTTP 404'), contains('`release_url`'))),
       );
     });
+
+    for (final url in [
+      'https://mirror.example/v1.0.0?channel=stable',
+      'https://mirror.example/v1.0.0/#assets',
+    ]) {
+      test('refuses a release_url with a query or fragment: $url', () async {
+        await expectLater(
+          resolve(package(), userDefines: {'release_url': url}),
+          throwsState(
+            allOf(
+              contains('`release_url`'),
+              contains('query or fragment'),
+              contains(url),
+            ),
+          ),
+        );
+      });
+    }
 
     test('refuses a release_url that is no string', () async {
       await expectLater(
@@ -253,39 +366,4 @@ final class _MapUserDefines implements UserDefines {
     final String path => .file(path),
     _ => null,
   };
-}
-
-/// Builds nothing but the library file cargo would write.
-final class _FakeCargo {
-  _FakeCargo({this.isAllowed = true});
-
-  /// A runner that fails the test when called.
-  static final never = _FakeCargo(isAllowed: false);
-
-  /// Whether cargo may run at all.
-  final bool isAllowed;
-
-  /// Arguments of every call.
-  final calls = <List<String>>[];
-
-  Future<ProcessResult> run(
-    String executable,
-    List<String> arguments, {
-    Map<String, String>? environment,
-    String? workingDirectory,
-  }) {
-    if (!isAllowed) fail('cargo must not run: $arguments');
-    calls.add(arguments);
-    String after(String flag) =>
-        arguments
-            .skipWhile((argument) => argument != flag)
-            .skip(1)
-            .firstOrNull ??
-        fail('cargo was called without $flag');
-    File(
-      '${after('--target-dir')}/${after('--target')}/release/libgleon_ffi.so',
-    ).createSync(recursive: true);
-
-    return .value(ProcessResult(1, 0, 'out', 'err'));
-  }
 }

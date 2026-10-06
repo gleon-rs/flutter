@@ -4,9 +4,9 @@ Drop-in replacement for Flutter's `matchesGoldenFile` with **tolerance**, **SSIM
 regions** and **real text in goldens** (compared on the platform the goldens are recorded on), powered by the gleon Rust comparison engine (the same engine as the
 [gleon CLI](https://github.com/gleon-rs/gleon)).
 
-> **Status: proof of concept (v0).** Host `flutter test` on macOS arm64, Linux x64/arm64
-> (Ubuntu 26.04+) and Windows x64. No Rust toolchain is needed: prebuilt, checksum-verified native
-> libraries are downloaded once per project.
+> **Status: proof of concept (v0).** Flutter 3.47.5+. Host `flutter test` on macOS arm64, Linux
+> x64/arm64 (Ubuntu 26.04+) and Windows x64. No Rust toolchain is needed: prebuilt,
+> checksum-verified native libraries are downloaded once per project.
 
 ## Install
 
@@ -15,7 +15,7 @@ dev_dependencies:
   gleon:
     git:
       url: https://github.com/gleon-rs/flutter.git
-      ref: v0.1.0 # a released tag: prebuilt libraries exist for tags only
+      ref: v0.2.0 # a released tag: prebuilt libraries exist for tags only
 ```
 
 On the first `flutter test`, the package's build hook downloads the native library for the test
@@ -30,9 +30,14 @@ hooks:
   user_defines:
     gleon:
       ffi_path: path/to/libgleon_ffi.dylib # use this library file as is
-      # release_url: https://mirror.example/gleon/v0.1.0/ # SHA256SUMS.txt + assets
+      # release_url: https://mirror.example/gleon/v0.2.0/ # SHA256SUMS.txt + assets
       # gleon_repo: ../gleon               # contributors: build from a gleon checkout
 ```
+
+The first source that applies wins: `ffi_path`, then `gleon_repo`, then a library inside the
+package's `native/<target>/` (a maintainer's build, or one shipped in the package), then the
+download, from `release_url` when it is set (the release's directory, without a query or
+fragment). `ffi_path` and `gleon_repo` must be paths: any other value fails the build.
 
 See [`example/`](example) for a counter app whose tests use gleon.
 
@@ -50,6 +55,22 @@ to the test file, `flutter test --update-goldens` rewrites them, and nothing is 
 tests pass unless metrics are on (see [Metrics](#metrics)). The one difference is the text of a
 widget, see [Real text](#real-text). If a file must keep both imports, add
 `hide matchesGoldenFile` to the `flutter_test` import.
+
+To keep Flutter's own matcher for some tests (e.g. goldens of a custom `goldenFileComparator`,
+which gleon does not support), import `flutter_test` with a prefix as well and call it there:
+
+```dart
+import 'package:flutter_test/flutter_test.dart' as ft;
+import 'package:gleon/gleon.dart';
+
+await expectLater(
+  find.byType(MyWidget),
+  ft.matchesGoldenFile('goldens/my_widget.png'),
+);
+```
+
+A file that also imports `golden_toolkit`, which has a `loadAppFonts` of its own, adds
+`hide loadAppFonts` to one of the two imports.
 
 ## Tolerance
 
@@ -208,7 +229,9 @@ the very same file, so a project that later adopts the CLI keeps its rules. Each
 the nearest directory above it with `.gleon/gleon.yaml` (its workspace; the working directory of
 the test does not matter, and one test run may span several workspaces). The rule of a golden is
 resolved by its path relative to that directory, with the CLI's own code; the file is read again
-when it changes:
+when it changes. The search does not stop at the repository root, so a stray `.gleon/gleon.yaml`
+in a directory above the project (e.g. `~/.gleon/gleon.yaml`) applies to goldens without a closer
+one.
 
 ```yaml
 # .gleon/gleon.yaml (create it by hand or with `gleon init`)
@@ -377,8 +400,17 @@ The defaults are calibrated on a corpus of benign rendering noise vs. regression
 - `ssim` can pass a low-contrast color change of a one-pixel line. Use `exact`/`pixel` where every
   pixel matters.
 - Only Flutter's default `LocalFileComparator` is supported as the underlying golden store.
-- Web (`--platform chrome`) and on-device tests are not supported: the native library does not
-  exist there, and the first comparison fails with a message saying so.
+  Custom `goldenFileComparator`s, tolerant ones included (alchemist's, or the
+  `_TolerantGoldenFileComparator` example of Flutter's documentation), fail with a message naming
+  the ways out: remove the custom comparator, or use `ft.matchesGoldenFile` for those tests (see
+  [Migrate](#migrate)).
+- Web (`--platform chrome`) does not compile: the package uses `dart:ffi`.
+- On-device tests and app builds for Android, iOS or other targets get no native library (the
+  build hook adds none instead of failing the build), so the first `matchesGoldenFile` there fails
+  with a message saying the library is missing. A desktop debug `flutter run` of an app with gleon
+  in `dev_dependencies` still runs the hook and fetches the library: Flutter runs the hooks of
+  dev_dependencies for every non-release build, and the hook cannot tell a test build from an app
+  build.
 
 ## Contributing
 
@@ -394,14 +426,19 @@ lib/src/core/             plain Dart: never imports Flutter (dart:ui, package:fl
   config/                 GleonIntegration (who calls), GleonSession (the native session)
   native/                 @Native leaf bindings, NativeEngine (ABI check, packing), verdicts,
                           error kinds
-  hook/                   native targets, release download, source build, atomic writes (used by
-                          hook/build.dart)
+  hook/                   what hook/build.dart needs: NativeLibrary (which library, in which
+                          order), UserDefines (hooks-free, so tests pass plain maps) and its
+                          HookUserDefines adapter (imported by the hook only), native targets,
+                          release download, source build, atomic writes
 lib/src/flutter/          the Flutter layer: matchesGoldenFile, the widget capture and its text
                           regions, the comparator, loadAppFonts, FlutterSession (this package
                           as an integration)
 hook/build.dart           thin build hook on top of lib/src/core/hook/
-bin/                      maintainer scripts (dart:* + crypto only), run with plain `dart`:
-                          build_native, native_licenses, check_cases (CI)
+bin/                      maintainer scripts (dart:*, crypto and this package only), run with
+                          plain `dart`: build_native, native_licenses, check_cases (CI)
+  src/                    their logic, tested in test/tooling/ (neither is published):
+                          CaseCheck, LicenseCrate and NativeLicenses, NativeBuild (install,
+                          checkout state), and the shared command line (cli.dart)
 ```
 
 The native engine (`gleon-ffi`) does the whole job of a golden: it finds the workspace, resolves
@@ -435,8 +472,10 @@ dcm analyze .                     # DCM 1.39.2, also in example/
 flutter test                      # also in example/
 ```
 
-Case reports written by the tests are validated against `case.v2.json` when a gleon checkout sits
-next to this repository (`../gleon`, as in CI); without it that check is skipped.
+Case reports written by the tests are validated against `case.v2.json` of the pinned commit
+(`native/gleon_ref`, read with `git show` whatever the checkout's own state) when a gleon checkout
+that has that commit sits next to this repository (`../gleon`, as in CI); without it that check is
+skipped.
 
 `analysis_options.yaml` is the single, strict configuration (analyzer lints plus DCM presets);
 every disabled or narrowed rule carries its reason.
@@ -471,8 +510,9 @@ dart bin/build_native.dart                 # host; --target all: every target th
 
 Use plain `dart`, not `dart run`: `dart run` executes the build hook first. `--target all` builds
 all four targets on macOS and all but macOS elsewhere; Linux targets of another OS or
-architecture need `cargo-zigbuild`, Windows from macOS or Linux `cargo-xwin`. CI builds every
-target natively. A library is replaced atomically and stamped only after it. A build
+architecture need zig and `cargo-zigbuild` (`cargo install --locked cargo-zigbuild` on any host),
+Windows from macOS or Linux `cargo-xwin`. CI builds every target natively. A library is replaced
+atomically and stamped only after it; the `--dist` copy (release assets) comes last. A build
 records the gleon commit it was made from, and the hook uses it only while `native/gleon_ref` pins
 that commit. To try an unmerged engine change on top of the pinned commit, build with
 `--allow-dirty` (and rebuild after every change: the hook cannot tell two dirty builds apart); to
@@ -482,11 +522,15 @@ reach it, and `CARGO_*`/`RUSTUP_*` only from Flutter 3.49. Use `CARGO_BUILD_RUST
 `CARGO_BUILD_RUSTC_WRAPPER` (Flutter 3.49+), a `.cargo/config.toml` in the checkout, or
 `bin/build_native.dart`, which sees the whole environment.
 
-`NATIVE_LICENSES.md` lists every crate linked into the library with its license texts. After
-moving `native/gleon_ref`, regenerate it (CI checks it):
+`NATIVE_LICENSES.md` lists every crate linked into the library with its license texts and names
+the pinned commit it was generated for. After moving `native/gleon_ref`, regenerate it (CI checks
+it). The gleon repo must be at the pinned commit: its `git rev-parse HEAD` is checked; for a tree
+exported without git, pass the commit with `--commit`. To leave your gleon checkout alone:
 
 ```sh
 dart bin/native_licenses.dart              # --check: fail when it is stale
+git -C ../gleon archive "$(cat native/gleon_ref)" | tar -x -C /tmp/gleon-pin
+dart bin/native_licenses.dart --gleon-repo /tmp/gleon-pin --commit "$(cat native/gleon_ref)"
 ```
 
 Releasing: bump `version` in `pubspec.yaml`, `FlutterSession.packageVersion` and `CHANGELOG.md`,

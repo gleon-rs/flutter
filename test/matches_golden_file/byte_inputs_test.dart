@@ -116,6 +116,31 @@ void main() {
     expect(message, contains('needs the default LocalFileComparator'));
   });
 
+  test('a version names the golden of bytes', () async {
+    final bytes = File('${GoldenSandbox.dir.path}/${Swatch.golden}')
+        .readAsBytesSync();
+    final matcher = matchesGoldenFile('goldens/versioned.png', version: 3);
+
+    expect(await withGoldenUpdates(() => matcher.matchAsync(bytes)), isNull);
+    expect(await matcher.matchAsync(bytes), isNull);
+    final sandbox = '${GoldenSandbox.dir.path}/goldens';
+    expect(File('$sandbox/versioned.3.png').readAsBytesSync(), bytes);
+    expect(File('$sandbox/versioned.png').existsSync(), isFalse);
+  });
+
+  test('a byte future completing with null fails like Flutter', () async {
+    await expectLater(
+      matchesGoldenFile(Swatch.golden).matchAsync(Future<List<int>?>.value()),
+      throwsA(
+        isA<AssertionError>().having(
+          (error) => error.message,
+          'message',
+          contains('must provide a Finder, Image'),
+        ),
+      ),
+    );
+  });
+
   test('other inputs fail like Flutter', () async {
     for (final input in <Object?>['goldens/swatch.png', null]) {
       await expectLater(

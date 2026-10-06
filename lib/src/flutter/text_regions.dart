@@ -22,8 +22,9 @@ abstract final class TextRegions {
   /// [margin] of its height, clipped by the paragraph (when its text
   /// overflows) and by its ancestors, in whole pixels of the image (rounded
   /// outwards). Text in
-  /// children that are not painted (`Offstage`, `Visibility`) is skipped;
-  /// empty text has no region.
+  /// children that are not painted (`Offstage`, `Visibility`) is skipped, so
+  /// is a line a perspective transform sends to infinity; empty text has no
+  /// region.
   static List<PixelRegion> captured(Element element) {
     RenderObject? boundary = element.renderObject;
     while (boundary != null && !boundary.isRepaintBoundary) {
@@ -44,8 +45,11 @@ abstract final class TextRegions {
     while (pending.isNotEmpty) {
       final (:clip, :object, :toImage) = pending.removeLast();
       for (final line in _lines(object)) {
-        final rect = MatrixUtils.transformRect(toImage, line).intersect(clip);
-        if (!rect.isEmpty) {
+        final transformed = MatrixUtils.transformRect(toImage, line);
+        final rect = transformed.intersect(clip);
+        // A perspective can send a line to infinity (or NaN), which is not
+        // painted; clipped, it would cover the whole clip.
+        if (transformed.isFinite && !rect.isEmpty) {
           final Rect(:bottom, :left, :right, :top) = rect;
           regions.add(
             .outwards(left: left, top: top, right: right, bottom: bottom),

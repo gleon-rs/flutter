@@ -19,12 +19,16 @@ doc/api/
 .flutter-plugins-dependencies
 test/failures/
 example/test/failures/
+coverage/
 .antigravity/
 CLAUDE.local.md
 
 # Maintainer-only
 /benchmark/
 /bin/
+/test/tooling/
 /dist/
 /.github/
 /native/gleon_ref
+# Stamps of local builds: the archive's libraries are accepted without a pin.
+/native/*/gleon_ref
