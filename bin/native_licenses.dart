@@ -9,7 +9,7 @@
 /// The crates come from `cargo tree` of `gleon-ffi` per target (normal
 /// dependencies, no proc-macros or build scripts: only what ends up in the
 /// library), their licenses from `cargo metadata` and the license files in
-/// each crate (see `LicenseCrate` in `lib/src/core/tooling/`). A crate
+/// each crate (see `LicenseCrate` in `src/license_crate.dart`). A crate
 /// without license files must offer a license that needs no notice (Zlib,
 /// Unlicense, 0BSD, CC0-1.0, BSL-1.0 or MIT-0). The Rust standard library is
 /// listed too. `--check` fails when the file is stale (CI); run without it
@@ -22,8 +22,8 @@
 /// fails after a pin move until the file is regenerated.
 ///
 /// Run it with plain `dart` (see `build_native.dart`); needs cargo and the
-/// gleon repo's toolchain. Only `dart:*` and this package may be imported
-/// here.
+/// gleon repo's toolchain. Only `dart:*`, this package and `src/` may be
+/// imported here.
 library;
 
 import 'dart:convert';
@@ -128,15 +128,20 @@ Future<void> main(List<String> args) async {
 /// of a git checkout, else the [given] `--commit`. A checkout with
 /// uncommitted changes to the inputs of the library (`Cargo.lock`, the
 /// manifests and sources of its crates) is refused: its crates are not the
-/// commit's.
+/// commit's; so is one whose changes git cannot tell.
 Future<String> _commitOf(Directory repo, {required String? given}) async {
   final head = await _gitHead(repo);
   if (head != null && given != null && head != given) {
     _cli.fail('${repo.path} is at $head, not --commit $given.');
   }
   if (head != null) {
-    final state = await NativeBuild.checkoutState(repo.uri);
-    if (state?.isDirty ?? false) {
+    final state =
+        await NativeBuild.checkoutState(repo.uri) ??
+        _cli.fail(
+          'cannot read the changes of ${repo.path} with git: its crates may '
+          'not be those of $head.',
+        );
+    if (state.isDirty) {
       _cli.fail(
         '${repo.path} has uncommitted changes to the inputs of the library: '
         'its crates are not those of $head. Commit or stash them.',

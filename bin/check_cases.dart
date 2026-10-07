@@ -1,7 +1,7 @@
 /// Checks the case reports of a run: that each golden was compared where the
 /// example's `fallback_platform` says it should be (CI proof of
 /// platform-aware goldens; the rules are `CaseCheck` in
-/// `lib/src/core/tooling/case_check.dart`).
+/// `src/case_check.dart`).
 ///
 /// ```sh
 /// dart bin/check_cases.dart <runs dir> (--fallback-platform <key> | --own)
@@ -12,7 +12,7 @@
 /// that is no case report (invalid JSON, another value) is a problem of the
 /// run, not a crash: every file is checked, then the run fails.
 ///
-/// Only `dart:*` and this package may be imported here (see
+/// Only `dart:*`, this package and `src/` may be imported here (see
 /// `build_native.dart`).
 library;
 

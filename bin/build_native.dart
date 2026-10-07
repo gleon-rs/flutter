@@ -21,7 +21,7 @@
 /// A library is replaced atomically, and its stamp (the gleon commit it was
 /// built from) is written only after it, so an interrupted build leaves no
 /// stamp, which the hook refuses while `native/gleon_ref` exists; the
-/// `--dist` copy comes last (see `NativeBuild` in `lib/src/core/tooling/`).
+/// `--dist` copy comes last (see `NativeBuild` in `src/native_build.dart`).
 ///
 /// Only `dart:*`, `crypto`, this package and `src/` may be imported here:
 /// pub's strict-dependencies check forbids dev_dependencies in `bin/`.
