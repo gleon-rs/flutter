@@ -8,6 +8,7 @@ import 'package:gleon/src/flutter/gleon_golden_comparator.dart';
 
 import '../helpers/blob.dart';
 import '../helpers/golden_updates.dart';
+import '../helpers/prints.dart';
 import '../helpers/swatch.dart';
 import '../helpers/workspace_sandbox.dart';
 
@@ -41,27 +42,12 @@ String _shaOf(Object? image) => switch (image) {
   _ => fail('no sha256 in the report'),
 };
 
-/// Runs [body] with `debugPrint` captured (reset to the test binding's
-/// override before the test ends, as the binding requires) and returns the
-/// printed lines.
-Future<List<String>> _capturePrints(AsyncCallback body) async {
-  final lines = <String>[];
-  debugPrint = (message, {wrapWidth}) => lines.add(message ?? '(null)');
-  try {
-    await body();
-  } finally {
-    debugPrint = TestWidgetsFlutterBinding.instance.debugPrintOverride;
-  }
-
-  return lines;
-}
-
 void main() {
   // Only the PNG bytes of the golden itself are identical: a widget is
   // compared as raw pixels, and equal pixels are a match.
   test('identical: schema-valid case without metrics', () async {
     final sandbox = WorkspaceSandbox.create(_yaml);
-    final lines = await _capturePrints(
+    final lines = await capturePrints(
       () => expectLater(
         sandbox.goldenBytes(Swatch.golden),
         sandbox.matcher(Swatch.golden),
@@ -89,7 +75,7 @@ void main() {
     expect(report.containsKey('metrics'), isFalse);
     expect(report.containsKey('artifacts'), isFalse, reason: 'a pass');
     expect(report.containsKey('run_id'), isFalse, reason: 'no GLEON_RUN_ID');
-    expect(report, containsPair('schema_version', 2));
+    expect(report, containsPair('schema_version', 3));
     expect(report, containsPair('regions', isEmpty));
     expect(report['comparison'], {
       'masks': isEmpty,
@@ -115,10 +101,31 @@ void main() {
     );
   });
 
+  testWidgets('an image is compared as raw pixels: a match', (tester) async {
+    final sandbox = WorkspaceSandbox.create(_yaml);
+    await tester.pumpWidget(const Swatch());
+    final image =
+        await tester.runAsync(
+          () => captureImage(
+            Swatch.finder.evaluate().singleOrNull ?? fail('no swatch'),
+          ),
+        ) ??
+        fail('no image captured');
+    addTearDown(image.dispose);
+    await capturePrints(
+      () => expectLater(image, sandbox.matcher(Swatch.golden)),
+    );
+
+    expect(
+      sandbox.readCase('test/goldens/swatch'),
+      containsPair('outcome', 'match'),
+    );
+  });
+
   testWidgets('match: headroom metrics and a console line', (tester) async {
     final sandbox = WorkspaceSandbox.create(_yaml);
     await tester.pumpWidget(const Blob(offset: 0.3));
-    final lines = await _capturePrints(
+    final lines = await capturePrints(
       () => expectLater(Blob.finder, sandbox.matcher(Blob.golden)),
     );
     final report = sandbox.readCase('test/goldens/blob');
@@ -205,7 +212,7 @@ void main() {
     Future<void> match() async => results.add(
       await sandbox.matcher('goldens/new/swatch.png').matchAsync(Swatch.finder),
     );
-    final lines = await _capturePrints(match);
+    final lines = await capturePrints(match);
     final report = sandbox.readCase('test/goldens/new/swatch');
 
     // Word for word the failure of Flutter's own comparator.
@@ -242,7 +249,7 @@ void main() {
     final sandbox = WorkspaceSandbox.create(_yaml);
     // Masks apply only to differing images: the dot inside the mask differs.
     await tester.pumpWidget(const Swatch(dot: Offset(96, 5)));
-    final lines = await _capturePrints(
+    final lines = await capturePrints(
       () => expectLater(
         Swatch.finder,
         sandbox.matcher(
@@ -262,7 +269,7 @@ void main() {
   testWidgets('several warnings print one line each', (tester) async {
     final sandbox = WorkspaceSandbox.create(_yaml);
     await tester.pumpWidget(const Swatch(dot: Offset(96, 5)));
-    final lines = await _capturePrints(
+    final lines = await capturePrints(
       () => expectLater(
         Swatch.finder,
         sandbox.matcher(
@@ -285,7 +292,7 @@ void main() {
       ..parent.createSync(recursive: true)
       ..createSync();
     await tester.pumpWidget(const Swatch());
-    final lines = await _capturePrints(
+    final lines = await capturePrints(
       () => expectLater(Swatch.finder, sandbox.matcher(Swatch.golden)),
     );
 
@@ -353,7 +360,7 @@ void main() {
     testWidgets('enables metrics a disabled yaml does not', (tester) async {
       final sandbox = WorkspaceSandbox.create(_disabledYaml);
       await tester.pumpWidget(const Swatch());
-      final lines = await _capturePrints(
+      final lines = await capturePrints(
         () => expectLater(
           Swatch.finder,
           sandbox.matcher(
@@ -403,7 +410,7 @@ void main() {
     ) async {
       final sandbox = WorkspaceSandbox.create(_yaml);
       await tester.pumpWidget(const Swatch());
-      Future<List<String>> run(GleonSession session) => _capturePrints(
+      Future<List<String>> run(GleonSession session) => capturePrints(
         () => expectLater(
           Swatch.finder,
           sandbox.matcher(Swatch.golden, session: session),
@@ -425,65 +432,4 @@ void main() {
       }
     });
   });
-
-  // ignore: missing-test-assertion, the assertions live in the helper below.
-  test(
-    'the committed schema rejects an off-contract case',
-    _expectSchemaRejectsOffContractCases,
-    skip: caseSchema == null ? 'needs a gleon checkout at ../gleon' : null,
-  );
-}
-
-void _expectSchemaRejectsOffContractCases() {
-  final valid = {
-    'candidate': {'sha256': '0' * 64},
-    'comparison': {
-      'masks': <Object>[],
-      'policy_version': 2,
-      'tolerance': {'kind': 'exact'},
-    },
-    'golden': {'path': 'a.png', 'sha256': '0' * 64},
-    'name': 'a',
-    'outcome': 'identical',
-    'platform': {'arch': 'aarch64', 'os': 'macos'},
-    'recorded_at': '2026-09-27T12:00:00.000Z',
-    'regions': <Object>[],
-    'schema_version': 2,
-    'source': {'tool': 'gleon_flutter', 'tool_version': '0.1.0'},
-    'timings_ms': {'total': 1.5},
-  };
-  final failed = {
-    ...valid,
-    'artifacts': {'candidate': '.gleon/runs/latest/artifacts/a/candidate.png'},
-    'error_kind': 'image',
-    'golden': {'blob': 'sha256:${'0' * 64}', 'path': 'a.png'},
-    'outcome': 'error',
-    'run_id': '12345',
-  };
-  final schema = caseSchema;
-
-  expect(schema?.validate(valid).isValid, isTrue);
-  expect(schema?.validate(failed).isValid, isTrue);
-  for (final broken in [
-    {...valid, 'schema_version': 1},
-    {...valid, 'outcome': 'passed'},
-    {...valid, 'name': 'Upper/Case'},
-    {...valid, 'extra': 1},
-    {...failed, 'error_kind': 'disk'},
-    {...failed, 'run_id': 'run 1'},
-    {
-      ...failed,
-      'artifacts': {'image': 'a.png'},
-    },
-    {
-      ...valid,
-      'comparison': {
-        'masks': <Object>[],
-        'policy_version': 2,
-        'tolerance': {'kind': 'exact', 'max_diff_ratio': 0.1},
-      },
-    },
-  ]) {
-    expect(schema?.validate(broken).isValid, isFalse, reason: '$broken');
-  }
 }

@@ -96,9 +96,9 @@ abstract final class NativeEngine {
   /// update). [tolerance] null uses the golden's `.gleon/gleon.yaml` rule,
   /// else exact; [masks] add to the rule's. [textRegions] (pixels of a raw
   /// candidate) are compared under [textTolerance] (a share of a tile), null
-  /// the rule's, else the golden's default (see `matchesGoldenFile`). With a
-  /// `fallback_platform`, the engine may compare or write this platform's own
-  /// golden beside [goldenPath] instead. Failure artifacts go to
+  /// the rule's, else the golden's default (see `matchesGoldenFile`). The
+  /// engine may compare or write this platform's own golden beside
+  /// [goldenPath] instead (`fallback_platform`). Failure artifacts go to
   /// [failuresDir]; [goldenUri] names the golden in messages.
   ///
   /// The candidate is read in place by the native code; nothing is copied in.
@@ -178,11 +178,13 @@ abstract final class NativeEngine {
     } on ArgumentError catch (error, stackTrace) {
       Error.throwWithStackTrace(
         StateError(
-          'gleon: the native library was not loaded ($error). It is provided '
-          'by the build hook of the gleon package for `flutter test` on macOS '
-          'arm64, Linux and Windows x64 (not web or devices); run the tests '
-          'with `flutter test` and see the package README for the `ffi_path` '
-          'and `gleon_repo` user-defines.',
+          'gleon: the native library was not loaded ($error). The build '
+          'hook of the gleon package provides it for host `flutter test` on '
+          'macOS arm64, Linux x64/arm64 and Windows x64 only: app builds for '
+          'devices (Android, iOS) and other targets get none, and web cannot '
+          'load it. Run golden tests with `flutter test` on such a host, and '
+          'see the package README for the `ffi_path` and `gleon_repo` '
+          'user-defines.',
         ),
         stackTrace,
       );
@@ -194,8 +196,12 @@ abstract final class NativeEngine {
   static void checkAbiVersion(int abiVersion) {
     if (abiVersion != expectedAbiVersion) {
       throw StateError(
-        'gleon: native library ABI version $abiVersion does not match the '
-        'Dart package ($expectedAbiVersion). Rebuild the native library.',
+        'gleon: native library ABI version $abiVersion does not match this '
+        'version of the package (ABI $expectedAbiVersion). The library comes '
+        'from the `ffi_path` user-define, a `release_url` mirror, a '
+        '`gleon_repo` checkout or `native/<target>/` of the package: point '
+        'the user-define at the library of this package version, or rebuild '
+        'it (`dart bin/build_native.dart`).',
       );
     }
   }

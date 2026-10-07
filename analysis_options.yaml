@@ -196,7 +196,9 @@ dart_code_metrics:
     # Enabled (beyond the presets):
     - avoid-banned-exports: true
     - avoid-continue: true
-    - match-lib-folder-structure: true
+    - match-lib-folder-structure:
+        exclude:
+          - test/tooling/** # The maintainer scripts' logic lives in bin/src/ (not published).
     - max-imports: true
     - no-equal-arguments: true
     - pass-correct-accepted-type: true

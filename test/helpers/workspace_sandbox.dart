@@ -14,7 +14,14 @@ import 'package:json_schema/json_schema.dart';
 
 import 'golden_sandbox.dart';
 
-/// `case.v2.json` of a sibling gleon checkout (as in CI), or null.
+/// The gleon commit `native/gleon_ref` pins.
+// ignore: avoid-explicit-type-declaration, not obvious from the initializer.
+final String gleonPin = File('native/gleon_ref').readAsStringSync().trim();
+
+/// `case.v3.json` of the pinned commit ([gleonPin]) in a sibling gleon
+/// checkout (`../gleon`, as in CI), or null without that checkout or commit.
+/// Read from git, not the working tree: the checkout may be at another
+/// commit.
 // ignore: avoid-explicit-type-declaration, not obvious from the initializer.
 final JsonSchema? caseSchema = _loadCaseSchema();
 
@@ -73,14 +80,19 @@ final class WorkspaceSandbox {
         : const [];
   }
 
-  /// The images kept for the golden named [name] in the default artifacts
-  /// directory.
+  /// The images kept for the golden named [name] on this platform in the
+  /// default artifacts directory (`<dir>/<platform>/<name>/`).
   Directory artifactsOf(String name) =>
-      .new('${root.path}/.gleon/runs/latest/artifacts/$name');
+      .new('${root.path}/.gleon/runs/latest/artifacts/$hostPlatform/$name');
 
-  /// Whether the case report of the golden named [name] exists.
-  bool hasCase(String name) =>
-      File('${root.path}/.gleon/runs/latest/cases/$name.json').existsSync();
+  /// Whether the case report of the golden named [name] on this platform
+  /// exists.
+  bool hasCase(String name) => _caseFile(name).existsSync();
+
+  /// The case report of the golden named [name] on this platform:
+  /// `cases/<platform>/<name>.json`.
+  File _caseFile(String name) =>
+      .new('${root.path}/.gleon/runs/latest/cases/$hostPlatform/$name.json');
 
   /// A session with the given values of `GLEON_METRICS`,
   /// `GLEON_ARTIFACTS_DIR` and `GLEON_RUN_ID` (unset by default, whatever the
@@ -123,9 +135,10 @@ final class WorkspaceSandbox {
   Uint8List goldenBytes(String key) =>
       File('${root.path}/test/$key').readAsBytesSync();
 
-  /// The case report named [name], validated against the committed schema.
+  /// The case report named [name] on this platform, validated against the
+  /// committed schema.
   Map<String, Object?> readCase(String name) {
-    final file = File('${root.path}/.gleon/runs/latest/cases/$name.json');
+    final file = _caseFile(name);
     expect(file.existsSync(), isTrue, reason: '${file.path} was not written');
     final json = jsonDecode(file.readAsStringSync());
     if (json is! Map<String, Object?>) throw StateError('not an object');
@@ -184,7 +197,19 @@ void expectMatchesCaseSchema(Map<String, Object?> json) {
 }
 
 JsonSchema? _loadCaseSchema() {
-  final file = File('../gleon/gleon-model/schema/case.v2.json');
+  final ProcessResult shown;
+  try {
+    shown = Process.runSync('git', [
+      '-C',
+      '../gleon',
+      'show',
+      '$gleonPin:gleon-model/schema/case.v3.json',
+    ]);
+  } on ProcessException {
+    return null;
+  }
 
-  return file.existsSync() ? JsonSchema.create(file.readAsStringSync()) : null;
+  return shown.exitCode == 0
+      ? JsonSchema.create(shown.stdout.toString())
+      : null;
 }

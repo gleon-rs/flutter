@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gleon/src/core/compare/golden_tolerance.dart';
+import 'package:gleon/src/core/compare/tolerances.dart';
 
 import '../../../helpers/value_semantics.dart';
 
@@ -52,9 +53,38 @@ void main() {
       '${const GoldenTolerance.pixel(maxDiffRatio: .nan)}',
       'pixel ≤ NaN%',
     );
-    expect(GoldenTolerance.describeText(1), 'text ignored');
-    expect(GoldenTolerance.describeText(0.0625), 'text ≤ 6.25% per tile');
-    expect(GoldenTolerance.describeText(0), 'text ≤ 0.00% per tile');
+  });
+
+  test('text tolerances are described per tile', () {
+    expect(Tolerances.describeText(1), 'text ignored');
+    expect(Tolerances.describeText(0.0625), 'text ≤ 6.25% per tile');
+    expect(Tolerances.describeText(0), 'text ≤ 0.00% per tile');
+  });
+
+  test('out-of-range values are rejected by name', () {
+    Matcher rejects(String name) => throwsA(
+      isA<ArgumentError>().having((error) => error.name, 'name', name),
+    );
+
+    expect(() => Tolerances.validate(const .exact()), returnsNormally);
+    expect(
+      () => Tolerances.validate(const .pixel(maxDiffRatio: 1)),
+      returnsNormally,
+    );
+    expect(
+      () => Tolerances.validate(const .pixel(maxDiffRatio: 1.5)),
+      rejects('maxDiffRatio'),
+    );
+    expect(
+      () => Tolerances.validate(const .ssim(minSimilarity: -1)),
+      rejects('minSimilarity'),
+    );
+    expect(
+      () => Tolerances.validate(const .ssim(colorTolerance: .infinity)),
+      rejects('colorTolerance'),
+    );
+    expect(() => Tolerances.validateText(0.5), returnsNormally);
+    expect(() => Tolerances.validateText(.nan), rejects('textTolerance'));
   });
 
   test('values compare by content', () {

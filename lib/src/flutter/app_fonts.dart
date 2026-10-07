@@ -59,29 +59,26 @@ abstract final class AppFonts {
 
   static Future<void> _load() async {
     TestWidgetsFlutterBinding.ensureInitialized();
-    final families = <String, List<String>>{};
     final manifest = json.decode(
       await rootBundle.loadString('FontManifest.json'),
     );
+    bool hasRoboto = false;
     if (manifest is List<Object?>) {
       for (final family in manifest) {
         if (family case {
           'family': final String name,
           'fonts': final List<Object?> fonts,
         }) {
-          families[name] = [
+          await _loadFamily(name, [
             for (final font in fonts)
-              if (font case {'asset': final String asset}) asset,
-          ];
+              if (font case {'asset': final String asset})
+                await rootBundle.load(asset),
+          ]);
+          hasRoboto |= name == 'Roboto';
         }
       }
     }
-    for (final MapEntry(key: family, value: keys) in families.entries) {
-      await _loadFamily(family, [
-        for (final key in keys) await rootBundle.load(key),
-      ]);
-    }
-    if (!families.containsKey('Roboto')) {
+    if (!hasRoboto) {
       await _loadFamily('Roboto', [
         for (final file in _sdkRoboto)
           ByteData.sublistView(await file.readAsBytes()),

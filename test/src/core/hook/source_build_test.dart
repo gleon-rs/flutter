@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gleon/src/core/hook/source_build.dart';
 
+import '../../../helpers/fake_cargo.dart';
+
 void main() {
   Directory? temp;
   setUp(() => temp = Directory.systemTemp.createTempSync('gleon_source_'));
@@ -152,7 +154,7 @@ void main() {
   });
 
   group('run', () {
-    Future<SourceBuildOutput> build(_FakeCargo cargo) => SourceBuild.run(
+    Future<SourceBuildOutput> build(FakeCargo cargo) => SourceBuild.run(
       repoRoot: .file(fakeCheckout()),
       targetDir: .directory('${tempPath()}/cargo'),
       target: .linuxX64,
@@ -161,7 +163,7 @@ void main() {
     );
 
     test('builds the requested target and reports its inputs', () async {
-      final cargo = _FakeCargo();
+      final cargo = FakeCargo();
       final built = await build(cargo);
 
       expect(
@@ -182,7 +184,7 @@ void main() {
 
     test('a failing cargo is an error with its output', () async {
       await expectLater(
-        build(_FakeCargo(exitCode: 101)),
+        build(FakeCargo(exitCode: 101)),
         throwsA(
           isA<ProcessException>()
               .having((error) => error.errorCode, 'exit code', 101)
@@ -197,47 +199,9 @@ void main() {
 
     test('a successful cargo without the library is an error', () async {
       await expectLater(
-        build(_FakeCargo(isWritingLibrary: false)),
+        build(FakeCargo(isWritingLibrary: false)),
         throwsState(contains('cargo succeeded but')),
       );
     });
   });
-}
-
-/// A cargo stand-in that exits with [exitCode] and, on success, writes the
-/// library unless [isWritingLibrary] is false.
-final class _FakeCargo {
-  _FakeCargo({this.exitCode = 0, this.isWritingLibrary = true});
-
-  /// Exit code of every build.
-  final int exitCode;
-
-  /// Whether a successful build writes the library.
-  final bool isWritingLibrary;
-
-  /// Arguments of every call.
-  final calls = <List<String>>[];
-
-  /// A [ProcessRunner].
-  Future<ProcessResult> run(
-    String executable,
-    List<String> arguments, {
-    Map<String, String>? environment,
-    String? workingDirectory,
-  }) {
-    calls.add(arguments);
-    String after(String flag) =>
-        arguments
-            .skipWhile((argument) => argument != flag)
-            .skip(1)
-            .firstOrNull ??
-        (throw ArgumentError('cargo was called without $flag'));
-    if (exitCode == 0 && isWritingLibrary) {
-      File(
-        '${after('--target-dir')}/${after('--target')}/release/libgleon_ffi.so',
-      ).createSync(recursive: true);
-    }
-
-    return .value(ProcessResult(1, exitCode, 'out', 'err'));
-  }
 }

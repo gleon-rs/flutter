@@ -3,9 +3,8 @@
 # that pass no `tolerance`.
 required_version: ">=0.1.0"
 
-# The goldens in test/goldens/ are recorded on an Apple silicon Mac: there
-# their text is compared too; other platforms keep their own goldens in
-# test/goldens/<os>-<arch>/ (see "Real text" in the package README).
+# The goldens in test/goldens/ are recorded on an Apple silicon Mac (see
+# "Real text" in the package README).
 fallback_platform: macos-aarch64
 
 screenshots:
@@ -16,7 +15,7 @@ screenshots:
     diff:
       threshold: 0
 
-# Per-golden case reports in .gleon/runs/latest/cases/; CI turns them on with
-# GLEON_METRICS=1.
+# Per-golden case reports in .gleon/runs/latest/cases/<platform>/; CI turns them
+# on with GLEON_METRICS=1.
 metrics:
   enabled: false

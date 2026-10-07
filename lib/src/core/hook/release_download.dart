@@ -9,7 +9,7 @@ import 'atomic_write.dart';
 import 'native_download_exception.dart';
 import 'native_target.dart';
 
-typedef _Checksums = ({File file, Map<String, String> hashes, bool isCached});
+typedef _Checksums = ({Map<String, String> hashes, bool isCached});
 
 /// Downloads, verifies and caches the prebuilt `gleon-ffi` library from a
 /// GitHub Release. Plain Dart (no Flutter imports): used by `hook/build.dart`
@@ -44,14 +44,19 @@ abstract final class ReleaseDownload {
         name: hash.toLowerCase(),
   };
 
-  /// Returns the verified library for [target] from the release at
-  /// [releaseUrl], downloading it into [cacheDir] only if no verified copy is
-  /// cached yet.
+  /// Returns the verified library for [target] from the release of this
+  /// package's [packageVersion] at [releaseUrl], downloading it into
+  /// [cacheDir] only if no verified copy is cached yet.
+  ///
+  /// The checksum list is cached per URL and version, so a mirror kept across
+  /// upgrades is asked again; a cached list that disagrees with the mirror
+  /// (an entry missing, or a library with another hash) is reloaded once.
   ///
   /// [redirectTimeout] bounds reading the body of a redirect response,
   /// [bodyTimeout] reading a downloaded file.
   static Future<File> fetchLibrary({
     required Uri releaseUrl,
+    required String packageVersion,
     required NativeTarget target,
     required Directory cacheDir,
     Duration redirectTimeout = const Duration(seconds: 30),
@@ -66,6 +71,7 @@ abstract final class ReleaseDownload {
     }
     final fetch = _Release(
       url: releaseUrl,
+      packageVersion: packageVersion,
       cacheDir: cacheDir,
       redirectTimeout: redirectTimeout,
       bodyTimeout: bodyTimeout,
@@ -82,20 +88,22 @@ abstract final class ReleaseDownload {
 final class _Release {
   _Release({
     required this.url,
+    required this.packageVersion,
     required this.cacheDir,
     required this.redirectTimeout,
     required this.bodyTimeout,
   });
 
   final Uri url;
+  final String packageVersion;
   final Directory cacheDir;
   final Duration redirectTimeout;
   final Duration bodyTimeout;
 
   static const _overridesHint =
       'Alternatively set the `ffi_path` user-define to a local copy of the '
-      'library, or `gleon_repo` to build it from a gleon checkout (see the '
-      'package README).';
+      'library, `release_url` to a mirror of the release, or `gleon_repo` to '
+      'build it from a gleon checkout (see the package README).';
 
   static const _attempts = 3;
   static const _maxRedirects = 5;
@@ -113,18 +121,28 @@ final class _Release {
       (url.isScheme('http') &&
           const {'localhost', '127.0.0.1', '::1'}.contains(url.host));
 
+  /// Whether [url] is a `release_url` mirror rather than this package's
+  /// GitHub Release.
+  bool get isMirror => url != ReleaseDownload.defaultUrl(packageVersion);
+
+  /// What a mirror must serve, for errors that a stale mirror would explain.
+  String get _mirrorHint => isMirror
+      ? ' The `release_url` user-define ($url) must serve the release of '
+            'gleon $packageVersion unchanged.'
+      : _noHint;
+
+  static const _noHint = '';
+
   void close() => _client.close(force: true);
 
   Future<File> library(NativeTarget target) async {
-    final expected =
-        await _expectedHash(target) ??
-        (throw NativeDownloadException(
-          'the release at $url has no ${target.assetName} for '
-          '${target.key} in its ${ReleaseDownload.checksumsFileName}.',
-        ));
-    final library = File.fromUri(
-      cacheDir.uri.resolve('$expected/${target.libFileName}'),
-    );
+    _Checksums checksums = await _checksums();
+    if (checksums.hashes[target.assetName] == null && checksums.isCached) {
+      // A cached list can only be stale for a mirror.
+      checksums = await _checksums(isRefresh: true);
+    }
+    String expected = _expected(checksums, target);
+    File library = _cachedLibrary(expected, target);
     if (library.existsSync() &&
         await AtomicWrite.sha256Of(library) == expected) {
       return library;
@@ -132,10 +150,17 @@ final class _Release {
     final assetUrl = url.resolve(target.assetName);
     final bytes = await _download(assetUrl);
     final actual = sha256.convert(bytes).toString();
+    if (actual != expected && checksums.isCached) {
+      // The mirror may have changed since its list was cached.
+      checksums = await _checksums(isRefresh: true);
+      expected = _expected(checksums, target);
+      library = _cachedLibrary(expected, target);
+    }
     if (actual != expected) {
       throw NativeDownloadException(
-        'checksum mismatch for $assetUrl (expected $expected, got $actual). '
-        'The file was not used.',
+        'checksum mismatch for $assetUrl (expected $expected per '
+        '$_checksumsUrl, got $actual). The file was not used.'
+        '$_mirrorHint',
       );
     }
     await AtomicWrite.bytes(library, bytes, expectedSha256: expected);
@@ -143,32 +168,34 @@ final class _Release {
     return library;
   }
 
-  Future<String?> _expectedHash(NativeTarget target) async {
-    final cached = await _checksums();
-    final expected = cached.hashes[target.assetName];
-    if (expected != null || !cached.isCached) return expected;
-    // A cached list can only be stale for a custom, mutable `release_url`.
-    final fresh = await _checksums(isRefresh: true);
+  /// The hash of [target]'s library in [checksums].
+  String _expected(_Checksums checksums, NativeTarget target) =>
+      checksums.hashes[target.assetName] ??
+      (throw NativeDownloadException(
+        'the release at $url has no ${target.assetName} for '
+        '${target.key} in its ${ReleaseDownload.checksumsFileName}.'
+        '$_mirrorHint',
+      ));
 
-    return fresh.hashes[target.assetName];
-  }
+  /// Where the library of [target] with the hash [expected] is cached.
+  File _cachedLibrary(String expected, NativeTarget target) =>
+      .fromUri(cacheDir.uri.resolve('$expected/${target.libFileName}'));
+
+  Uri get _checksumsUrl => url.resolve(ReleaseDownload.checksumsFileName);
 
   /// The checksum list of the release: cached unless [isRefresh], which
   /// replaces a cached copy.
   Future<_Checksums> _checksums({bool isRefresh = false}) async {
-    final checksumsUrl = url.resolve(ReleaseDownload.checksumsFileName);
-    final key = sha256.convert(utf8.encode(checksumsUrl.toString()));
+    final checksumsUrl = _checksumsUrl;
+    // Per version too: a mirror URL may stay the same across upgrades.
+    final key = sha256.convert(utf8.encode('$checksumsUrl\n$packageVersion'));
     final file = File.fromUri(cacheDir.uri.resolve('checksums/$key.txt'));
     // A refresh replaces the cached list atomically below: deleting it first
     // would let a concurrent build find no list at all.
     if (!isRefresh && file.existsSync()) {
       final content = await file.readAsString();
 
-      return (
-        file: file,
-        hashes: ReleaseDownload.parseChecksums(content),
-        isCached: true,
-      );
+      return (hashes: ReleaseDownload.parseChecksums(content), isCached: true);
     }
     final bytes = await _download(checksumsUrl);
     final hashes = ReleaseDownload.parseChecksums(
@@ -181,7 +208,7 @@ final class _Release {
     }
     await AtomicWrite.bytes(file, bytes);
 
-    return (file: file, hashes: hashes, isCached: false);
+    return (hashes: hashes, isCached: false);
   }
 
   /// GETs [source], retrying transient failures with a linear backoff.
@@ -210,9 +237,13 @@ final class _Release {
       await _drain(response);
       if (status == HttpStatus.notFound) {
         throw NativeDownloadException(
-          '$source does not exist (HTTP 404). Prebuilt libraries are attached '
-          'to tagged releases only: depend on a released version (git '
-          '`ref: vX.Y.Z`) rather than an untagged commit. $_overridesHint',
+          isMirror
+              ? '$source does not exist (HTTP 404).$_mirrorHint '
+                    '$_overridesHint'
+              : '$source does not exist (HTTP 404). Prebuilt libraries are '
+                    'attached to tagged releases only: depend on a released '
+                    'version (git `ref: vX.Y.Z`) rather than an untagged '
+                    'commit. $_overridesHint',
         );
       }
       if (status < HttpStatus.internalServerError || isLast) {

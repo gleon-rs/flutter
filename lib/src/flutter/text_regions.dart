@@ -22,8 +22,9 @@ abstract final class TextRegions {
   /// [margin] of its height, clipped by the paragraph (when its text
   /// overflows) and by its ancestors, in whole pixels of the image (rounded
   /// outwards). Text in
-  /// children that are not painted (`Offstage`, `Visibility`) is skipped;
-  /// empty text has no region.
+  /// children that are not painted (`Offstage`, `Visibility`) is skipped, so
+  /// is a line a perspective transform sends to infinity; empty text has no
+  /// region.
   static List<PixelRegion> captured(Element element) {
     RenderObject? boundary = element.renderObject;
     while (boundary != null && !boundary.isRepaintBoundary) {
@@ -44,8 +45,16 @@ abstract final class TextRegions {
     while (pending.isNotEmpty) {
       final (:clip, :object, :toImage) = pending.removeLast();
       for (final line in _lines(object)) {
-        final rect = MatrixUtils.transformRect(toImage, line).intersect(clip);
-        if (!rect.isEmpty) regions.add(_outwards(rect));
+        final transformed = MatrixUtils.transformRect(toImage, line);
+        final rect = transformed.intersect(clip);
+        // A perspective can send a line to infinity (or NaN), which is not
+        // painted; clipped, it would cover the whole clip.
+        if (transformed.isFinite && !rect.isEmpty) {
+          final Rect(:bottom, :left, :right, :top) = rect;
+          regions.add(
+            .outwards(left: left, top: top, right: right, bottom: bottom),
+          );
+        }
       }
       final children = <RenderObject>[];
       object.visitChildren(children.add);
@@ -86,35 +95,44 @@ abstract final class TextRegions {
   /// The lines of text of [object] in its own coordinates, grown by
   /// [margin] of their height and clipped to the object (grown the same)
   /// unless it paints its overflow; none for other render objects.
-  static List<Rect> _lines(RenderObject object) {
-    final (:plain, :size) = switch (object) {
-      RenderParagraph(:final text) => (
-        plain: text.toPlainText(includeSemanticsLabels: false),
-        size: object.size,
-      ),
-      RenderEditable(:final plainText) => (plain: plainText, size: object.size),
-      _ => (plain: _noText, size: Size.zero),
-    };
+  static List<Rect> _lines(RenderObject object) => switch (object) {
+    RenderParagraph(:final overflow, :final size, :final text) => _linesOf(
+      text.toPlainText(includeSemanticsLabels: false),
+      object.getBoxesForSelection,
+      overflow == .visible ? null : Offset.zero & size,
+    ),
+    RenderEditable(:final plainText, :final size) => _linesOf(
+      plainText,
+      object.getBoxesForSelection,
+      Offset.zero & size,
+    ),
+    _ => const [],
+  };
+
+  /// The lines of [plain] text whose selections [boxesOf] gives, clipped to
+  /// [own] (null: the overflow is painted).
+  static List<Rect> _linesOf(
+    String plain,
+    List<TextBox> Function(TextSelection selection) boxesOf,
+    Rect? own,
+  ) {
     final lines = <Rect>[];
     int start = 0;
     // The text between placeholders: a `WidgetSpan` is no text.
     for (final segment in plain.split(_placeholder)) {
       final end = start + segment.length;
       if (end > start) {
-        lines.addAll(_byLine(_boxes(object, start, end)));
+        lines.addAll(
+          _byLine(boxesOf(TextSelection(baseOffset: start, extentOffset: end))),
+        );
       }
       start = end + _placeholder.length;
     }
+
     // Text beyond its object is clipped (an ellipsis, a scrolled field),
     // unless a paragraph paints its overflow; tight boxes may reach a
     // fraction of a pixel beyond it.
-    final isOverflowPainted =
-        object is RenderParagraph && object.overflow == .visible;
-
-    return [
-      for (final line in lines)
-        _grown(line, isOverflowPainted ? null : Offset.zero & size),
-    ];
+    return [for (final line in lines) _grown(line, own)];
   }
 
   /// [line] grown by [margin] of its height, clipped to [own] grown the same.
@@ -123,19 +141,6 @@ abstract final class TextRegions {
     final grown = line.inflate(delta);
 
     return own == null ? grown : grown.intersect(own.inflate(delta));
-  }
-
-  static const _noText = '';
-
-  /// The boxes of the text from [start] to [end] of [object].
-  static List<TextBox> _boxes(RenderObject object, int start, int end) {
-    final selection = TextSelection(baseOffset: start, extentOffset: end);
-
-    return switch (object) {
-      RenderParagraph() => object.getBoxesForSelection(selection),
-      RenderEditable() => object.getBoxesForSelection(selection),
-      _ => const [],
-    };
   }
 
   /// [boxes] merged into one rectangle per line: a box whose middle is within
@@ -155,15 +160,6 @@ abstract final class TextRegions {
     }
 
     return [...lines, ?current];
-  }
-
-  /// [rect] grown to whole pixels.
-  static PixelRegion _outwards(Rect rect) {
-    final Rect(:bottom, :left, :right, :top) = rect;
-    final x = left.floor();
-    final y = top.floor();
-
-    return .new(x: x, y: y, width: right.ceil() - x, height: bottom.ceil() - y);
   }
 }
 

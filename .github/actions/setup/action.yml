@@ -55,7 +55,8 @@ runs:
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: flutter/native/${{ inputs.target }}
-        key: gleon-ffi-${{ inputs.target }}-${{ steps.pin.outputs.gleon_ref }}-${{ hashFiles('flutter/bin/build_native.dart', 'flutter/lib/src/core/hook/native_target.dart', 'flutter/lib/src/core/hook/source_build.dart') }}
+        # Only the files that decide the built and installed bytes (build_native and what it imports).
+        key: gleon-ffi-${{ inputs.target }}-${{ steps.pin.outputs.gleon_ref }}-${{ hashFiles('flutter/bin/build_native.dart', 'flutter/bin/src/*.dart', 'flutter/lib/src/core/hook/native_target.dart', 'flutter/lib/src/core/hook/source_build.dart', 'flutter/lib/src/core/hook/atomic_write.dart') }}
     - name: Check out gleon
       if: ${{ inputs.build == 'true' && steps.cache.outputs.cache-hit != 'true' }}
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

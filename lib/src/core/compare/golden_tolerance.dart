@@ -3,6 +3,8 @@
 
 import 'package:meta/meta.dart';
 
+import 'tolerances.dart';
+
 /// How much a test image may deviate from its golden.
 ///
 /// Without a tolerance, `matchesGoldenFile` compares exactly, like Flutter.
@@ -52,9 +54,6 @@ sealed class GoldenTolerance {
   const factory ssim({double minSimilarity, double colorTolerance}) =
       SsimTolerance;
 
-  /// Throws an [ArgumentError] for out-of-range values.
-  void validate();
-
   /// The thresholds as shown in matcher descriptions and failure messages
   /// (`ssim ≥ 0.800, color ±8`). One exhaustive switch, so a new variant
   /// cannot fall back to `Instance of ...`.
@@ -62,66 +61,11 @@ sealed class GoldenTolerance {
   String toString() => switch (this) {
     ExactTolerance() => 'exact',
     PixelTolerance(:final maxDiffRatio) =>
-      'pixel \u2264 ${_percent(maxDiffRatio)}%',
+      'pixel \u2264 ${Tolerances.percent(maxDiffRatio)}%',
     SsimTolerance(:final colorTolerance, :final minSimilarity) =>
-      'ssim \u2265 ${_decimal(minSimilarity, 3)}, '
-          'color \u00b1${_decimal(colorTolerance, 0, max: 2)}',
+      'ssim \u2265 ${Tolerances.decimal(minSimilarity, 3)}, '
+          'color \u00b1${Tolerances.decimal(colorTolerance, 0, max: 2)}',
   };
-
-  /// The most decimals a threshold is shown with, as in the native engine's
-  /// messages: enough for any threshold a developer sets.
-  static const _maxDecimals = 4;
-
-  /// [value] rounded to [max] decimals, trailing zeros dropped down to [min]
-  /// (`8`, `7.5`, `0.800`); `-0.0` shows as `0`.
-  static String _decimal(double value, int min, {int max = _maxDecimals}) {
-    final fixed = (value == 0 ? 0.0 : value).toStringAsFixed(max);
-    if (fixed.split('.') case [final whole, final fraction]) {
-      final significant =
-          _withoutTrailingZeros.stringMatch(fraction) ?? fraction;
-      final kept = significant.padRight(min, '0');
-
-      return kept.isEmpty ? whole : '$whole.$kept';
-    }
-
-    return fixed; // `NaN`.
-  }
-
-  /// The digits of a fraction up to its trailing zeros.
-  static final _withoutTrailingZeros = RegExp(r'^\d*?(?=0*$)');
-
-  /// [ratio] as a percentage with 2 to 4 decimals (`1.00`, `0.0167`); a
-  /// positive ratio too small to show is `<0.0001`, never a misleading `0.00`.
-  static String _percent(double ratio) {
-    final text = _decimal(ratio * 100, 2);
-
-    return ratio > 0 && double.parse(text) == 0 ? '<0.0001' : text;
-  }
-
-  /// Throws an [ArgumentError] unless [share], a `textTolerance`, is between
-  /// 0.0 and 1.0.
-  static void validateText(double share) => _checkRatio(share, 'textTolerance');
-
-  /// A `textTolerance` as in failure messages: `text ignored` at 1 (text
-  /// never fails), else e.g. `text ≤ 10.00% per tile`.
-  static String describeText(double share) =>
-      share >= 1 ? 'text ignored' : 'text \u2264 ${_percent(share)}% per tile';
-
-  static void _checkRatio(double value, String name) {
-    if (value.isNaN || value < 0 || value > 1) {
-      throw ArgumentError.value(value, name, 'must be between 0.0 and 1.0');
-    }
-  }
-
-  static void _checkColor(double value) {
-    if (!value.isFinite || value < 0 || value > 255) {
-      throw ArgumentError.value(
-        value,
-        'colorTolerance',
-        'must be between 0 and 255',
-      );
-    }
-  }
 }
 
 /// Every pixel must be identical; see [GoldenTolerance.exact].
@@ -133,10 +77,6 @@ final class ExactTolerance extends GoldenTolerance {
 
   @override
   int get hashCode => 'exact'.hashCode;
-
-  @override
-  // ignore: no-empty-block, nothing to configure means nothing to reject.
-  void validate() {}
 
   @override
   bool operator ==(Object other) => other is ExactTolerance;
@@ -154,9 +94,6 @@ final class PixelTolerance extends GoldenTolerance {
 
   @override
   int get hashCode => Object.hash(PixelTolerance, maxDiffRatio);
-
-  @override
-  void validate() => GoldenTolerance._checkRatio(maxDiffRatio, 'maxDiffRatio');
 
   @override
   bool operator ==(Object other) =>
@@ -179,12 +116,6 @@ final class SsimTolerance extends GoldenTolerance {
 
   @override
   int get hashCode => Object.hash(SsimTolerance, minSimilarity, colorTolerance);
-
-  @override
-  void validate() {
-    GoldenTolerance._checkRatio(minSimilarity, 'minSimilarity');
-    GoldenTolerance._checkColor(colorTolerance);
-  }
 
   @override
   bool operator ==(Object other) =>

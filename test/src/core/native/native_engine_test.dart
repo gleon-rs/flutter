@@ -20,7 +20,7 @@ void main() {
         isA<StateError>().having(
           (error) => error.message,
           'message',
-          contains('Rebuild the native library'),
+          allOf(contains('release_url'), contains('ffi_path')),
         ),
       ),
     );
@@ -38,6 +38,7 @@ void main() {
           'message',
           allOf(
             contains('native library was not loaded'),
+            contains('app builds for devices'),
             contains('ffi_path'),
           ),
         ),
