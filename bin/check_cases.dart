@@ -44,9 +44,15 @@ void main(List<String> args) {
           .where((file) => file.path.endsWith('.json'))
           .toList()
         ..sort((a, b) => a.path.compareTo(b.path));
+  // Locations relative to `cases/`, `/`-separated on every OS: the segments
+  // of the file's URI below the directory's (whose URI ends in `/`).
+  final depth = cases.absolute.uri.pathSegments.length - 1;
   final problems = <String>[];
   for (final file in files) {
-    final found = check.problemsOfReport(file.readAsStringSync());
+    final found = check.problemsOfReport(
+      file.readAsStringSync(),
+      location: file.absolute.uri.pathSegments.skip(depth).join('/'),
+    );
     problems.addAll([for (final problem in found) '${file.path}: $problem']);
     stdout.writeln('${found.isEmpty ? 'ok  ' : 'FAIL'} ${file.path}');
   }

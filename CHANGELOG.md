@@ -20,7 +20,8 @@ The first pub.dev release.
 - **Metrics and case reports:** opt-in (`GLEON_METRICS=1`) JSON case reports with the headroom to
   each threshold and a console line per golden, in the gleon CLI's result format; failing goldens
   keep their golden, candidate and diff images, in `failures/` next to the test and in
-  `.gleon/runs/latest/artifacts/`.
+  `.gleon/runs/latest/artifacts/<platform>/`; platforms sharing a workspace keep their reports
+  apart (`.gleon/runs/latest/cases/<platform>/`).
 - **Fast:** 5-20x faster than Flutter's own comparator inside `flutter test` (see the README's
   "Performance").
 - **No Rust needed:** `flutter test` on macOS arm64, Linux x64/arm64 (Ubuntu 26.04+) and

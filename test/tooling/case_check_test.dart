@@ -8,7 +8,7 @@ void main() {
   const shared = 'test/goldens/a.png';
   const linuxOwn = 'test/goldens/linux-x86_64/a.png';
 
-  /// A case report as JSON text.
+  /// A case report of the golden `test/goldens/a` as JSON text.
   String report({
     String path = shared,
     String? fallback,
@@ -18,28 +18,44 @@ void main() {
     bool hasText = true,
     String outcome = 'match',
     String? runId,
-    int version = 2,
+    int version = 3,
   }) => json.encode({
     'comparison': {'text_tolerance': ?(hasText ? text : null)},
     'golden': {'fallback': ?fallback, 'path': path},
+    'name': 'test/goldens/a',
     'outcome': outcome,
     'platform': {'arch': arch, 'os': os},
     'run_id': ?runId,
     'schema_version': version,
   });
 
+  /// The problems of [content] filed at [location] (relative to `cases/`),
+  /// by default where it belongs: `<platform key>/<name>.json`.
+  List<String> problemsOf(CaseCheck check, String content, {String? location}) {
+    final belongs = switch (json.decode(content)) {
+      {
+        'name': final String name,
+        'platform': {'arch': final String arch, 'os': final String os},
+      } =>
+        '${CaseCheck.platformKey(os: os, arch: arch)}/$name.json',
+      _ => 'a.json',
+    };
+
+    return check.problemsOfReport(content, location: location ?? belongs);
+  }
+
   group('with a fallback platform', () {
     const check = CaseCheck(fallbackPlatform: 'macos-aarch64');
 
     test('its own platform compares the shared golden with text', () {
-      expect(check.problemsOfReport(report()), isEmpty);
-      expect(check.problemsOfReport(report(fallback: shared)), [
+      expect(problemsOf(check, report()), isEmpty);
+      expect(problemsOf(check, report(fallback: shared)), [
         'compared $shared, expected $shared itself',
       ]);
-      expect(check.problemsOfReport(report(text: 1)), [
+      expect(problemsOf(check, report(text: 1)), [
         'text tolerance 1.0, expected 0.05',
       ]);
-      expect(check.problemsOfReport(report(hasText: false)), [
+      expect(problemsOf(check, report(hasText: false)), [
         'text tolerance none, expected 0.05',
       ]);
     });
@@ -55,15 +71,15 @@ void main() {
             hasText: text != null,
           );
 
-      expect(check.problemsOfReport(linux(fallback: shared, text: 1)), isEmpty);
-      expect(check.problemsOfReport(linux(text: 1)), [
+      expect(problemsOf(check, linux(fallback: shared, text: 1)), isEmpty);
+      expect(problemsOf(check, linux(text: 1)), [
         'compared its own golden, expected $shared',
       ]);
-      expect(check.problemsOfReport(linux(fallback: shared)), [
+      expect(problemsOf(check, linux(fallback: shared)), [
         'text tolerance none, expected 1.0',
       ]);
       expect(
-        check.problemsOfReport(linux(path: shared, fallback: shared, text: 1)),
+        problemsOf(check, linux(path: shared, fallback: shared, text: 1)),
         [
           'golden.path $shared is not in a linux-x86_64/ directory',
           'compared $shared, expected test/a.png',
@@ -77,13 +93,12 @@ void main() {
 
     test('every platform compares its own golden with text', () {
       expect(
-        check.problemsOfReport(
-          report(path: linuxOwn, os: 'linux', arch: 'x86_64'),
-        ),
+        problemsOf(check, report(path: linuxOwn, os: 'linux', arch: 'x86_64')),
         isEmpty,
       );
       expect(
-        check.problemsOfReport(
+        problemsOf(
+          check,
           report(path: linuxOwn, fallback: shared, os: 'linux', arch: 'x86_64'),
         ),
         ['compared $shared, expected $linuxOwn'],
@@ -100,7 +115,8 @@ void main() {
         'os=ios-sim+arch=arm64',
       );
       expect(
-        check.problemsOfReport(
+        problemsOf(
+          check,
           report(
             path: 'goldens/os=ios-sim+arch=arm64/a.png',
             os: 'ios-sim',
@@ -113,7 +129,8 @@ void main() {
           'golden.path goldens/ios-sim-aarch64/a.png is not in a '
           'os=ios-sim+arch=aarch64/ directory';
       expect(
-        check.problemsOfReport(
+        problemsOf(
+          check,
           report(path: 'goldens/ios-sim-aarch64/a.png', os: 'ios-sim'),
         ),
         [misplaced],
@@ -125,11 +142,11 @@ void main() {
     const check = CaseCheck(fallbackPlatform: 'macos-aarch64');
 
     expect(
-      check.problemsOfReport('{"golden": '),
+      check.problemsOfReport('{"golden": ', location: 'a.json'),
       allOf(hasLength(1), everyElement(startsWith('invalid JSON ('))),
     );
     for (final other in ['[1, 2]', '{}', '"report"', '{"golden": {}}']) {
-      final problems = check.problemsOfReport(other);
+      final problems = check.problemsOfReport(other, location: 'a.json');
       expect(problems, ['not a case report'], reason: other);
     }
   });
@@ -142,17 +159,31 @@ void main() {
     );
 
     expect(
-      check.problemsOfReport(report(outcome: 'identical', runId: 'run-1')),
+      problemsOf(check, report(outcome: 'identical', runId: 'run-1')),
       isEmpty,
     );
-    expect(check.problemsOfReport(report(runId: 'run-2', version: 3)), [
-      'schema_version 3, expected 2',
+    expect(problemsOf(check, report(runId: 'run-2', version: 2)), [
+      'schema_version 2, expected 3',
       'outcome match, expected one of identical',
       'run_id run-2, expected run-1',
     ]);
-    expect(check.problemsOfReport(report(outcome: 'identical')), [
+    expect(problemsOf(check, report(outcome: 'identical')), [
       'run_id none, expected run-1',
     ]);
+  });
+
+  test('a report lies at cases/<platform key>/<name>.json', () {
+    const check = CaseCheck(fallbackPlatform: 'macos-aarch64');
+
+    for (final misplaced in [
+      'test/goldens/a.json',
+      'linux-x86_64/test/goldens/a.json',
+      'macos-aarch64/test/goldens/b.json',
+    ]) {
+      expect(problemsOf(check, report(), location: misplaced), [
+        'lies at $misplaced, expected macos-aarch64/test/goldens/a.json',
+      ]);
+    }
   });
 
   test('a run needs at least --min-cases reports', () {

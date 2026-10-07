@@ -41,12 +41,12 @@ void main() {
     // A widget is compared as raw pixels; its PNG is encoded for a failure.
     expect(report['candidate'], containsPair('sha256', hasLength(64)));
 
+    // The images of this platform: `<dir>/<platform>/<name>/`.
+    const dir = '.gleon/runs/latest/artifacts';
     expect(artifacts, {
-      'candidate':
-          '.gleon/runs/latest/artifacts/test/goldens/swatch/'
-          'candidate.png',
-      'diff': '.gleon/runs/latest/artifacts/test/goldens/swatch/diff.png',
-      'golden': '.gleon/runs/latest/artifacts/test/goldens/swatch/golden.png',
+      'candidate': '$dir/$hostPlatform/test/goldens/swatch/candidate.png',
+      'diff': '$dir/$hostPlatform/test/goldens/swatch/diff.png',
+      'golden': '$dir/$hostPlatform/test/goldens/swatch/golden.png',
     });
     for (final MapEntry(key: kind, value: failure)
         in _flutterFailures.entries) {
@@ -122,7 +122,7 @@ void main() {
         .matcher(Swatch.golden)
         .matchAsync(Swatch.finder);
     final kept = Directory(
-      '${sandbox.root.path}/.gleon/runs/kept/test/goldens/swatch',
+      '${sandbox.root.path}/.gleon/runs/kept/$hostPlatform/test/goldens/swatch',
     );
 
     expect(failure, contains('Failure feedback can be found at'));
@@ -133,7 +133,7 @@ void main() {
       report['artifacts'],
       containsPair(
         'candidate',
-        '.gleon/runs/kept/test/goldens/swatch/candidate.png',
+        '.gleon/runs/kept/$hostPlatform/test/goldens/swatch/candidate.png',
       ),
     );
 
@@ -165,7 +165,10 @@ void main() {
       expect(report, containsPair('run_id', '12345-2'));
       expect(
         report['artifacts'],
-        containsPair('diff', '.gleon/runs/ram/test/goldens/swatch/diff.png'),
+        containsPair(
+          'diff',
+          '.gleon/runs/ram/$hostPlatform/test/goldens/swatch/diff.png',
+        ),
       );
       expect(sandbox.artifactsOf('test/goldens/swatch').existsSync(), isFalse);
     });

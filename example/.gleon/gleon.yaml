@@ -15,7 +15,7 @@ screenshots:
     diff:
       threshold: 0
 
-# Per-golden case reports in .gleon/runs/latest/cases/; CI turns them on with
-# GLEON_METRICS=1.
+# Per-golden case reports in .gleon/runs/latest/cases/<platform>/; CI turns them
+# on with GLEON_METRICS=1.
 metrics:
   enabled: false

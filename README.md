@@ -281,21 +281,24 @@ artifacts: .gleon/runs/latest/artifacts
 ### Failure images
 
 A failing golden covered by a rule also keeps its images in the workspace's artifacts directory,
-`<artifacts>/<test name>/golden.png`, `candidate.png` and `diff.png` (a missing golden keeps its
-candidate only), and its case report (see
+`<artifacts>/<platform>/<test name>/golden.png`, `candidate.png` and `diff.png`, where
+`<platform>` is the platform the test ran on (`macos-aarch64`, `linux-x86_64`, ...; a missing
+golden keeps its candidate only), and its case report (see
 [Metrics](#metrics)), with or without metrics; when the golden passes again, the images are
 removed and so is the report (with metrics, the report of the pass replaces it, and a pass that
 differs from another platform's golden keeps its `candidate.png`). The directory
 is `.gleon/runs/latest/artifacts` unless
 `artifacts:` or the environment variable `GLEON_ARTIFACTS_DIR` (which beats the file) names
-another directory under `.gleon/runs/` outside `latest/` (any other value fails every golden), so
-the images are always ignored by Git. To keep them on a RAM disk,
+another directory under `.gleon/runs/` outside `latest/` (any other value fails every golden;
+`<platform>/` is added below it too), so the images are always ignored by Git. Platforms sharing
+a workspace (a Mac and a Linux container on one checkout) never overwrite each other's images or
+reports. To keep them on a RAM disk,
 link `.gleon/runs` there. The `failures/` files next to the test are written as before.
 
 ## Metrics
 
 Passing goldens don't show how close they came to failing. A golden covered by a rule writes a
-case report to `.gleon/runs/latest/cases/<test name>.json` when it fails, and with metrics on
+case report to `.gleon/runs/latest/cases/<platform>/<test name>.json` when it fails, and with metrics on
 for every comparison (overwritten by each run; `.gleon/.gitignore` ignores `runs/` and is created
 like `gleon init` would if it is missing); metrics also print one line:
 
@@ -316,7 +319,7 @@ outcome
 `missing` for a golden that does not exist yet), the metrics with their headroom to each threshold
 (for SSIM `min_ssim - min_similarity` and `color_tolerance - peak_excess`), the paths of the
 failure images, the test name, platform, Flutter version and timings. The format is a JSON Schema
-in the gleon repository (`gleon-model/schema/case.v2.json`), shared with the CLI.
+in the gleon repository (`gleon-model/schema/case.v3.json`), shared with the CLI.
 
 Reports of different goldens come from different test processes and stay until overwritten, so a
 report does not show by itself which run wrote it. Set `GLEON_RUN_ID` (e.g.
@@ -472,7 +475,7 @@ dcm analyze .                     # DCM 1.39.2, also in example/
 flutter test                      # also in example/
 ```
 
-Case reports written by the tests are validated against `case.v2.json` of the pinned commit
+Case reports written by the tests are validated against `case.v3.json` of the pinned commit
 (`native/gleon_ref`, read with `git show` whatever the checkout's own state) when a gleon checkout
 that has that commit sits next to this repository (`../gleon`, as in CI); without it that check is
 skipped.

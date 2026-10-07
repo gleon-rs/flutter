@@ -51,9 +51,14 @@ final class CaseCheck {
       ? 'os=$os+arch=$arch'
       : '$os-$arch';
 
-  /// What the report [content] (JSON text of one case report file) shows
-  /// that it should not; empty: as expected.
-  List<String> problemsOfReport(String content) {
+  /// The case report schema version gleon writes.
+  static const _schemaVersion = 3;
+
+  /// What the report [content] (JSON text of one case report file at
+  /// [location], `/`-separated and relative to `cases/`) shows that it
+  /// should not; empty: as expected. A report lies at
+  /// `<platform key>/<name>.json`, like the gleon CLI reads it.
+  List<String> problemsOfReport(String content, {required String location}) {
     final Object? decoded;
     try {
       decoded = json.decode(content);
@@ -62,10 +67,13 @@ final class CaseCheck {
     }
     final report = _Case.of(decoded);
     if (report == null) return const ['not a case report'];
-    final _Case(:outcome, :platform, runId: recorded, :version) = report;
+    final _Case(:name, :outcome, :platform, runId: recorded, :version) = report;
+    final belongs = '$platform/$name.json';
 
     return [
-      if (version != 2) 'schema_version $version, expected 2',
+      if (location != belongs) 'lies at $location, expected $belongs',
+      if (version != _schemaVersion)
+        'schema_version $version, expected $_schemaVersion',
       if (!outcomes.contains(outcome))
         'outcome $outcome, expected one of ${outcomes.join(', ')}',
       if (runId case final expected? when recorded != expected)
@@ -117,6 +125,7 @@ final class CaseCheck {
 final class _Case {
   const _Case({
     required this.fallback,
+    required this.name,
     required this.outcome,
     required this.path,
     required this.platform,
@@ -131,12 +140,14 @@ final class _Case {
       'comparison': final Map<String, Object?> comparison,
       'golden':
           {'path': final String path} && final Map<String, Object?> golden,
+      'name': final String name,
       'outcome': final String outcome,
       'platform': {'arch': final String arch, 'os': final String os},
       'schema_version': final int version,
     } =>
       .new(
         fallback: golden['fallback']?.toString(),
+        name: name,
         outcome: outcome,
         path: path,
         platform: CaseCheck.platformKey(os: os, arch: arch),
@@ -149,6 +160,9 @@ final class _Case {
 
   /// The shared golden compared in place of [path], if any.
   final String? fallback;
+
+  /// The canonical name of the golden, the same on every platform.
+  final String name;
 
   /// How the comparison ended.
   final String outcome;

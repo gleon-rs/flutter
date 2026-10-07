@@ -17,14 +17,16 @@ void main() {
       ..writeAsStringSync(content);
   }
 
-  /// A report of macOS that compared the shared golden [path] with text.
-  String report(String path) => json.encode({
+  /// A report of macOS that compared the shared golden [name]`.png` with
+  /// text.
+  String report(String name) => json.encode({
     'comparison': {'text_tolerance': 0.05},
-    'golden': {'path': path},
+    'golden': {'path': '$name.png'},
+    'name': name,
     'outcome': 'match',
     'platform': {'arch': 'aarch64', 'os': 'macos'},
     'run_id': 'run-1',
-    'schema_version': 2,
+    'schema_version': 3,
   });
 
   Future<ProcessResult> checkCases(List<String> args) {
@@ -35,8 +37,8 @@ void main() {
   }
 
   test('a run as expected passes', () async {
-    write('test/goldens/a.json', report('test/goldens/a.png'));
-    write('test/goldens/b.json', report('test/goldens/b.png'));
+    write('macos-aarch64/test/goldens/a.json', report('test/goldens/a'));
+    write('macos-aarch64/test/goldens/b.json', report('test/goldens/b'));
 
     final result = await checkCases([
       '--fallback-platform',
@@ -53,13 +55,15 @@ void main() {
   test('every file is checked, and any problem fails the run', () async {
     write('a.json', '{"golden": ');
     write('b.json', '[]');
-    write('c.json', report('test/goldens/c.png'));
+    write('macos-aarch64/test/goldens/c.json', report('test/goldens/c'));
+    // The flat layout of an older gleon.
+    write('test/goldens/d.json', report('test/goldens/d'));
 
     final result = await checkCases([
       '--fallback-platform',
       'macos-aarch64',
       '--min-cases',
-      '4',
+      '5',
       '--run-id',
       'run-2',
     ]);
@@ -70,7 +74,11 @@ void main() {
         contains('a.json: invalid JSON ('),
         contains('b.json: not a case report'),
         contains('c.json: run_id run-1, expected run-2'),
-        contains('3 case reports, expected at least 4.'),
+        contains(
+          'd.json: lies at test/goldens/d.json, expected '
+          'macos-aarch64/test/goldens/d.json',
+        ),
+        contains('4 case reports, expected at least 5.'),
       ),
     );
     expect(result.stdout, contains('FAIL'));
