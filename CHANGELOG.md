@@ -1,3 +1,19 @@
+## 0.3.0
+
+- **Half the native library:** 0.97 MB instead of 1.88 MB on macOS arm64 (similar on Linux and
+  Windows). Globs of `.gleon/gleon.yaml` match with the small `glob` crate instead of the regex
+  engine of `globset`, and the engine runs on the calling thread instead of a thread pool per test
+  process.
+- **Faster comparisons:** a passing golden is one native call; widget and image captures are
+  compared without a copy of their pixels; equal rows and equal frames take one `memcmp`; the
+  golden is decoded without a copy. 20-37% less native time per golden in the package's
+  measurements (`gleon-model/tests/perf.rs` of the gleon repository).
+- **Breaking:** native ABI 11 (`gleon_golden` takes its scalars as one struct and writes its
+  summary to the caller's buffer): libraries of 0.2.0 from `ffi_path`, `release_url` mirrors or
+  `gleon_repo` checkouts are refused with the ABI message. Glob patterns with `{a,b}`
+  alternatives, `**` inside a segment (`a**`) or a trailing `/` are config errors instead of
+  matching differently than written.
+
 ## 0.2.0
 
 The first pub.dev release.

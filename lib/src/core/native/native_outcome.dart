@@ -6,13 +6,13 @@ import 'package:meta/meta.dart';
 /// What a native call reports: the verdict and the texts to show.
 @immutable
 final class NativeOutcome {
-  /// Creates the outcome.
+  /// Creates the outcome; a summary without texts has none of them.
   const NativeOutcome(
     this.verdict, {
-    required this.errorKind,
-    required this.message,
-    required this.console,
-    required this.warning,
+    this.errorKind = .none,
+    this.message = '',
+    this.console = '',
+    this.warning = '',
   });
 
   /// The verdict.

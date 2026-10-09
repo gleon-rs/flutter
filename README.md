@@ -15,7 +15,7 @@ dev_dependencies:
   gleon:
     git:
       url: https://github.com/gleon-rs/flutter.git
-      ref: v0.2.0 # a released tag: prebuilt libraries exist for tags only
+      ref: v0.3.0 # a released tag: prebuilt libraries exist for tags only
 ```
 
 On the first `flutter test`, the package's build hook downloads the native library for the test
@@ -30,7 +30,7 @@ hooks:
   user_defines:
     gleon:
       ffi_path: path/to/libgleon_ffi.dylib # use this library file as is
-      # release_url: https://mirror.example/gleon/v0.2.0/ # SHA256SUMS.txt + assets
+      # release_url: https://mirror.example/gleon/v0.3.0/ # SHA256SUMS.txt + assets
       # gleon_repo: ../gleon               # contributors: build from a gleon checkout
 ```
 
@@ -339,40 +339,40 @@ A widget golden (a `Finder`), from the captured frame to the verdict: Flutter en
 as a PNG and compares it with its comparator (a pass short-cuts on equal bytes); gleon passes the
 frame's raw pixels and encodes a PNG only to keep it (a failure, or with metrics a pass that
 differs from another platform's golden); a `ui.Image` goes the same way. Rendering the frame is the same for both
-and not measured. Exact, no `.gleon/` workspace; Apple M3 Max, macOS, Flutter 3.47.6, mean
-latency with [bench_press](https://pub.dev/packages/bench_press):
+and not measured. Exact, no `.gleon/` workspace; Apple M3 Max, macOS, Flutter 3.47.6, gleon 0.3.0,
+mean latency with [bench_press](https://pub.dev/packages/bench_press):
 
 | Scenario                                      | Golden    | Flutter SDK | gleon   | Speedup |
 | --------------------------------------------- | --------- | ----------: | ------: | ------: |
-| Passing                                       | 400x300   |     9.49 ms | 0.46 ms |     20x |
-|                                               | 390x844   |     15.2 ms | 1.25 ms |     12x |
-|                                               | 1170x2532 |     87.8 ms |  7.7 ms |     11x |
-| Failing (small change, failure files written) | 400x300   |     43.3 ms |  3.1 ms |     14x |
-|                                               | 390x844   |     77.0 ms |  6.0 ms |     13x |
+| Passing                                       | 400x300   |     9.60 ms | 0.43 ms |     22x |
+|                                               | 390x844   |     15.5 ms | 1.19 ms |     13x |
+|                                               | 1170x2532 |     89.4 ms |  7.3 ms |     12x |
+| Failing (small change, failure files written) | 400x300   |     43.7 ms |  1.9 ms |     23x |
+|                                               | 390x844   |     77.5 ms |  4.2 ms |     18x |
 
-Encoding the PNG is most of Flutter's cost. The 390x844 and 1170x2532 passes resolve to 12.1x and
-11.4x with 95% confidence intervals within ±1%; gleon's other samples (sub-millisecond, or
-writing files) varied too much for bench_press to resolve a ratio.
+Encoding the PNG is most of Flutter's cost. Most of gleon's is the capture itself
+(`toByteData`), then decoding the golden PNG; comparing the pixels is a `memcmp` per equal row.
+gleon's failing samples (writing files) varied too much for bench_press to resolve a ratio.
 
 One golden comparison of PNG bytes (byte inputs), Flutter's own comparator
 (`LocalFileComparator`, behind `flutter_test`'s `matchesGoldenFile`) against gleon, with the same
 golden file and candidate bytes. Measured inside `flutter test`, where golden tests run, with
 [bench_press](https://pub.dev/packages/bench_press) (mean latency; every ratio has a 95% confidence
-interval within ±8%). Apple M3 Max, macOS, Flutter 3.47.5:
+interval within ±8%). Apple M3 Max, macOS, Flutter 3.47.6, gleon 0.3.0:
 
 | Scenario                                      | Golden    | Flutter SDK | gleon (exact) | Speedup | gleon `ssim` |
 | --------------------------------------------- | --------- | ----------: | ------------: | ------: | -----------: |
-| Passing, identical bytes                      | 400x300   |      191 µs |         34 µs |    5.7x |        34 µs |
-|                                               | 390x844   |      213 µs |         36 µs |    5.9x |        36 µs |
-|                                               | 1170x2532 |      423 µs |         45 µs |    9.5x |        45 µs |
-| Passing, re-encoded (same pixels)             | 400x300   |     2.95 ms |       0.53 ms |    5.5x |      0.52 ms |
-|                                               | 390x844   |     7.67 ms |       1.57 ms |    4.9x |      1.57 ms |
-|                                               | 1170x2532 |     56.4 ms |        9.1 ms |    6.2x |       9.3 ms |
-| Failing (small change, failure files written) | 400x300   |     34.6 ms |       1.96 ms |   17.6x |      1.85 ms |
-|                                               | 390x844   |     61.1 ms |       4.44 ms |   13.8x |      4.07 ms |
+| Passing, identical bytes                      | 400x300   |      190 µs |         40 µs |    4.8x |        40 µs |
+|                                               | 390x844   |      211 µs |         42 µs |    5.0x |        42 µs |
+|                                               | 1170x2532 |      429 µs |         51 µs |    8.4x |        51 µs |
+| Passing, re-encoded (same pixels)             | 400x300   |     2.95 ms |       0.52 ms |    5.6x |      0.52 ms |
+|                                               | 390x844   |     8.29 ms |       1.60 ms |    5.2x |      1.61 ms |
+|                                               | 1170x2532 |     56.1 ms |       8.57 ms |    6.5x |       8.68 ms |
+| Failing (small change, failure files written) | 400x300   |     35.7 ms |       1.76 ms |     20x |      1.79 ms |
+|                                               | 390x844   |     63.0 ms |       3.69 ms |     17x |      3.83 ms |
 
-Across all cases gleon is 7.7x faster (geometric mean), and tolerant `ssim` costs no more than
-exact. A failing 1170x2532 golden takes Flutter about 0.4 s and gleon 25 ms; that case is beyond
+Across the resolved cases gleon is 5.8x faster (geometric mean; the failing ones write files and
+varied too much to resolve), and tolerant `ssim` costs no more than exact. A failing 1170x2532 golden takes Flutter about 0.4 s and gleon 25 ms; that case is beyond
 bench_press's 200 ms limit for one operation, so it is a plain timing. Flutter decodes through the
 engine but inverts both images and compares them pixel by pixel in Dart, and a failure renders two
 diff images and encodes four PNGs; gleon decodes and compares in Rust and writes one diff image.
@@ -456,10 +456,12 @@ lives in `lib/src/flutter/` and converts to core types at the boundary. DCM enfo
 
 ### Why leaf FFI calls
 
-Every native call is an `isLeaf: true` call. That allows passing the PNG zero-copy via
-`Uint8List.address` (and a call's strings as one UTF-8 buffer plus a `Uint32List` of their
-lengths) and returning `{ptr, len}` slices by value, so the Dart side never allocates native memory
-(no `package:ffi`, no `malloc`/`free` pairs; only the session is released by a `NativeFinalizer`).
+Every native call is an `isLeaf: true` call. That allows passing the candidate zero-copy via
+`Uint8List.address` (a call's strings as one UTF-8 buffer plus a `Uint32List` of their lengths,
+its scalars as one `Struct.create`d struct) and letting the library write the verdict and
+`{ptr, len}` text slices into another one, so the Dart side never allocates native memory (no
+`package:ffi`, no `malloc`/`free` pairs; only the session is released by a `NativeFinalizer`, and
+the texts of a failure by one more call). A passing golden is one native call.
 The price is that the isolate group cannot reach a GC safepoint while a comparison runs
 (milliseconds for typical goldens, seconds for very large SSIM comparisons). For tests that is the right trade-off: the test
 awaits the result anyway, and `flutter test` parallelizes across processes. Apps that must stay
