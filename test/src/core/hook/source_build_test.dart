@@ -153,6 +153,36 @@ void main() {
     expect(inputs, isNot(contains(root.resolve('gone/Cargo.toml'))));
   });
 
+  test('workspace-inherited and single-quoted paths are followed', () {
+    final root = Uri.directory(fakeCheckout());
+    final manifests = {
+      'Cargo.toml':
+          '[workspace.dependencies]\n'
+          "gleon-model = { path = 'gleon-model' }\n"
+          'outside = { path = "../outside" }\n',
+      '${SourceBuild.crate}/Cargo.toml': 'gleon-model = { workspace = true }',
+      'gleon-model/Cargo.toml': "gleon-engine = { path = '../gleon-engine' }",
+      '../outside/Cargo.toml': '[package]',
+    };
+    for (final MapEntry(key: path, value: content) in manifests.entries) {
+      File.fromUri(root.resolve(path))
+        ..createSync(recursive: true)
+        ..writeAsStringSync(content);
+    }
+
+    final inputs = SourceBuild.inputs(root);
+
+    expect(
+      inputs,
+      containsAll([
+        root.resolve('gleon-model/src/rules.rs'),
+        root.resolve('gleon-engine/src/lib.rs'),
+      ]),
+    );
+    // A crate outside the checkout is not an input of it.
+    expect(inputs, isNot(contains(root.resolve('../outside/Cargo.toml'))));
+  });
+
   group('run', () {
     Future<LibraryFiles> build(FakeCargo cargo) => SourceBuild.run(
       repoRoot: .file(fakeCheckout()),

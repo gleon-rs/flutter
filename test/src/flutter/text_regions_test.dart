@@ -143,6 +143,32 @@ void main() {
     ]);
   });
 
+  testWidgets('text side by side keeps the gap between', (tester) async {
+    await tester.pumpWidget(
+      const _Boundary(
+        Row(
+          mainAxisAlignment: .spaceBetween,
+          crossAxisAlignment: .start,
+          children: [
+            Text('ab', style: _style),
+            SizedBox.square(dimension: 10),
+            Text('cd', style: _style),
+          ],
+        ),
+      ),
+    );
+
+    // Lines merge within a paragraph only: two columns on one line are two
+    // regions, and what lies between them (an icon) is still compared.
+    expect(
+      _regions(tester),
+      unorderedEquals(const [
+        PixelRegion(x: 0, y: 0, width: 22, height: 12),
+        PixelRegion(x: 78, y: 0, width: 22, height: 12),
+      ]),
+    );
+  });
+
   testWidgets('clipped text is clipped', (tester) async {
     await tester.pumpWidget(
       const _Boundary(

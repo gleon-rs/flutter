@@ -88,8 +88,13 @@ final class WorkspaceSandbox {
   /// running test created (for `setUp` users). Read from Flutter's global,
   /// not kept apart, so it can never point at another test's sandbox.
   factory WorkspaceSandbox.current() => switch (goldenFileComparator) {
-    LocalFileComparator(:final basedir)
-        when Directory.fromUri(basedir).parent.path.contains(_prefix) =>
+    // `<temp>/gleon_ws_…/test/` (a directory: its last segment is empty): the
+    // sandbox's own directory, not any path that happens to contain the
+    // prefix.
+    LocalFileComparator(
+      basedir: final basedir && Uri(pathSegments: [..., final name, 'test', _]),
+    )
+        when name.startsWith(_prefix) =>
       ._(Directory.fromUri(basedir).parent),
     final other => throw StateError(
       'no WorkspaceSandbox in this test (goldenFileComparator is a '

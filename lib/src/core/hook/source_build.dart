@@ -32,8 +32,8 @@ abstract final class SourceBuild {
     'rust-toolchain.toml',
   ];
 
-  /// `path = "../<crate>"` dependencies of a `Cargo.toml`.
-  static final _pathDependency = RegExp(r'path\s*=\s*"\.\./([^"/]+)"');
+  /// `path = "<dir>"` dependencies of a `Cargo.toml`, in either quotes.
+  static final _pathDependency = RegExp(r'''path\s*=\s*["']([^"']+)["']''');
 
   /// The arguments of a cargo build subcommand (`build`, `zigbuild`, ...)
   /// that builds [target] into [targetDir]: release, locked, only [crate].
@@ -168,24 +168,43 @@ abstract final class SourceBuild {
     ],
   ];
 
-  /// [crate] and its transitive `path` dependencies inside the checkout.
+  /// [crate] and its transitive `path` dependencies inside the checkout
+  /// [root], as directories relative to it. The workspace's own `path`
+  /// dependencies count too, since members inherit them with
+  /// `workspace = true`: one crate too many only rebuilds more often.
   static Set<String> _localCrates(Uri root) {
     final crates = <String>{};
-    final pending = [crate];
+    final pending = [crate, ..._pathDependencies(root, inside: root)];
     while (pending.isNotEmpty) {
       final member = pending.removeLast();
-      final manifest = File.fromUri(root.resolve('$member/Cargo.toml'));
-      if (crates.add(member) && manifest.existsSync()) {
+      if (crates.add(member)) {
         pending.addAll(
-          _pathDependency
-              .allMatches(manifest.readAsStringSync())
-              .map((match) => match.group(1))
-              .nonNulls,
+          _pathDependencies(root.resolve('$member/'), inside: root),
         );
       }
     }
 
     return crates;
+  }
+
+  /// The `path` dependencies of the manifest in [dir] that lie [inside] the
+  /// checkout, relative to it.
+  static List<String> _pathDependencies(Uri dir, {required Uri inside}) {
+    final manifest = File.fromUri(dir.resolve('Cargo.toml'));
+    // `inside` is a directory: its last segment is empty.
+    final depth = inside.pathSegments.length - 1;
+
+    return manifest.existsSync()
+        ? [
+            for (final match in _pathDependency.allMatches(
+              manifest.readAsStringSync(),
+            ))
+              if (match.group(1) case final path?)
+                if (dir.resolve(path) case final crateDir
+                    when crateDir.path.startsWith(inside.path))
+                  crateDir.pathSegments.skip(depth).join('/'),
+          ]
+        : const [];
   }
 
   static Iterable<Uri> _sources(Uri dir) {

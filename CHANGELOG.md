@@ -4,9 +4,9 @@
   1.88 → 0.98 MB, Linux x64 2.21 → 1.13 MB, Linux arm64 1.97 → 1.00 MB). Globs of
   `.gleon/gleon.yaml` match with the small `glob` crate instead of the regex engine of `globset`,
   and the engine runs on the calling thread instead of a thread pool per test process.
-- **Faster comparisons:** widget and image captures are compared without a copy of their pixels,
-  equal rows and frames take one `memcmp`, the golden is decoded without a copy, and a passing
-  golden without a console line or warning is one native call. Native time per golden: passes
+- **Faster comparisons:** the engine reads widget and image captures in place instead of copying
+  them, equal rows and frames take one `memcmp`, the golden is decoded without a copy, and a
+  passing golden without a console line or warning is one native call. Native time per golden: passes
   12-42% less, failures 9-26% (`gleon-model/tests/perf.rs` of the gleon repository); byte inputs
   in `flutter test` 8-11% faster for re-encoded passes and 11-24% for failures, identical bytes
   unchanged (`bench_press diff` against 0.2.0 on one machine).

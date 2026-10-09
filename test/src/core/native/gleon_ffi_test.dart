@@ -26,8 +26,10 @@ String? _pinnedLib() {
   }
 }
 
-/// The byte offset [write] puts a non-zero value at, in a zeroed struct of
-/// [size] bytes.
+/// The byte offset [write] puts a value at, in a zeroed struct of [size]
+/// bytes. Every value written has no zero byte (`_word`, `_address`, `1 / 3`
+/// is `0x3FD5555555555555`), so its first byte is the field's offset in
+/// either byte order.
 int _offset(int size, void Function(Uint8List bytes) write) {
   final bytes = Uint8List(size);
   write(bytes);
@@ -46,10 +48,10 @@ Map<String, int> _callOffsets() {
       (bytes) => Struct.create<GleonCall>(bytes).candidateFormat = 1,
     ),
     'candidate_height': offset(
-      (bytes) => Struct.create<GleonCall>(bytes).candidateHeight = 1,
+      (bytes) => Struct.create<GleonCall>(bytes).candidateHeight = _word,
     ),
     'candidate_width': offset(
-      (bytes) => Struct.create<GleonCall>(bytes).candidateWidth = 1,
+      (bytes) => Struct.create<GleonCall>(bytes).candidateWidth = _word,
     ),
     'color_tolerance': offset(
       (bytes) => Struct.create<GleonCall>(bytes).colorTolerance = 1 / 3,
@@ -75,7 +77,7 @@ Map<String, int> _callOffsets() {
 Map<String, int> _summaryOffsets() {
   int offset(void Function(Uint8List bytes) write) =>
       _offset(sizeOf<GleonSummary>(), write);
-  final Pointer<Never> set = .fromAddress(1);
+  final Pointer<Never> set = .fromAddress(_address);
 
   return {
     'console': offset(
@@ -102,6 +104,13 @@ Map<String, int> _summaryOffsets() {
     ),
   };
 }
+
+/// A `Uint32` without a zero byte.
+const _word = 0x01010101;
+
+/// A pointer without a zero byte.
+// ignore: avoid_js_rounded_ints, dart:ffi never runs on the web.
+const _address = 0x0101010101010101;
 
 const _noSource = '';
 

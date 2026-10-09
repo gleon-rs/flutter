@@ -41,7 +41,7 @@ void main() {
     );
     expect(
       '${const GoldenTolerance.pixel(maxDiffRatio: 1e-9)}',
-      'pixel ≤ <0.0001%',
+      'pixel <0.0001%',
       reason: 'a positive threshold never reads as zero',
     );
     expect(
@@ -59,6 +59,7 @@ void main() {
     expect(Tolerances.describeText(1), 'text ignored');
     expect(Tolerances.describeText(0.0625), 'text ≤ 6.25% per tile');
     expect(Tolerances.describeText(0), 'text ≤ 0.00% per tile');
+    expect(Tolerances.describeText(1e-9), 'text <0.0001% per tile');
   });
 
   test('out-of-range values are rejected by name', () {
