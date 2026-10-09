@@ -265,8 +265,8 @@ artifacts: .gleon/runs/latest/artifacts
 - **Globs** (`include`, `exclude`, mask `path`) match paths relative to the workspace root,
   case-insensitively: `*` and `?` stay within a directory, `**` (a whole segment) crosses
   directories, `[abc]` and `[!abc]` are character classes. `{a,b}` alternatives, `[^abc]`, `\`,
-  a leading `/` or `./` and a trailing `/` are config errors naming the pattern: they would match
-  differently than written, or differently on Windows.
+  a leading `/`, a `.`, `..` or empty segment and a trailing `/` are config errors naming the
+  pattern: they would match differently than written, differently on Windows, or never.
 - **Priority:** the `tolerance` argument of a call beats the golden's rule, which beats exact;
   `textTolerance` beats the rule's `text_tolerance`. Masks of the rule are added to the call's
   `ignoreRegions`.

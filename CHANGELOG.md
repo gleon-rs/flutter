@@ -16,10 +16,10 @@
 - **Breaking:** native ABI 11 (`gleon_golden` takes its scalars as one struct and writes its
   summary to the caller's buffer; verdict code 0 is an error): libraries of 0.2.0 from
   `ffi_path`, `release_url` mirrors or `gleon_repo` checkouts are refused with the ABI message.
-  Globs that would match differently than written, or differently on Windows, are config errors
-  naming the pattern: `{a,b}` alternatives, `[^...]` (use `[!...]`), `\`, `**` inside a segment
-  (`a**`, `***`), a leading `/` or `./`, a trailing `/`, the empty pattern. `anti_alias` is no
-  longer a config key.
+  Globs that would match differently than written, differently on Windows, or never, are config
+  errors naming the pattern: `{a,b}` alternatives, `[^...]` (use `[!...]`), `\`, `**` inside a
+  segment (`a**`, `***`), a leading `/`, a `.`, `..` or empty segment (`./a`, `../a`, `a//b`), a
+  trailing `/`, the empty pattern. `anti_alias` is no longer a config key.
 
 ## 0.2.0
 
