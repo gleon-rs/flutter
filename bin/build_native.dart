@@ -74,7 +74,7 @@ Future<void> main(List<String> args) async {
   final packageRoot = await _cli.packageRoot();
   final repo = _checkout(options.repo, packageRoot);
   final builtFrom = await _stamp(repo, isDirtyAllowed: options.isDirtyAllowed);
-  await _warnUnlessPinned(packageRoot, repo, builtFrom);
+  _warnUnlessPinned(packageRoot, repo, builtFrom);
   for (final target in targets) {
     final subcommand =
         target.cargoSubcommand(hostOs: hostOs, host: host) ??
@@ -94,14 +94,9 @@ Future<void> main(List<String> args) async {
   }
 }
 
-/// The gleon checkout: [repo] (`--gleon-repo`), `$GLEON_REPO`, else the
-/// sibling of [packageRoot].
+/// The gleon checkout of [Cli.gleonCheckout]; fails unless it is one.
 Directory _checkout(String? repo, Uri packageRoot) {
-  final checkout = Directory(
-    repo ??
-        Platform.environment['GLEON_REPO'] ??
-        packageRoot.resolve('../gleon').toFilePath(),
-  ).absolute;
+  final checkout = Cli.gleonCheckout(repo, packageRoot);
   final manifest = checkout.uri.resolve('${SourceBuild.crate}/Cargo.toml');
   if (!File.fromUri(manifest).existsSync()) {
     _cli.fail('${checkout.path} is not a gleon checkout; pass --gleon-repo.');
@@ -112,12 +107,8 @@ Directory _checkout(String? repo, Uri packageRoot) {
 
 /// Warns when a build of [repo] stamped [builtFrom] is not one of the
 /// commit `native/gleon_ref` pins: the hook refuses it.
-Future<void> _warnUnlessPinned(
-  Uri packageRoot,
-  Directory repo,
-  String builtFrom,
-) async {
-  final pin = await _readPin(packageRoot);
+void _warnUnlessPinned(Uri packageRoot, Directory repo, String builtFrom) {
+  final pin = NativeTarget.readPin(packageRoot);
   if (pin != null && !NativeTarget.isBuildOfPin(builtFrom, pin)) {
     stderr.writeln(
       'warning: ${repo.path} is at $builtFrom, but native/'
@@ -171,31 +162,18 @@ Future<File> _build(
   NativeTarget target,
   List<String> subcommand,
 ) async {
-  final NativeTarget(:libFileName, :rustTriple) = target;
-
-  await _run('rustup', ['target', 'add', rustTriple], repo, isOptional: true);
+  final rustup = ['target', 'add', target.rustTriple];
+  await _run('rustup', rustup, repo, isOptional: true);
   // Explicit: a `CARGO_TARGET_DIR` or `build.target-dir` would build
   // elsewhere, and an old library left in `target/` would be copied instead.
   final targetDir = Directory.fromUri(repo.uri.resolve('target/'));
   await _run(
     'cargo',
-    [
-      ...subcommand,
-      '--release',
-      '--locked',
-      '-p',
-      SourceBuild.crate,
-      '--target',
-      rustTriple,
-      '--target-dir',
-      targetDir.path,
-    ],
+    [...subcommand, ...SourceBuild.cargoArguments(target, targetDir.uri)],
     repo,
     environment: target.cargoEnvironment(Platform.environment),
   );
-  final library = File.fromUri(
-    targetDir.uri.resolve('$rustTriple/release/$libFileName'),
-  );
+  final library = File.fromUri(target.builtLibrary(targetDir.uri));
   if (!library.existsSync()) {
     _cli.fail('cargo succeeded but ${library.path} is missing.');
   }
@@ -229,16 +207,6 @@ Future<void> _run(
   if (exitCode != 0 && !isOptional) {
     _cli.fail('`$command` failed with exit code $exitCode.');
   }
-}
-
-Future<String?> _readPin(Uri packageRoot) async {
-  final pin = File.fromUri(
-    packageRoot.resolve('native/${NativeTarget.pinFileName}'),
-  );
-  if (!pin.existsSync()) return null;
-  final content = await pin.readAsString();
-
-  return content.trim();
 }
 
 /// The stamp of a build of [repo]: its commit, with

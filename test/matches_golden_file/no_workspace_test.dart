@@ -4,12 +4,11 @@ import 'dart:ui';
 import 'package:gleon/gleon.dart';
 import 'package:gleon/src/flutter/gleon_matches_golden_file.dart';
 
-import '../helpers/golden_sandbox.dart';
 import '../helpers/swatch.dart';
 import '../helpers/workspace_sandbox.dart';
 
 void main() {
-  GoldenSandbox.install();
+  setUp(WorkspaceSandbox.withoutWorkspace);
 
   GleonMatchesGoldenFile matcher() => .new(
     Uri.parse(Swatch.golden),
@@ -21,7 +20,10 @@ void main() {
     await tester.pumpWidget(const Swatch());
     await expectLater(Swatch.finder, matcher());
 
-    expect(Directory('${GoldenSandbox.dir.path}/.gleon').existsSync(), isFalse);
+    expect(
+      Directory('${WorkspaceSandbox.current.root.path}/.gleon').existsSync(),
+      isFalse,
+    );
     expect(Directory('.gleon').existsSync(), isFalse);
   });
 

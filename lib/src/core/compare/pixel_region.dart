@@ -2,7 +2,7 @@ import 'package:meta/meta.dart';
 
 /// An axis-aligned rectangle in whole pixels of an image (origin top-left).
 ///
-/// Used both for masks sent to the engine and for regions it reports.
+/// Masks and text regions sent to the engine.
 @immutable
 @pragma('vm:deeply-immutable')
 final class PixelRegion {

@@ -7,7 +7,7 @@ import 'package:gleon/src/core/compare/pixel_region.dart';
 import 'package:gleon/src/flutter/text_regions.dart';
 
 import '../helpers/caption.dart';
-import '../helpers/golden_sandbox.dart';
+import '../helpers/workspace_sandbox.dart';
 
 // A golden with real fonts, recorded on macOS, passes on every OS of CI: by
 // default text never fails (OSes rasterize glyphs differently), everything else
@@ -15,7 +15,7 @@ import '../helpers/golden_sandbox.dart';
 // `textTolerance` compares text (for goldens of one OS).
 void main() {
   setUpAll(loadAppFonts);
-  GoldenSandbox.install();
+  setUp(WorkspaceSandbox.withoutWorkspace);
   final field = TextEditingController(text: 'Field ǺÅÉ gq');
   tearDownAll(field.dispose);
 

@@ -207,7 +207,7 @@ the candidate, for a failure or a recorded pass that differs from another platfo
 (`ArgumentError` with `ssim`; a warning when an SSIM rule, a byte or an image input leaves a
 `textTolerance` unused); `ignoreRegions` beat
 it, for unstable backgrounds under text. Without a `textTolerance`, the `text_tolerance` of the
-golden's `.gleon/gleon.yaml` rule applies, else the golden's default (0.05 or 1, see above).
+golden's `.gleon/gleon.yaml` rule applies, else the golden's default (see above).
 Byte and image inputs (`Uint8List`, `ui.Image`) have no text boxes: their text is compared like
 every other pixel, so against another OS's golden they need their own per-platform golden.
 
@@ -253,7 +253,7 @@ screenshots:
   - include: "test/**/*.png"
     mode: pixel
     diff: { threshold: 0.01 } # max fraction of differing pixels; 0 = exact
-    text_tolerance: 1 # pixel only, see Real text (1: text never fails, on every platform)
+    text_tolerance: 1 # pixel only, see Real text
 
 metrics:
   enabled: false
@@ -398,8 +398,7 @@ The defaults are calibrated on a corpus of benign rendering noise vs. regression
 ## Known PoC limitations
 
 - `ssim` fails when glyphs move by half a pixel or more — typical of different operating
-  systems' font engines. Use real fonts with `exact` or `pixel` instead (see Real text: text is
-  ignored against another OS's golden by default).
+  systems' font engines. Use real fonts with `exact` or `pixel` instead (see Real text).
 - `ssim` can pass a low-contrast color change of a one-pixel line. Use `exact`/`pixel` where every
   pixel matters.
 - Only Flutter's default `LocalFileComparator` is supported as the underlying golden store.

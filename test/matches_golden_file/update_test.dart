@@ -2,17 +2,19 @@ import 'dart:io';
 
 import 'package:gleon/gleon.dart';
 
-import '../helpers/golden_sandbox.dart';
 import '../helpers/golden_updates.dart';
 import '../helpers/swatch.dart';
+import '../helpers/workspace_sandbox.dart';
 
 void main() {
-  GoldenSandbox.install();
+  setUp(WorkspaceSandbox.withoutWorkspace);
 
   testWidgets('--update-goldens writes through Flutter paths incl. version', (
     tester,
   ) async {
-    final written = File('${GoldenSandbox.dir.path}/goldens/tmp_update.2.png');
+    final written = File(
+      '${WorkspaceSandbox.current.dir.path}/goldens/tmp_update.2.png',
+    );
     await tester.pumpWidget(const Swatch(dot: Swatch.dotOffset));
     await withGoldenUpdates(
       () => expectLater(
@@ -26,6 +28,6 @@ void main() {
     );
 
     expect(written.existsSync(), isTrue);
-    expect(GoldenSandbox.failures.existsSync(), isFalse);
+    expect(WorkspaceSandbox.current.failures.existsSync(), isFalse);
   });
 }

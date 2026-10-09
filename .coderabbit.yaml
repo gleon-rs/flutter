@@ -183,5 +183,5 @@ code_generation:
           network access: use local servers and temp directories.
       - path: "lib/src/flutter/**/*.dart"
         instructions: >
-          Golden tests live in test/matches_golden_file/ and use the GoldenSandbox helper so
+          Golden tests live in test/matches_golden_file/ and use the WorkspaceSandbox helper so
           parallel test files never race on failure artifacts.

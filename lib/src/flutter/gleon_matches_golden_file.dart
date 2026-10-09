@@ -116,11 +116,12 @@ class GleonMatchesGoldenFile extends flutter_test.MatchesGoldenFile {
     try {
       if (isUpdate) {
         await comparator.update(uri, png);
-
-        return null;
+      } else {
+        // Throws a TestFailure unless the golden passes.
+        await comparator.compare(png, uri);
       }
 
-      return await comparator.compare(png, uri) ? null : 'does not match';
+      return null;
     } on flutter_test.TestFailure catch (error) {
       return error.message;
     }

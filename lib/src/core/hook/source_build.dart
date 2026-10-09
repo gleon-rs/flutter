@@ -35,6 +35,20 @@ abstract final class SourceBuild {
   /// `path = "../<crate>"` dependencies of a `Cargo.toml`.
   static final _pathDependency = RegExp(r'path\s*=\s*"\.\./([^"/]+)"');
 
+  /// The arguments of a cargo build subcommand (`build`, `zigbuild`, ...)
+  /// that builds [target] into [targetDir]: release, locked, only [crate].
+  /// The library lands at [NativeTarget.builtLibrary].
+  static List<String> cargoArguments(NativeTarget target, Uri targetDir) => [
+    '--release',
+    '--locked',
+    '--package',
+    crate,
+    '--target',
+    target.rustTriple,
+    '--target-dir',
+    targetDir.toFilePath(),
+  ];
+
   /// Builds [target] from the checkout at [repoRoot] into [targetDir]
   /// (cargo's `--target-dir`), using [environment] (the hook's process
   /// environment) to find cargo and to pass its settings on; [runProcess]
@@ -48,34 +62,23 @@ abstract final class SourceBuild {
   }) async {
     final root = checkoutRoot(repoRoot);
     final cargo = findCargo(environment);
-    final triple = target.rustTriple;
     final result = await runProcess(
       cargo,
-      [
-        'build',
-        '--release',
-        '--locked',
-        '--package',
-        crate,
-        '--target',
-        triple,
-        '--target-dir',
-        targetDir.toFilePath(),
-      ],
+      ['build', ...cargoArguments(target, targetDir)],
       environment: target.cargoEnvironment(environment),
       workingDirectory: root.toFilePath(),
     );
     if (result.exitCode != 0) {
       throw ProcessException(
         cargo,
-        ['build', '--package', crate, '--target', triple],
+        ['build', '--package', crate, '--target', target.rustTriple],
         'gleon: failed to build the native library (exit ${result.exitCode}).'
         '\n${result.stdout}\n${result.stderr}',
         result.exitCode,
       );
     }
 
-    final library = targetDir.resolve('$triple/release/${target.libFileName}');
+    final library = target.builtLibrary(targetDir);
     if (!File.fromUri(library).existsSync()) {
       throw StateError(
         'gleon: cargo succeeded but ${library.toFilePath()} is missing.',

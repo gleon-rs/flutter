@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gleon/src/core/hook/native_download_exception.dart';
 import 'package:gleon/src/core/hook/native_target.dart';
 import 'package:gleon/src/core/hook/release_download.dart';
 
@@ -33,11 +32,7 @@ void main() {
   );
 
   Matcher throwsDownload(Object message) => throwsA(
-    isA<NativeDownloadException>().having(
-      (error) => error.message,
-      'message',
-      message,
-    ),
+    isA<StateError>().having((error) => error.message, 'message', message),
   );
 
   test('downloads, verifies and then reuses the cached library', () async {
@@ -358,9 +353,5 @@ void main() {
       throwsDownload(contains('more than 5 redirects')),
     );
     expect(server.hits[target.assetName], 6);
-  });
-
-  test('download errors name the package', () {
-    expect('${const NativeDownloadException('boom')}', 'gleon: boom');
   });
 }

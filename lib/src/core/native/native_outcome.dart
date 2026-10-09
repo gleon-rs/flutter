@@ -9,10 +9,10 @@ final class NativeOutcome {
   /// Creates the outcome.
   const NativeOutcome(
     this.verdict, {
-    this.errorKind = .none,
-    this.message = '',
-    this.console = '',
-    this.warning = '',
+    required this.errorKind,
+    required this.message,
+    required this.console,
+    required this.warning,
   });
 
   /// The verdict.

@@ -25,8 +25,7 @@ import 'ignore_regions.dart';
 ///   while everything else is compared under an exact or pixel [tolerance]:
 ///   the largest share (0.0–1.0) of differing pixels in any 16x16 tile of
 ///   text. Null uses the `text_tolerance` of the golden's `.gleon/gleon.yaml`
-///   rule, else the golden's default (0.05 for a golden recorded on this
-///   platform, else 1: text never fails; see the README's "Real text"). A
+///   rule, else the golden's default (see the README's "Real text"). A
 ///   value set here always applies (1 turns text comparison off). Byte and
 ///   image inputs have no text boxes: their text is compared like every
 ///   other pixel.

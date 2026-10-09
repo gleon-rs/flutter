@@ -4,15 +4,15 @@ import 'dart:typed_data';
 
 import 'package:gleon/gleon.dart';
 
-import '../helpers/golden_sandbox.dart';
 import '../helpers/golden_updates.dart';
 import '../helpers/swatch.dart';
+import '../helpers/workspace_sandbox.dart';
 
 void main() {
-  GoldenSandbox.install();
+  setUp(WorkspaceSandbox.withoutWorkspace);
 
   testWidgets('matches List<int> of the golden itself', (tester) async {
-    final bytes = File('${GoldenSandbox.dir.path}/${Swatch.golden}')
+    final bytes = File('${WorkspaceSandbox.current.dir.path}/${Swatch.golden}')
         .readAsBytesSync();
     await tester.runAsync(
       () => expectLater(bytes, matchesGoldenFile(Swatch.golden)),
@@ -32,7 +32,7 @@ void main() {
   // Finder inputs cannot overlap (Flutter forbids concurrent `runAsync`), but
   // byte inputs can: each match must still use its own tolerance.
   test('concurrent byte matches do not interfere', () async {
-    final bytes = File('${GoldenSandbox.dir.path}/${Swatch.golden}')
+    final bytes = File('${WorkspaceSandbox.current.dir.path}/${Swatch.golden}')
         .readAsBytesSync();
 
     await Future.wait([
@@ -49,7 +49,7 @@ void main() {
   });
 
   test('a failing concurrent match leaves the others intact', () async {
-    final bytes = File('${GoldenSandbox.dir.path}/${Swatch.golden}')
+    final bytes = File('${WorkspaceSandbox.current.dir.path}/${Swatch.golden}')
         .readAsBytesSync();
     final before = goldenFileComparator;
     final [intact, failed, alsoIntact] = await Future.wait([
@@ -75,7 +75,8 @@ void main() {
 
     expect(goldenFileComparator, same(before));
     bytes.complete(
-      File('${GoldenSandbox.dir.path}/${Swatch.golden}').readAsBytesSync(),
+      File('${WorkspaceSandbox.current.dir.path}/${Swatch.golden}')
+          .readAsBytesSync(),
     );
     expect(await pending, isNull);
   });
@@ -83,7 +84,9 @@ void main() {
   // Like a match abandoned by a timed-out test that goes on during the next
   // test, which installed another comparator and runs with --update-goldens.
   test('a late match keeps its own comparator and update flag', () async {
-    final golden = File('${GoldenSandbox.dir.path}/${Swatch.golden}');
+    final golden = File(
+      '${WorkspaceSandbox.current.dir.path}/${Swatch.golden}',
+    );
     final original = golden.readAsBytesSync();
     final bytes = Completer<List<int>>();
     final pending = matchesGoldenFile(Swatch.golden).matchAsync(bytes.future);
@@ -95,9 +98,7 @@ void main() {
     autoUpdateGoldenFiles = true;
     // Another image than the golden: compared, it fails; written, it would
     // replace the golden.
-    bytes.complete(
-      File('${GoldenSandbox.source}/caption.png').readAsBytesSync(),
-    );
+    bytes.complete(File('$goldenSource/caption.png').readAsBytesSync());
 
     expect(await pending, isNotNull);
     expect(spy.calls, isEmpty);
@@ -106,7 +107,7 @@ void main() {
   });
 
   test('a byte update that fails is the failure message', () async {
-    final bytes = File('${GoldenSandbox.dir.path}/${Swatch.golden}')
+    final bytes = File('${WorkspaceSandbox.current.dir.path}/${Swatch.golden}')
         .readAsBytesSync();
     goldenFileComparator = _SpyComparator();
 
@@ -117,13 +118,13 @@ void main() {
   });
 
   test('a version names the golden of bytes', () async {
-    final bytes = File('${GoldenSandbox.dir.path}/${Swatch.golden}')
+    final bytes = File('${WorkspaceSandbox.current.dir.path}/${Swatch.golden}')
         .readAsBytesSync();
     final matcher = matchesGoldenFile('goldens/versioned.png', version: 3);
 
     expect(await withGoldenUpdates(() => matcher.matchAsync(bytes)), isNull);
     expect(await matcher.matchAsync(bytes), isNull);
-    final sandbox = '${GoldenSandbox.dir.path}/goldens';
+    final sandbox = '${WorkspaceSandbox.current.dir.path}/goldens';
     expect(File('$sandbox/versioned.3.png').readAsBytesSync(), bytes);
     expect(File('$sandbox/versioned.png').existsSync(), isFalse);
   });
@@ -158,9 +159,10 @@ void main() {
 
   test('keys with spaces and nested folders resolve like Flutter', () async {
     final golden = File(
-      '${GoldenSandbox.dir.path}/goldens/nested dir/swatch copy.png',
+      '${WorkspaceSandbox.current.dir.path}/goldens/nested dir/swatch copy.png',
     )..parent.createSync(recursive: true);
-    File('${GoldenSandbox.dir.path}/${Swatch.golden}').copySync(golden.path);
+    File('${WorkspaceSandbox.current.dir.path}/${Swatch.golden}')
+        .copySync(golden.path);
     final bytes = golden.readAsBytesSync();
 
     await expectLater(
@@ -174,7 +176,7 @@ void main() {
   });
 
   test('a match outside any test zone still works', () async {
-    final bytes = File('${GoldenSandbox.dir.path}/${Swatch.golden}')
+    final bytes = File('${WorkspaceSandbox.current.dir.path}/${Swatch.golden}')
         .readAsBytesSync();
     final matcher = matchesGoldenFile(Swatch.golden);
 

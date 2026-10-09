@@ -2,6 +2,7 @@
 // ignore_for_file: avoid-duplicate-constant-values
 
 import 'dart:ffi' show Abi;
+import 'dart:io' show File;
 
 /// A host platform the `gleon-ffi` library is built and released for.
 ///
@@ -63,6 +64,14 @@ enum NativeTarget {
   static bool isBuildOfPin(String? builtFrom, String pinned) =>
       builtFrom == pinned || builtFrom == '$pinned$dirtySuffix';
 
+  /// The gleon commit `native/<pinFileName>` of the package at [packageRoot]
+  /// pins, or null without that file (the pub.dev archive ships none).
+  static String? readPin(Uri packageRoot) {
+    final pin = File.fromUri(packageRoot.resolve('native/$pinFileName'));
+
+    return pin.existsSync() ? pin.readAsStringSync().trim() : null;
+  }
+
   /// Operating system, named like `code_assets`' `OS.name` and `dart:ffi`'s
   /// `Abi` (`macos`, `linux`, `windows`).
   final String os;
@@ -87,6 +96,11 @@ enum NativeTarget {
     [final rustArch, ...] => '$os-$rustArch',
     _ => key,
   };
+
+  /// The library cargo builds for this target into [targetDir] (its
+  /// `--target-dir`, see `SourceBuild.cargoArguments`).
+  Uri builtLibrary(Uri targetDir) =>
+      targetDir.resolve('$rustTriple/release/$libFileName');
 
   /// Flat, unique file name of this target's GitHub Release asset, e.g.
   /// `libgleon_ffi-macos-arm64.dylib`.
@@ -188,14 +202,6 @@ enum NativeTarget {
 
   /// All target keys, comma-separated (for messages).
   static String get keys => values.map((target) => target.key).join(', ');
-
-  /// The target the hooks runner asks for, or null when it has no library:
-  /// [os] and [arch] are the names of `code_assets`' `OS` and `Architecture`.
-  ///
-  /// Flutter runs the build hooks of dev_dependencies for every non-release
-  /// build, so an app built for a device (Android, iOS) asks too: it gets no
-  /// library instead of a failing build.
-  static NativeTarget? requested(String os, String arch) => byKey('$os-$arch');
 
   /// Looks up a target by [key] (`<os>-<arch>`), or returns null.
   static NativeTarget? byKey(String key) =>

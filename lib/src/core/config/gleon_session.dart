@@ -27,16 +27,20 @@ final class GleonSession implements Finalizable {
          environment: environment,
          integration: integration,
        ) {
-    NativeEngine.sessionFinalizer.attach(
-      this,
-      handle.cast<Void>(),
-      detach: this,
-    );
+    _finalizer.attach(this, handle.cast<Void>(), detach: this);
   }
 
   /// The native session, released by [dispose] or when this object is
   /// garbage collected.
   final Pointer<GleonSessionHandle> handle;
+
+  /// Releases sessions that are garbage collected.
+  static final _finalizer = NativeFinalizer(
+    Native.addressOf<
+          NativeFunction<Void Function(Pointer<GleonSessionHandle> session)>
+        >(GleonFfi.sessionFree)
+        .cast<NativeFinalizerFunction>(),
+  );
 
   bool _isDisposed = false;
 
@@ -49,7 +53,7 @@ final class GleonSession implements Finalizable {
   void dispose() {
     if (_isDisposed) return;
     _isDisposed = true;
-    NativeEngine.sessionFinalizer.detach(this);
+    _finalizer.detach(this);
     GleonFfi.sessionFree(handle);
   }
 }

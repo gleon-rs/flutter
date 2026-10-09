@@ -33,9 +33,8 @@ Future<void> _build(BuildInput input, BuildOutputBuilder output) async {
   ) = input;
   if (!config.buildCodeAssets) return;
   final CodeConfig(:targetArchitecture, :targetOS) = config.code;
-  final requested = NativeTarget.requested(
-    targetOS.name,
-    targetArchitecture.name,
+  final requested = NativeTarget.byKey(
+    '${targetOS.name}-${targetArchitecture.name}',
   );
   if (requested == null) return;
   final (:dependencies, :library) = await NativeLibrary(

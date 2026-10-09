@@ -56,8 +56,8 @@ final class FakeCargo {
       final built = NativeTarget.values.firstWhere(
         (target) => target.rustTriple == triple,
       );
-      final library = '$triple/release/${built.libFileName}';
-      File('${after('--target-dir')}/$library').createSync(recursive: true);
+      final targetDir = Directory(after('--target-dir')).uri;
+      File.fromUri(built.builtLibrary(targetDir)).createSync(recursive: true);
     }
 
     return .value(ProcessResult(1, exitCode, 'out', 'err'));

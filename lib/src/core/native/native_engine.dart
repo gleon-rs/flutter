@@ -21,14 +21,6 @@ abstract final class NativeEngine {
   /// `gleon-ffi`). Keep both in lockstep.
   static const expectedAbiVersion = 10;
 
-  /// Releases sessions that are garbage collected.
-  static final sessionFinalizer = NativeFinalizer(
-    Native.addressOf<
-          NativeFunction<Void Function(Pointer<GleonSessionHandle> session)>
-        >(GleonFfi.sessionFree)
-        .cast<NativeFinalizerFunction>(),
-  );
-
   /// Asked once per process, on the first call.
   // ignore: avoid-explicit-type-declaration, not obvious from the initializer.
   static final int _abiVersion = loadAbiVersion(GleonFfi.abiVersion);
