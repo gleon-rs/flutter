@@ -65,9 +65,7 @@ final class NativeLibrary {
 
   /// The library and the files it came from, in the order of the class
   /// documentation; [runProcess] runs cargo for `gleon_repo` builds.
-  Future<SourceBuildOutput> resolve({
-    ProcessRunner runProcess = Process.run,
-  }) async {
+  Future<LibraryFiles> resolve({ProcessRunner runProcess = Process.run}) async {
     if (_path('ffi_path') case final override?) {
       if (!File.fromUri(override).existsSync()) {
         throw StateError(
@@ -105,7 +103,7 @@ final class NativeLibrary {
     return path;
   }
 
-  Future<SourceBuildOutput> _prebuilt() async {
+  Future<LibraryFiles> _prebuilt() async {
     const pinFile = NativeTarget.pinFileName;
     final nativeDir = packageRoot.resolve('native/');
     final targetDir = nativeDir.resolve('${target.key}/');

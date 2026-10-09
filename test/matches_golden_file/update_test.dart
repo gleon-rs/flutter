@@ -13,7 +13,7 @@ void main() {
     tester,
   ) async {
     final written = File(
-      '${WorkspaceSandbox.current.dir.path}/goldens/tmp_update.2.png',
+      '${WorkspaceSandbox.current().dir.path}/goldens/tmp_update.2.png',
     );
     await tester.pumpWidget(const Swatch(dot: Swatch.dotOffset));
     await withGoldenUpdates(
@@ -28,6 +28,6 @@ void main() {
     );
 
     expect(written.existsSync(), isTrue);
-    expect(WorkspaceSandbox.current.failures.existsSync(), isFalse);
+    expect(WorkspaceSandbox.current().failures.existsSync(), isFalse);
   });
 }

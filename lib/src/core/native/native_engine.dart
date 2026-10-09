@@ -114,6 +114,9 @@ abstract final class NativeEngine {
     List<PixelRegion> textRegions = const [],
     double? textTolerance,
   }) {
+    if (session.isDisposed) {
+      throw StateError('gleon: the session was disposed.');
+    }
     final (strings, lengths) = _pack([
       goldenPath,
       goldenUri,
@@ -133,9 +136,6 @@ abstract final class NativeEngine {
       ..minSimilarity = similarity
       ..colorTolerance = color
       ..textTolerance = textTolerance ?? .nan;
-    if (session.isDisposed) {
-      throw StateError('gleon: the session was disposed.');
-    }
     final summary = Struct.create<GleonSummary>();
     GleonFfi.golden(
       session.handle,
@@ -168,10 +168,17 @@ abstract final class NativeEngine {
       :warning,
     ) = summary;
     if (texts == nullptr) {
-      return NativeOutcome(
-        NativeVerdict.of(verdict),
-        errorKind: NativeErrorKind.of(errorKind),
-      );
+      final outcome = NativeVerdict.of(verdict);
+
+      // Every failure has a message: a textless one is a summary the library
+      // never wrote (all zeros, verdict `error`).
+      return outcome.isPass
+          ? NativeOutcome(outcome)
+          : const NativeOutcome(
+              .error,
+              errorKind: .internal,
+              message: 'gleon: the native library wrote no result.',
+            );
     }
     try {
       return NativeOutcome(
@@ -182,7 +189,7 @@ abstract final class NativeEngine {
         warning: _text(warning),
       );
     } finally {
-      GleonFfi.resultFree(texts);
+      GleonFfi.textsFree(texts);
     }
   }
 

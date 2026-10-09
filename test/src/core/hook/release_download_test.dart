@@ -31,8 +31,13 @@ void main() {
     bodyTimeout: bodyTimeout,
   );
 
+  // Hook errors are printed verbatim: every one names gleon first.
   Matcher throwsDownload(Object message) => throwsA(
-    isA<StateError>().having((error) => error.message, 'message', message),
+    isA<StateError>().having(
+      (error) => error.message,
+      'message',
+      allOf(startsWith('gleon: '), message),
+    ),
   );
 
   test('downloads, verifies and then reuses the cached library', () async {

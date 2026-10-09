@@ -68,7 +68,7 @@ abstract final class GleonFfi {
   /// straight RGBA8 of the call's width x height) and `[x, y, width, height]`
   /// pixel masks and text regions. Writes the verdict and texts to [summary];
   /// its `texts` (null when there are none) must be released with
-  /// [resultFree].
+  /// [textsFree].
   @Native<
     Void Function(
       Pointer<GleonSessionHandle> session,
@@ -102,26 +102,25 @@ abstract final class GleonFfi {
     int textRegionCount,
   );
 
-  /// `gleon_result_free`: releases the texts of a summary (and every slice
-  /// borrowed from them).
-  @Native<Void Function(Pointer<GleonResult> result)>(
-    symbol: 'gleon_result_free',
+  /// `gleon_texts_free`: releases the texts of a summary (and every slice
+  /// borrowed from them), once.
+  @Native<Void Function(Pointer<GleonTexts> texts)>(
+    symbol: 'gleon_texts_free',
     isLeaf: true,
   )
-  external static void resultFree(Pointer<GleonResult> result);
+  external static void textsFree(Pointer<GleonTexts> texts);
 }
 
 /// Opaque texts of a `GleonSummary` owned by the native library: created by
-/// `gleon_golden`, released only by `gleon_result_free`.
-final class GleonResult extends Opaque {}
+/// `gleon_golden`, released only by `gleon_texts_free`.
+final class GleonTexts extends Opaque {}
 
 /// Opaque `GleonSession` owned by the native library: created by
 /// `gleon_session_new`, released only by `gleon_session_free`.
 final class GleonSessionHandle extends Opaque {}
 
-/// The safer-ffi `c_slice::Ref<u8>` returned by value: a borrowed view into
-/// the texts of a `GleonSummary`, valid until they are freed (empty for
-/// "none").
+/// The safer-ffi `c_slice::Ref<u8>` fields of a `GleonSummary`: a borrowed
+/// view into its texts, valid until they are freed (empty for "none").
 final class NativeSlice extends Struct {
   /// First byte (dangling when [len] is 0).
   external Pointer<Uint8> ptr;
@@ -191,6 +190,6 @@ final class GleonSummary extends Struct {
   /// Warnings to print, one per line; usually empty.
   external NativeSlice warning;
 
-  /// Owns the texts until `gleon_result_free`; null when all are empty.
-  external Pointer<GleonResult> texts;
+  /// Owns the texts until `gleon_texts_free`; null when all are empty.
+  external Pointer<GleonTexts> texts;
 }

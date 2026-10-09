@@ -111,6 +111,31 @@ void main() {
     expect(message, contains('unknown field `colour`'));
   });
 
+  // The same file means the same on every OS: globs gleon would read
+  // differently than written fail with the pattern and why, not the parser's
+  // "did not match any variant".
+  testWidgets('a glob that would match differently than written fails', (
+    tester,
+  ) async {
+    final sandbox = WorkspaceSandbox.create(
+      "required_version: '>=0.1.0'\nscreenshots:\n"
+      "  - include: 'test/{goldens,screens}/*.png'\n",
+    );
+    await tester.pumpWidget(const Swatch());
+    final message = await sandbox
+        .matcher(Swatch.golden)
+        .matchAsync(Swatch.finder);
+
+    expect(
+      message,
+      allOf(
+        contains('screenshots[0].include'),
+        contains('"test/{goldens,screens}/*.png"'),
+        contains('alternatives are not supported'),
+      ),
+    );
+  });
+
   testWidgets('a golden name the CLI rejects fails strictly', (tester) async {
     final sandbox = WorkspaceSandbox.create(
       _yaml,

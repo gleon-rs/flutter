@@ -262,6 +262,11 @@ metrics:
 artifacts: .gleon/runs/latest/artifacts
 ```
 
+- **Globs** (`include`, `exclude`, mask `path`) match paths relative to the workspace root,
+  case-insensitively: `*` and `?` stay within a directory, `**` (a whole segment) crosses
+  directories, `[abc]` and `[!abc]` are character classes. `{a,b}` alternatives, `[^abc]`, `\`,
+  a leading `/` or `./` and a trailing `/` are config errors naming the pattern: they would match
+  differently than written, or differently on Windows.
 - **Priority:** the `tolerance` argument of a call beats the golden's rule, which beats exact;
   `textTolerance` beats the rule's `text_tolerance`. Masks of the rule are added to the call's
   `ignoreRegions`.
@@ -350,15 +355,16 @@ mean latency with [bench_press](https://pub.dev/packages/bench_press):
 | Failing (small change, failure files written) | 400x300   |     43.7 ms |  1.9 ms |     23x |
 |                                               | 390x844   |     77.5 ms |  4.2 ms |     18x |
 
-Encoding the PNG is most of Flutter's cost. Most of gleon's is the capture itself
-(`toByteData`), then decoding the golden PNG; comparing the pixels is a `memcmp` per equal row.
-gleon's failing samples (writing files) varied too much for bench_press to resolve a ratio.
+Encoding the PNG is most of Flutter's cost. gleon's is reading the frame's pixels (`toByteData`,
+which Flutter pays as well) and decoding the golden PNG; comparing them is a `memcmp` per equal
+row. gleon's failing samples (writing files) varied too much for bench_press to resolve a ratio,
+so their speedups are ratios of means.
 
 One golden comparison of PNG bytes (byte inputs), Flutter's own comparator
 (`LocalFileComparator`, behind `flutter_test`'s `matchesGoldenFile`) against gleon, with the same
 golden file and candidate bytes. Measured inside `flutter test`, where golden tests run, with
-[bench_press](https://pub.dev/packages/bench_press) (mean latency; every ratio has a 95% confidence
-interval within ±8%). Apple M3 Max, macOS, Flutter 3.47.6, gleon 0.3.0:
+[bench_press](https://pub.dev/packages/bench_press) (mean latency; the resolved ratios have 95%
+confidence intervals within ±8%). Apple M3 Max, macOS, Flutter 3.47.6, gleon 0.3.0:
 
 | Scenario                                      | Golden    | Flutter SDK | gleon (exact) | Speedup | gleon `ssim` |
 | --------------------------------------------- | --------- | ----------: | ------------: | ------: | -----------: |
@@ -372,8 +378,11 @@ interval within ±8%). Apple M3 Max, macOS, Flutter 3.47.6, gleon 0.3.0:
 |                                               | 390x844   |     63.0 ms |       3.69 ms |     17x |      3.83 ms |
 
 Across the resolved cases gleon is 5.8x faster (geometric mean; the failing ones write files and
-varied too much to resolve), and tolerant `ssim` costs no more than exact. A failing 1170x2532 golden takes Flutter about 0.4 s and gleon 25 ms; that case is beyond
-bench_press's 200 ms limit for one operation, so it is a plain timing. Flutter decodes through the
+varied too much to resolve), and tolerant `ssim` costs no more than exact. Against 0.2.0 on the
+same machine and day, 0.3.0 is 8-11% faster on re-encoded passes, 11-24% on failures and the same
+on identical bytes. A failing 1170x2532
+golden is beyond bench_press's 200 ms limit for one operation and not measured here. Flutter
+decodes through the
 engine but inverts both images and compares them pixel by pixel in Dart, and a failure renders two
 diff images and encodes four PNGs; gleon decodes and compares in Rust and writes one diff image.
 gleon here runs without a `.gleon/` workspace (exact, nothing recorded, like Flutter).

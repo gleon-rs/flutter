@@ -97,10 +97,16 @@ enum NativeTarget {
     _ => key,
   };
 
-  /// The library cargo builds for this target into [targetDir] (its
-  /// `--target-dir`, see `SourceBuild.cargoArguments`).
-  Uri builtLibrary(Uri targetDir) =>
-      targetDir.resolve('$rustTriple/release/$libFileName');
+  /// The library cargo builds for this target into the directory [targetDir]
+  /// (its `--target-dir`, see `SourceBuild.cargoArguments`; with or without a
+  /// trailing slash).
+  Uri builtLibrary(Uri targetDir) {
+    final dir = targetDir.path.endsWith('/')
+        ? targetDir
+        : targetDir.replace(path: '${targetDir.path}/');
+
+    return dir.resolve('$rustTriple/release/$libFileName');
+  }
 
   /// Flat, unique file name of this target's GitHub Release asset, e.g.
   /// `libgleon_ffi-macos-arm64.dylib`.

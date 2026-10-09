@@ -2,9 +2,9 @@ import 'dart:io';
 
 import 'native_target.dart';
 
-/// Result of [SourceBuild.run]: the built library and every input file whose
-/// change must re-run the build hook.
-typedef SourceBuildOutput = ({List<Uri> dependencies, Uri library});
+/// A library the build hook provides and every input file whose change must
+/// re-run the hook (`NativeLibrary.resolve`, [SourceBuild.run]).
+typedef LibraryFiles = ({List<Uri> dependencies, Uri library});
 
 /// Runs a process like [Process.run] (injectable so builds are testable
 /// without Rust).
@@ -53,7 +53,7 @@ abstract final class SourceBuild {
   /// (cargo's `--target-dir`), using [environment] (the hook's process
   /// environment) to find cargo and to pass its settings on; [runProcess]
   /// runs it.
-  static Future<SourceBuildOutput> run({
+  static Future<LibraryFiles> run({
     required Uri repoRoot,
     required Uri targetDir,
     required NativeTarget target,
@@ -62,16 +62,17 @@ abstract final class SourceBuild {
   }) async {
     final root = checkoutRoot(repoRoot);
     final cargo = findCargo(environment);
+    final arguments = ['build', ...cargoArguments(target, targetDir)];
     final result = await runProcess(
       cargo,
-      ['build', ...cargoArguments(target, targetDir)],
+      arguments,
       environment: target.cargoEnvironment(environment),
       workingDirectory: root.toFilePath(),
     );
     if (result.exitCode != 0) {
       throw ProcessException(
         cargo,
-        ['build', '--package', crate, '--target', target.rustTriple],
+        arguments,
         'gleon: failed to build the native library (exit ${result.exitCode}).'
         '\n${result.stdout}\n${result.stderr}',
         result.exitCode,

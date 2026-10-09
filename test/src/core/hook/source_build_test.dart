@@ -154,7 +154,7 @@ void main() {
   });
 
   group('run', () {
-    Future<SourceBuildOutput> build(FakeCargo cargo) => SourceBuild.run(
+    Future<LibraryFiles> build(FakeCargo cargo) => SourceBuild.run(
       repoRoot: .file(fakeCheckout()),
       targetDir: .directory('${tempPath()}/cargo'),
       target: .linuxX64,

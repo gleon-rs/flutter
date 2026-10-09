@@ -34,19 +34,20 @@ final class NativeOutcome {
 /// Verdict of one native call, with its `u8` code in `gleon-ffi`.
 enum NativeVerdict {
   /// Different image sizes.
-  dimensionMismatch(3),
+  dimensionMismatch(4),
 
-  /// Invalid input, config or I/O failure; never a pass.
-  error(4),
+  /// Invalid input, config or I/O failure; never a pass. Code 0, so a summary
+  /// the library never wrote is an error.
+  error(0),
 
   /// Byte-identical PNGs.
-  identical(0),
+  identical(1),
 
   /// Within the tolerance.
-  match(1),
+  match(2),
 
   /// Beyond the tolerance.
-  mismatch(2),
+  mismatch(3),
 
   /// The golden does not exist.
   missing(6),

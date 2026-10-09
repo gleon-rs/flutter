@@ -70,7 +70,7 @@ void main() {
 
     expect(await withGoldenUpdates(() => matcher.matchAsync(image)), isNull);
     expect(await matcher.matchAsync(image), isNull);
-    final sandbox = '${WorkspaceSandbox.current.dir.path}/goldens';
+    final sandbox = '${WorkspaceSandbox.current().dir.path}/goldens';
     expect(File('$sandbox/versioned.2.png').existsSync(), isTrue);
     expect(File('$sandbox/versioned.png').existsSync(), isFalse);
   });
@@ -105,7 +105,7 @@ void main() {
       contains('1 of 6000px'),
     );
     expect(
-      File('${WorkspaceSandbox.current.failures.path}/swatch_testImage.png')
+      File('${WorkspaceSandbox.current().failures.path}/swatch_testImage.png')
           .existsSync(),
       isTrue,
     );

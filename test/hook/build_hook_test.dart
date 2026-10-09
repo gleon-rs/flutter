@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:code_assets/code_assets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gleon/src/core/hook/native_target.dart';
 import 'package:hooks/hooks.dart';
 
 import '../../hook/build.dart' as hook;
@@ -38,26 +39,32 @@ void main() {
     return built.singleOrNull ?? fail('the hook ran once');
   }
 
-  for (final (os, arch, fileName) in [
-    (OS.linux, Architecture.arm64, 'libgleon_ffi.so'),
-    (OS.linux, Architecture.x64, 'libgleon_ffi.so'),
-    (OS.macOS, Architecture.arm64, 'libgleon_ffi.dylib'),
-    (OS.windows, Architecture.x64, 'gleon_ffi.dll'),
-  ]) {
+  // The id the bindings load, read from their source, not a copy of it.
+  final defaultAsset =
+      RegExp(r"@DefaultAsset\('([^']+)'\)")
+          .firstMatch(
+            File('lib/src/core/native/gleon_ffi.dart').readAsStringSync(),
+          )
+          ?.group(1) ??
+      fail('gleon_ffi.dart has no @DefaultAsset');
+
+  for (final NativeTarget(:arch, :key, :libFileName, :os)
+      in NativeTarget.values) {
     test(
-      '$os-$arch bundles the library under the asset id of the bindings',
+      '$key bundles the library under the asset id of the bindings',
       () async {
         final dir = Directory.systemTemp.createTempSync('gleon_hook_');
         addTearDown(() => dir.deleteSync(recursive: true));
-        final library = File('${dir.path}/$fileName')..writeAsBytesSync([0]);
+        final library = File.fromUri(dir.uri.resolve(libFileName))
+          ..writeAsBytesSync([0]);
 
         final (asset, dependencies) = await build(
           library,
-          targetOS: os,
-          targetArchitecture: arch,
+          targetOS: .fromString(os),
+          targetArchitecture: .fromString(arch),
         );
 
-        expect(asset.id, 'package:gleon/src/core/native/gleon_ffi.dart');
+        expect(asset.id, defaultAsset);
         expect(asset.linkMode, isA<DynamicLoadingBundled>());
         expect(asset.file, library.uri);
         expect(dependencies, [library.uri]);
@@ -65,21 +72,28 @@ void main() {
     );
   }
 
-  // A real library, so code_assets also checks its architecture.
-  final local = File('native/macos-arm64/libgleon_ffi.dylib');
+  // The real library of this host (CI builds one on each), so code_assets
+  // also checks its file format and architecture.
+  final local = switch (NativeTarget.host) {
+    NativeTarget(:final key, :final libFileName) => File(
+      'native/$key/$libFileName',
+    ).absolute,
+    null => null,
+  };
   test(
-    'the local macOS build passes the architecture check',
+    'the local build of this host passes the architecture check',
     () async {
-      final (asset, _) = await build(
-        local.absolute,
-        targetOS: .macOS,
-        targetArchitecture: .arm64,
+      final library = local ?? fail('no host target');
+      final (built, _) = await build(
+        library,
+        targetOS: .current,
+        targetArchitecture: .current,
       );
 
-      expect(asset.file, local.absolute.uri);
+      expect(built.file, library.uri);
     },
-    skip: Platform.isMacOS && local.existsSync()
+    skip: local != null && local.existsSync()
         ? false
-        : 'needs a local macOS build (dart bin/build_native.dart)',
+        : 'needs a local build of this host (dart bin/build_native.dart)',
   );
 }

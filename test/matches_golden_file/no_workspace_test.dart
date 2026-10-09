@@ -20,10 +20,10 @@ void main() {
     await tester.pumpWidget(const Swatch());
     await expectLater(Swatch.finder, matcher());
 
-    expect(
-      Directory('${WorkspaceSandbox.current.root.path}/.gleon').existsSync(),
-      isFalse,
-    );
+    final written = WorkspaceSandbox.current().root
+        .listSync(recursive: true)
+        .where((entry) => entry.uri.pathSegments.contains('.gleon'));
+    expect(written, isEmpty, reason: 'no .gleon anywhere in the sandbox');
     expect(Directory('.gleon').existsSync(), isFalse);
   });
 

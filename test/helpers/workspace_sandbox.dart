@@ -50,10 +50,10 @@ final class WorkspaceSandbox {
     Map<String, String> extraGoldens = const {},
   }) {
     final root = Directory(
-      Directory.systemTemp
-          .createTempSync('gleon_ws_')
-          .resolveSymbolicLinksSync(),
+      Directory.systemTemp.createTempSync(_prefix).resolveSymbolicLinksSync(),
     );
+    // Before anything that may throw, so the directory never outlives the test.
+    addTearDown(() => root.deleteSync(recursive: true));
     if (yaml != null) {
       Directory('${root.path}/.gleon').createSync();
       _writeConfig(root, yaml);
@@ -68,38 +68,45 @@ final class WorkspaceSandbox {
         ..parent.createSync(recursive: true);
       File('$goldenSource/$name').copySync(file.path);
     }
-    final sandbox = WorkspaceSandbox._(root, goldenFileComparator);
-    _current = sandbox;
-    addTearDown(() => _release(sandbox));
+    // Tear-downs run in reverse: the comparator is back before the directory
+    // goes.
+    addTearDown(_restore(goldenFileComparator));
     goldenFileComparator = LocalFileComparator(
       root.uri.resolve('test/sandbox_test.dart'),
     );
 
-    return sandbox;
+    return WorkspaceSandbox._(root);
   }
 
   /// A sandbox whose goldens (all three) have no workspace.
   factory WorkspaceSandbox.withoutWorkspace() =>
       .create(null, extraGoldens: const {'goldens/caption.png': 'caption.png'});
 
-  const WorkspaceSandbox._(this.root, this._original);
+  const WorkspaceSandbox._(this.root);
+
+  /// The sandbox whose comparator `goldenFileComparator` is: the last one the
+  /// running test created (for `setUp` users). Read from Flutter's global,
+  /// not kept apart, so it can never point at another test's sandbox.
+  factory WorkspaceSandbox.current() => switch (goldenFileComparator) {
+    LocalFileComparator(:final basedir)
+        when Directory.fromUri(basedir).parent.path.contains(_prefix) =>
+      ._(Directory.fromUri(basedir).parent),
+    final other => throw StateError(
+      'no WorkspaceSandbox in this test (goldenFileComparator is a '
+      '${other.runtimeType})',
+    ),
+  };
 
   /// The sandbox (workspace) root.
   final Directory root;
+
+  static const _prefix = 'gleon_ws_';
 
   /// The comparator's basedir: goldens are resolved against it.
   Directory get dir => .new('${root.path}/test');
 
   /// Where Flutter-style failure images of the running test are written.
   Directory get failures => .new('${dir.path}/failures');
-
-  final GoldenFileComparator _original;
-
-  static WorkspaceSandbox? _current;
-
-  /// The sandbox the running test created last (for `setUp` users).
-  static WorkspaceSandbox get current =>
-      _current ?? (throw StateError('no WorkspaceSandbox in this test'));
 
   /// Every file under `.gleon/runs/` (empty when nothing was recorded).
   List<File> get recordedFiles {
@@ -180,12 +187,9 @@ final class WorkspaceSandbox {
   /// Replaces `.gleon/gleon.yaml` with [yaml] (the engine reads it again).
   void writeConfig(String yaml) => _writeConfig(root, yaml);
 
-  /// Restores the comparator [sandbox] replaced and deletes it.
-  static void _release(WorkspaceSandbox sandbox) {
-    _current = null;
-    goldenFileComparator = sandbox._original;
-    sandbox.root.deleteSync(recursive: true);
-  }
+  /// A tear-down that puts [original] back as `goldenFileComparator`.
+  static VoidCallback _restore(GoldenFileComparator original) =>
+      () => goldenFileComparator = original;
 }
 
 /// The name gleon gives this platform: the directory of its own goldens, and

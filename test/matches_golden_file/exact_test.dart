@@ -36,7 +36,7 @@ void main() {
       expect(message, contains('Failure feedback can be found at'));
       for (final suffix in ['masterImage', 'testImage', 'gleonDiff']) {
         expect(
-          File('${WorkspaceSandbox.current.failures.path}/swatch_$suffix.png')
+          File('${WorkspaceSandbox.current().failures.path}/swatch_$suffix.png')
               .existsSync(),
           isTrue,
           reason: suffix,
@@ -62,7 +62,7 @@ void main() {
       expect(message, contains('golden is 100x60px'));
       expect(message, contains('test image is 100x61px'));
       expect(
-        File('${WorkspaceSandbox.current.failures.path}/swatch_testImage.png')
+        File('${WorkspaceSandbox.current().failures.path}/swatch_testImage.png')
             .existsSync(),
         isTrue,
       );
@@ -88,7 +88,7 @@ void main() {
       await tester.pumpWidget(const Swatch());
       await expectLater(Swatch.finder, matchesGoldenFile(Swatch.golden));
 
-      expect(WorkspaceSandbox.current.failures.existsSync(), isFalse);
+      expect(WorkspaceSandbox.current().failures.existsSync(), isFalse);
     });
   });
 
