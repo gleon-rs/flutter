@@ -102,6 +102,15 @@ void main() {
 
     expect(_lines(14, .w400, family: _gapRoboto), _withLineGapOnMacOS);
   });
+
+  // Alchemist loads the app's fonts again in the setUp of every golden test,
+  // after `loadAppFonts` and without its portable line metrics: text must
+  // keep the faces loaded first.
+  testWidgets('a family loaded again keeps its first faces', (tester) async {
+    await tester.runAsync(_loadTwice);
+
+    expect(_lines(14, .w400, family: _loadedTwice), _withLineGapOnMacOS);
+  });
 }
 
 /// Roboto with USE_TYPO_METRICS set, as an app font would have it.
@@ -110,11 +119,29 @@ const _typoRoboto = 'RobotoTypo';
 /// Roboto with a line gap.
 const _gapRoboto = 'RobotoGap';
 
+/// Roboto with a line gap, then loaded again without one.
+const _loadedTwice = 'RobotoTwice';
+
+/// Loads [_loadedTwice]: portable with a line gap, then as the files are
+/// (no line gap, not portable), like alchemist loading the app's fonts again
+/// after `loadAppFonts`.
+Future<void> _loadTwice() async {
+  await _loadVariant(_loadedTwice, _setLineGap);
+  final loader = FontLoader(_loadedTwice);
+  for (final file in _files) {
+    loader.addFont(.value(ByteData.sublistView(_bytesOf(file))));
+  }
+  await loader.load();
+}
+
+/// The bytes of the SDK's Roboto [file].
+Uint8List _bytesOf(String file) => File(_path(file)).readAsBytesSync();
+
 /// Loads [_files] as [family], each changed by [change] and made portable.
 Future<void> _loadVariant(String family, void Function(Uint8List font) change) {
   final loader = FontLoader(family);
   for (final file in _files) {
-    final font = File(_path(file)).readAsBytesSync();
+    final font = _bytesOf(file);
     change(font);
     final portable = AppFonts.withPortableLineMetrics(font);
     loader.addFont(.value(ByteData.sublistView(portable)));
