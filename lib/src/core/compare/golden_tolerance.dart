@@ -37,7 +37,24 @@ sealed class GoldenTolerance {
   const factory exact() = ExactTolerance;
 
   /// Passes when at most [maxDiffRatio] (0.0–1.0) of the pixels differ.
-  const factory pixel({double maxDiffRatio}) = PixelTolerance;
+  ///
+  /// The options, all off by default, let some differing pixels count as
+  /// equal: rendering noise of shapes (GPU drift, anti-aliasing, sub-pixel
+  /// geometry), not a substitute for [GoldenTolerance.ssim] or per-platform
+  /// goldens:
+  ///
+  /// * `channelTolerance` (0–255): no RGBA byte differs by more than this;
+  /// * `antiAlias`: the pixel looks anti-aliased in either image (the
+  ///   detection of pixelmatch);
+  /// * `edgeThreshold` (0–255, outside text): the Sobel gradient of the
+  ///   golden's luma there exceeds this. Every change on edges passes too (a
+  ///   missing glyph or small icon, a 1px move); 255 hides nothing.
+  const factory pixel({
+    double maxDiffRatio,
+    int channelTolerance,
+    bool antiAlias,
+    int edgeThreshold,
+  }) = PixelTolerance;
 
   /// Tolerates rendering noise (anti-aliasing, sub-pixel geometry, glyph
   /// weight, imperceptible color drift) while catching changed, added or
@@ -60,8 +77,7 @@ sealed class GoldenTolerance {
   @override
   String toString() => switch (this) {
     ExactTolerance() => 'exact',
-    PixelTolerance(:final maxDiffRatio) =>
-      'pixel ${Tolerances.atMost(maxDiffRatio)}',
+    final PixelTolerance pixel => Tolerances.describePixel(pixel),
     SsimTolerance(:final colorTolerance, :final minSimilarity) =>
       'ssim \u2265 ${Tolerances.decimal(minSimilarity, 3)}, '
           'color \u00b1${Tolerances.decimal(colorTolerance, 0, max: 2)}',
@@ -87,17 +103,46 @@ final class ExactTolerance extends GoldenTolerance {
 @pragma('vm:deeply-immutable')
 final class PixelTolerance extends GoldenTolerance {
   /// Creates a pixel tolerance.
-  const PixelTolerance({this.maxDiffRatio = 0.01});
+  const PixelTolerance({
+    this.maxDiffRatio = 0.01,
+    this.channelTolerance = 0,
+    this.antiAlias = false,
+    this.edgeThreshold = 0,
+  });
 
   /// Maximum fraction (0.0–1.0) of differing pixels.
   final double maxDiffRatio;
 
+  /// A differing pixel counts as equal when no RGBA byte differs by more
+  /// than this (0–255; 0: off).
+  final int channelTolerance;
+
+  /// Whether a differing pixel that looks anti-aliased in either image counts
+  /// as equal.
+  // ignore: prefer-boolean-prefixes, the name of the engine's `anti_alias` key.
+  final bool antiAlias;
+
+  /// A differing pixel outside text counts as equal when the Sobel gradient
+  /// of the golden's luma there exceeds this (0–255; 0: off, 255 hides
+  /// nothing).
+  final int edgeThreshold;
+
   @override
-  int get hashCode => Object.hash(PixelTolerance, maxDiffRatio);
+  int get hashCode => Object.hash(
+    PixelTolerance,
+    maxDiffRatio,
+    channelTolerance,
+    antiAlias,
+    edgeThreshold,
+  );
 
   @override
   bool operator ==(Object other) =>
-      other is PixelTolerance && other.maxDiffRatio == maxDiffRatio;
+      other is PixelTolerance &&
+      other.maxDiffRatio == maxDiffRatio &&
+      other.channelTolerance == channelTolerance &&
+      other.antiAlias == antiAlias &&
+      other.edgeThreshold == edgeThreshold;
 }
 
 /// Rendering-noise tolerant comparison; see [GoldenTolerance.ssim].

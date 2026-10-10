@@ -19,7 +19,7 @@ import 'native_outcome.dart';
 abstract final class NativeEngine {
   /// C contract version this Dart code understands (`ABI_VERSION` in
   /// `gleon-ffi`). Keep both in lockstep.
-  static const expectedAbiVersion = 11;
+  static const expectedAbiVersion = 12;
 
   /// Asked once per process, on the first call.
   // ignore: avoid-explicit-type-declaration, not obvious from the initializer.
@@ -126,6 +126,7 @@ abstract final class NativeEngine {
     final flatMasks = _flat(masks);
     final flatTextRegions = _flat(textRegions);
     final (kind, ratio, similarity, color) = _toleranceArguments(tolerance);
+    final (channel, antiAlias, edge) = _pixelOptions(tolerance);
     final call = Struct.create<GleonCall>()
       ..mode = isUpdate ? _updateMode : _compareMode
       ..candidateFormat = rawSize == null ? _pngFormat : _rawFormat
@@ -135,6 +136,9 @@ abstract final class NativeEngine {
       ..maxDiffRatio = ratio
       ..minSimilarity = similarity
       ..colorTolerance = color
+      ..channelTolerance = channel
+      ..antiAlias = antiAlias
+      ..edgeThreshold = edge
       ..textTolerance = textTolerance ?? .nan;
     final summary = Struct.create<GleonSummary>();
     GleonFfi.golden(
@@ -248,6 +252,19 @@ abstract final class NativeEngine {
       colorTolerance,
     ),
   };
+
+  /// `(channelTolerance, antiAlias, edgeThreshold)` of `gleon_golden`: the
+  /// options of a pixel tolerance, off for any other.
+  static (int, int, int) _pixelOptions(GoldenTolerance? tolerance) =>
+      switch (tolerance) {
+        PixelTolerance(
+          antiAlias: final ignoresAntiAliasing,
+          :final channelTolerance,
+          :final edgeThreshold,
+        ) =>
+          (channelTolerance, ignoresAntiAliasing ? 1 : 0, edgeThreshold),
+        ExactTolerance() || SsimTolerance() || null => (0, 0, 0),
+      };
 
   /// [regions] as `[x, y, width, height]` quadruples.
   static Uint32List _flat(List<PixelRegion> regions) {

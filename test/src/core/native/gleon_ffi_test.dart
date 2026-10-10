@@ -44,6 +44,9 @@ Map<String, int> _callOffsets() {
       _offset(sizeOf<GleonCall>(), write);
 
   return {
+    'anti_alias': offset(
+      (bytes) => Struct.create<GleonCall>(bytes).antiAlias = 1,
+    ),
     'candidate_format': offset(
       (bytes) => Struct.create<GleonCall>(bytes).candidateFormat = 1,
     ),
@@ -53,8 +56,14 @@ Map<String, int> _callOffsets() {
     'candidate_width': offset(
       (bytes) => Struct.create<GleonCall>(bytes).candidateWidth = _word,
     ),
+    'channel_tolerance': offset(
+      (bytes) => Struct.create<GleonCall>(bytes).channelTolerance = 1,
+    ),
     'color_tolerance': offset(
       (bytes) => Struct.create<GleonCall>(bytes).colorTolerance = 1 / 3,
+    ),
+    'edge_threshold': offset(
+      (bytes) => Struct.create<GleonCall>(bytes).edgeThreshold = 1,
     ),
     'max_diff_ratio': offset(
       (bytes) => Struct.create<GleonCall>(bytes).maxDiffRatio = 1 / 3,
@@ -120,10 +129,13 @@ void main() {
   test('the structs have the layout of gleon-ffi', () {
     expect(sizeOf<GleonCall>(), 48);
     expect(_callOffsets(), {
+      'anti_alias': 44,
       'candidate_format': 41,
       'candidate_height': 36,
       'candidate_width': 32,
+      'channel_tolerance': 43,
       'color_tolerance': 16,
+      'edge_threshold': 45,
       'max_diff_ratio': 0,
       'min_similarity': 8,
       'mode': 40,

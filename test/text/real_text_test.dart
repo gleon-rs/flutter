@@ -79,6 +79,26 @@ void main() {
       // Only text failed: the reason names no other pixels.
       expect(compared, contains('": text up to'));
     });
+
+    // SSIM judges text by the same tiles and leaves it out of both gates.
+    testWidgets('ssim: passes by default, fails a text tolerance for $name', (
+      tester,
+    ) async {
+      await tester.pumpWidget(mutation);
+      final byDefault = await matchesGoldenFile(
+        Caption.golden,
+        tolerance: const .ssim(),
+      ).matchAsync(Caption.finder);
+      final compared = await matchesGoldenFile(
+        Caption.golden,
+        tolerance: const .ssim(),
+        textTolerance: 0.1,
+      ).matchAsync(Caption.finder);
+
+      expect(byDefault, isNull);
+      expect(compared, contains('": text up to'));
+      expect(compared, contains('text ≤ 10.00% per tile'));
+    });
   }
 
   // Glyph ink reaching beyond the boxes of its line must stay in the text

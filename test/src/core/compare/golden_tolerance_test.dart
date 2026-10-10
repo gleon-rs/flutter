@@ -8,6 +8,9 @@ void main() {
   test('defaults match the documented values', () {
     expect(const GoldenTolerance.pixel(), const PixelTolerance());
     expect(const PixelTolerance().maxDiffRatio, 0.01);
+    expect(const PixelTolerance().channelTolerance, 0);
+    expect(const PixelTolerance().antiAlias, isFalse);
+    expect(const PixelTolerance().edgeThreshold, 0);
     expect(const SsimTolerance().minSimilarity, 0.8);
     expect(const SsimTolerance().colorTolerance, 8);
   });
@@ -55,6 +58,27 @@ void main() {
     );
   });
 
+  test('pixel options are described like the engine does, when on', () {
+    const options = GoldenTolerance.pixel(
+      channelTolerance: 4,
+      antiAlias: true,
+      edgeThreshold: 64,
+    );
+    expect(
+      '$options',
+      'pixel ≤ 1.00%, ±4 per channel, aa ignored, edges >64 ignored',
+    );
+    expect(
+      '${const GoldenTolerance.pixel(maxDiffRatio: 0, antiAlias: true)}',
+      'pixel ≤ 0.00%, aa ignored',
+    );
+    expect(
+      '${const GoldenTolerance.pixel(edgeThreshold: 255)}',
+      'pixel ≤ 1.00%',
+      reason: '255 hides nothing',
+    );
+  });
+
   test('text tolerances are described per tile', () {
     expect(Tolerances.describeText(1), 'text ignored');
     expect(Tolerances.describeText(0.0625), 'text ≤ 6.25% per tile');
@@ -84,6 +108,22 @@ void main() {
       () => Tolerances.validate(const .ssim(colorTolerance: .infinity)),
       rejects('colorTolerance'),
     );
+    for (final tolerance in const [
+      PixelTolerance(edgeThreshold: 255),
+      PixelTolerance(channelTolerance: 255),
+    ]) {
+      expect(() => Tolerances.validate(tolerance), returnsNormally);
+    }
+    for (final byte in [-1, 256]) {
+      expect(
+        () => Tolerances.validate(PixelTolerance(channelTolerance: byte)),
+        rejects('channelTolerance'),
+      );
+      expect(
+        () => Tolerances.validate(PixelTolerance(edgeThreshold: byte)),
+        rejects('edgeThreshold'),
+      );
+    }
     expect(() => Tolerances.validateText(0.5), returnsNormally);
     expect(() => Tolerances.validateText(.nan), rejects('textTolerance'));
   });
@@ -115,5 +155,16 @@ void main() {
       equal: const PixelTolerance(maxDiffRatio: 0.2),
       different: const .pixel(maxDiffRatio: 0.3),
     );
+    for (final different in const <GoldenTolerance>[
+      .pixel(channelTolerance: 1),
+      .pixel(antiAlias: true),
+      .pixel(edgeThreshold: 1),
+    ]) {
+      expectValueSemantics<GoldenTolerance>(
+        const .pixel(),
+        equal: const PixelTolerance(),
+        different: different,
+      );
+    }
   });
 }

@@ -168,6 +168,20 @@ final class GleonCall extends Struct {
   /// 0 the `.gleon/gleon.yaml` rule, 1 exact, 2 pixel, 3 SSIM.
   @Uint8()
   external int toleranceKind;
+
+  /// Pixel tolerance: the largest RGBA byte delta a pixel may differ by and
+  /// still count as equal (0: off).
+  @Uint8()
+  external int channelTolerance;
+
+  /// Pixel tolerance: 1 lets anti-aliased pixels pass, 0 not.
+  @Uint8()
+  external int antiAlias;
+
+  /// Pixel tolerance: differing pixels on the golden's edges (Sobel gradient
+  /// above this) pass, outside text (0: off).
+  @Uint8()
+  external int edgeThreshold;
 }
 
 /// The `GleonSummary` `gleon_golden` writes: the verdict code and the UTF-8

@@ -87,11 +87,11 @@ void main() {
     for (final input in <Object>[image, Future.value(image)]) {
       expect(
         await matcher.matchAsync(input),
-        contains('needs the default LocalFileComparator'),
+        contains('needs a LocalFileComparator'),
       );
       expect(
         await withGoldenUpdates(() => matcher.matchAsync(input)),
-        contains('needs the default LocalFileComparator'),
+        contains('needs a LocalFileComparator'),
       );
     }
     expect(custom.calls, isEmpty);

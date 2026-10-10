@@ -1,0 +1,73 @@
+import 'dart:typed_data';
+
+import 'package:flutter_test/flutter_test.dart';
+
+import 'gleon_golden_comparator.dart';
+
+/// A `goldenFileComparator` backed by the gleon engine, for golden harnesses
+/// (alchemist, golden_toolkit, …) and tests that call `flutter_test`'s own
+/// `matchesGoldenFile`. Install it once, in `test/flutter_test_config.dart`:
+///
+/// ```dart
+/// import "dart:async";
+///
+/// import "package:gleon/gleon.dart";
+///
+/// Future<void> testExecutable(FutureOr<void> Function() testMain) async {
+///   goldenFileComparator = GleonFileComparator.fromExisting(
+///     goldenFileComparator,
+///   );
+///   await testMain();
+/// }
+/// ```
+///
+/// Goldens resolve like with Flutter's [LocalFileComparator] (relative to the
+/// test file); tolerances and masks come from the golden's
+/// `.gleon/gleon.yaml` rule, else the comparison is exact; failures and
+/// `--update-goldens` behave like with gleon's own `matchesGoldenFile`.
+///
+/// A best-effort path: a comparator only gets PNG bytes, so text is
+/// compared like every other pixel (no text boxes) and the PNG of every
+/// candidate is encoded by Flutter first. gleon's `matchesGoldenFile` with a
+/// widget (`Finder`) compares the raw pixels with the boxes of their text and
+/// is faster; it works with this comparator installed too (it only takes the
+/// directory of the goldens from it).
+class GleonFileComparator extends LocalFileComparator {
+  /// Creates a comparator for the goldens of the test file [testFile], like
+  /// [LocalFileComparator].
+  GleonFileComparator(super.testFile);
+
+  /// A comparator for the same golden directory as [existing], the
+  /// [LocalFileComparator] `flutter test` installs before
+  /// `test/flutter_test_config.dart` runs (or a subclass of it).
+  ///
+  /// Throws an [ArgumentError] for any other comparator: it has no golden
+  /// directory to take.
+  factory GleonFileComparator.fromExisting(GoldenFileComparator existing) =>
+      switch (existing) {
+        // Any file name in that directory: only its directory is used.
+        final LocalFileComparator local => .new(
+          local.basedir.resolve('gleon_test.dart'),
+        ),
+        final other => throw ArgumentError.value(
+          other,
+          'existing',
+          'gleon: GleonFileComparator.fromExisting takes the golden directory '
+              'of a LocalFileComparator, but goldenFileComparator is '
+              '${other.runtimeType}; install it from '
+              'test/flutter_test_config.dart under flutter test',
+        ),
+      };
+
+  /// Compares [imageBytes] (a PNG) with [golden]; throws a [TestFailure] with
+  /// the engine's message unless it passes.
+  @override
+  Future<bool> compare(Uint8List imageBytes, Uri golden) =>
+      GleonGoldenComparator(this).compare(imageBytes, golden);
+
+  /// Writes [imageBytes] (a PNG) as [golden] through the engine (the
+  /// golden of this platform, see the README's "Real text").
+  @override
+  Future<void> update(Uri golden, Uint8List imageBytes) =>
+      GleonGoldenComparator(this).update(golden, imageBytes);
+}

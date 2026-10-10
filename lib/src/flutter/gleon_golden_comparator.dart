@@ -15,9 +15,11 @@ import 'flutter_session.dart';
 /// golden's `.gleon/gleon.yaml` rule, compares, and writes failure artifacts,
 /// case reports and (`--update-goldens`) the golden itself.
 ///
-/// Golden paths come from the comparator it wraps (normally Flutter's
-/// [LocalFileComparator]), so golden files live where they would without this
-/// package (per-platform goldens: see the README's "Real text").
+/// Golden paths come from the comparator it wraps (Flutter's
+/// [LocalFileComparator], a subclass of it, or a `GleonFileComparator`), so
+/// golden files live where they would without this package (per-platform
+/// goldens: see the README's "Real text"). Only that comparator's directory
+/// is used: its own comparison (and any threshold of a subclass) never runs.
 class GleonGoldenComparator extends GoldenFileComparator {
   /// Wraps [delegate]; [tolerance], [masks] and [textTolerance] come from
   /// the matcher call. [session] defaults to [FlutterSession.process].
@@ -87,10 +89,11 @@ class GleonGoldenComparator extends GoldenFileComparator {
   LocalFileComparator get _local => switch (delegate) {
     final LocalFileComparator local => local,
     final other => throw TestFailure(
-      'gleon: matchesGoldenFile needs the default LocalFileComparator, but '
-      'goldenFileComparator is ${other.runtimeType}; custom comparators are '
-      'not supported. Either remove the custom goldenFileComparator (e.g. '
-      'from test/flutter_test_config.dart), or compare these goldens with '
+      "gleon: matchesGoldenFile needs a LocalFileComparator (Flutter's "
+      'default, a subclass of it, or GleonFileComparator) for the directory '
+      'of the goldens, but goldenFileComparator is ${other.runtimeType}. '
+      'Either remove the custom goldenFileComparator (e.g. from '
+      'test/flutter_test_config.dart), or compare these goldens with '
       "flutter_test's own matcher: "
       "import 'package:flutter_test/flutter_test.dart' as ft; "
       'and call ft.matchesGoldenFile(...).',

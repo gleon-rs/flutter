@@ -27,7 +27,7 @@ void _expectSchemaRejectsOffContractCases() {
     'platform': {'arch': 'aarch64', 'os': 'macos'},
     'recorded_at': '2026-09-27T12:00:00.000Z',
     'regions': <Object>[],
-    'schema_version': 3,
+    'schema_version': 4,
     'source': {'tool': 'gleon_flutter', 'tool_version': '0.1.0'},
     'timings_ms': {'total': 1.5},
   };

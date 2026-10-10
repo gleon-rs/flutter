@@ -66,7 +66,7 @@ void main() {
             (failure) => failure.message,
             'message',
             allOf(
-              contains('needs the default LocalFileComparator'),
+              contains('needs a LocalFileComparator'),
               contains('_RecordingComparator'),
               // The ways out: no custom comparator, or Flutter's matcher.
               contains('remove the custom goldenFileComparator'),

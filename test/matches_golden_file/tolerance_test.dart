@@ -31,6 +31,69 @@ void main() {
       expect(message, contains('50.00%'));
       expect(message, contains('gleon pixel ≤ 1.00%'));
     });
+
+    testWidgets('antiAlias takes most sub-pixel noise', (tester) async {
+      await tester.pumpWidget(const Blob(offset: 0.3));
+      // 611 of 9600 pixels differ (6.4%); anti-aliased ones count as equal.
+      expect(
+        await matchesGoldenFile(
+          Blob.golden,
+          tolerance: const .pixel(),
+        ).matchAsync(Blob.finder),
+        contains('(611 of 9600px)'),
+      );
+      await expectLater(
+        Blob.finder,
+        matchesGoldenFile(
+          Blob.golden,
+          tolerance: const .pixel(antiAlias: true),
+        ),
+      );
+    });
+
+    testWidgets('edgeThreshold hides edge differences only', (tester) async {
+      await tester.pumpWidget(const Blob(offset: 0.3));
+      final message = await matchesGoldenFile(
+        Blob.golden,
+        tolerance: const .pixel(maxDiffRatio: 0, edgeThreshold: 64),
+      ).matchAsync(Blob.finder);
+
+      expect(message, contains('(22 of 9600px)'));
+      expect(message, contains('(gleon pixel ≤ 0.00%, edges >64 ignored)'));
+    });
+
+    testWidgets('options never hide a dot on a flat area', (tester) async {
+      await tester.pumpWidget(const Swatch(dot: Swatch.dotOffset));
+      final message = await matchesGoldenFile(
+        Swatch.golden,
+        tolerance: const .pixel(
+          maxDiffRatio: 0,
+          channelTolerance: 8,
+          antiAlias: true,
+          edgeThreshold: 64,
+        ),
+      ).matchAsync(Swatch.finder);
+
+      expect(message, contains('(1 of 6000px)'));
+    });
+
+    testWidgets('channelTolerance takes a one-level drift', (tester) async {
+      await tester.pumpWidget(const Swatch(accent: Color(0xFF2197F4)));
+      expect(
+        await matchesGoldenFile(
+          Swatch.golden,
+          tolerance: const .pixel(maxDiffRatio: 0),
+        ).matchAsync(Swatch.finder),
+        contains('differ'),
+      );
+      await expectLater(
+        Swatch.finder,
+        matchesGoldenFile(
+          Swatch.golden,
+          tolerance: const .pixel(maxDiffRatio: 0, channelTolerance: 1),
+        ),
+      );
+    });
   });
 
   group('ssim', () {

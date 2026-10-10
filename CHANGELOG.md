@@ -1,5 +1,12 @@
 ## 0.3.0
 
+- **`GleonFileComparator` for golden harnesses:** installed once in
+  `test/flutter_test_config.dart`, it compares the goldens of every test that calls
+  `flutter_test`'s own `matchesGoldenFile` (alchemist, golden_toolkit, …) with the gleon engine
+  and the rules of `.gleon/gleon.yaml`. A best-effort path (PNG bytes, text compared like every
+  other pixel): gleon's matcher with a widget stays the fastest and the only one that compares
+  real text right. gleon's matcher accepts any `LocalFileComparator` subclass (it only takes its
+  golden directory; the subclass's threshold does not apply).
 - **Half the native library:** release libraries of about 1 MB instead of 2 MB (macOS arm64
   1.88 → 0.98 MB, Linux x64 2.21 → 1.13 MB, Linux arm64 1.97 → 1.00 MB). Globs of
   `.gleon/gleon.yaml` match with the small `glob` crate instead of the regex engine of `globset`,
@@ -10,17 +17,27 @@
   12-42% less, failures 9-26% (`gleon-model/tests/perf.rs` of the gleon repository); byte inputs
   in `flutter test` 8-11% faster for re-encoded passes and 11-24% for failures, identical bytes
   unchanged (`bench_press diff` against 0.2.0 on one machine).
+- **Pixel options:** `.pixel(channelTolerance:, antiAlias:, edgeThreshold:)` (yaml
+  `channel_tolerance`, `anti_alias`, `edge_threshold`), all off by default, let small channel
+  deltas, anti-aliased pixels and pixels on the golden's edges count as equal (see the README's
+  "Pixel options" for what each one hides). Case reports count them as `tolerated_pixels`.
+- **Text under `ssim`:** `textTolerance` (and a rule's `text_tolerance`) works with `.ssim()`
+  too: text is judged by its tiles and left out of both SSIM gates, so another OS's glyphs no
+  longer fail an SSIM comparison of a widget.
+- **Diffs of every failure:** images of different sizes keep a diff image of both sizes; SSIM
+  case reports list the `changed` and `failing` regions with their own metrics.
 - **Text tiles:** a text region thinner than a 16x16 tile, or clipped at the image edge, is judged
   as a whole tile (the rest of the square counts as equal): one differing pixel of a 4x1 strip is
-  no longer a quarter of a tile. Case reports carry `policy_version` 3 for this.
-- **Breaking:** native ABI 11 (`gleon_golden` takes its scalars as one struct and writes its
+  no longer a quarter of a tile.
+- **Breaking:** native ABI 12 (`gleon_golden` takes its scalars as one struct and writes its
   summary to the caller's buffer; verdict code 0 is an error): libraries of 0.2.0 from
   `ffi_path`, `release_url` mirrors or `gleon_repo` checkouts are refused with the ABI message.
+  Case reports are schema 4 with `policy_version` 4 (text tiles and text under SSIM). A yaml
+  `mode: pixel` rule without `threshold` allows 0.01 of the pixels (was 0.1), like `.pixel()`.
   Globs that would match differently than written, differently on Windows, or never, are config
   errors naming the pattern: `{a,b}` alternatives, `[^...]` (use `[!...]`), a class only `/`
   fits (`[/]`), `\`, `**` inside a segment (`a**`, `***`), a leading `/`, a `.`, `..` or empty
-  segment (`./a`, `../a`, `a//b`), a trailing `/`, the empty pattern. `anti_alias` is no longer
-  a config key.
+  segment (`./a`, `../a`, `a//b`), a trailing `/`, the empty pattern.
 
 ## 0.2.0
 

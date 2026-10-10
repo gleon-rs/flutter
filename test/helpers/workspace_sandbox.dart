@@ -21,7 +21,7 @@ const goldenSource = 'test/goldens';
 final String gleonPin =
     NativeTarget.readPin(Directory.current.uri) ?? fail('no native/gleon_ref');
 
-/// `case.v3.json` of the pinned commit ([gleonPin]) in a sibling gleon
+/// `case.v4.json` of the pinned commit ([gleonPin]) in a sibling gleon
 /// checkout (`../gleon`, as in CI), or null without that checkout or commit.
 /// Read from git, not the working tree: the checkout may be at another
 /// commit.
@@ -244,7 +244,7 @@ JsonSchema? _loadCaseSchema() {
       '-C',
       '../gleon',
       'show',
-      '$gleonPin:gleon-model/schema/case.v3.json',
+      '$gleonPin:gleon-model/schema/case.v4.json',
     ]);
   } on ProcessException {
     return null;

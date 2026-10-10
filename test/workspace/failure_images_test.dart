@@ -1,8 +1,10 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:gleon/gleon.dart';
 
+import '../helpers/png.dart';
 import '../helpers/swatch.dart';
 import '../helpers/workspace_sandbox.dart';
 
@@ -83,15 +85,40 @@ void main() {
     expect(kept.listSync(), isEmpty);
   });
 
-  testWidgets('a dimension mismatch keeps no diff image', (tester) async {
+  testWidgets('a dimension mismatch keeps a diff of both', (tester) async {
     final sandbox = WorkspaceSandbox.create(_yaml);
     await tester.pumpWidget(const Swatch(size: Size(100, 61)));
     await sandbox.matcher(Swatch.golden).matchAsync(Swatch.finder);
 
     expect(sandbox.readCase('test/goldens/swatch')['artifacts'], {
       'candidate': endsWith('/test/goldens/swatch/candidate.png'),
+      'diff': endsWith('/test/goldens/swatch/diff.png'),
       'golden': endsWith('/test/goldens/swatch/golden.png'),
     });
+    final diff = decodeRgbaPng(
+      File('${sandbox.failures.path}/swatch_gleonDiff.png').readAsBytesSync(),
+    );
+    expect((diff.width, diff.height), (100, 61));
+    final golden = decodeRgbaPng(sandbox.goldenBytes(Swatch.golden));
+    // The area both cover: equal pixels are the darkened golden.
+    expect(_pixel(diff, 0, 0), _darkened(_pixel(golden, 0, 0)));
+    // Row 60, the candidate's alone: green stripes where (x + y) % 8 < 4.
+    expect(_pixel(diff, 4, 60), [0, 200, 83, 255]);
+  });
+
+  testWidgets('a mismatch diff marks the changed pixel', (tester) async {
+    final sandbox = WorkspaceSandbox.create(_yaml);
+    await tester.pumpWidget(const Swatch(dot: Swatch.dotOffset));
+    await sandbox
+        .matcher(Swatch.golden, tolerance: const .exact())
+        .matchAsync(Swatch.finder);
+
+    final diff = decodeRgbaPng(
+      File('${sandbox.failures.path}/swatch_gleonDiff.png').readAsBytesSync(),
+    );
+    final golden = decodeRgbaPng(sandbox.goldenBytes(Swatch.golden));
+    expect(_pixel(diff, 10, 10), [255, 0, 255, 255]);
+    expect(_pixel(diff, 90, 30), _darkened(_pixel(golden, 90, 30)));
   });
 
   testWidgets('a missing golden keeps its candidate for gleon approve', (
@@ -196,3 +223,21 @@ void main() {
     });
   });
 }
+
+/// The RGBA bytes at ([x], [y]) of a decoded PNG.
+List<int> _pixel(
+  ({int height, Uint8List rgba, int width}) image,
+  int x,
+  int y,
+) {
+  final start = (y * image.width + x) * 4;
+
+  return image.rgba.sublist(start, start + 4);
+}
+
+/// [pixel] as gleon's pixel diff draws the unchanged golden: color halved,
+/// alpha kept.
+List<int> _darkened(List<int> pixel) => [
+  ...pixel.take(3).map((channel) => channel ~/ 2),
+  ...pixel.skip(3),
+];
