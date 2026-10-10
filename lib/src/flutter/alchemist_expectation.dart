@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart' as flutter_test;
 import '../core/compare/golden_tolerance.dart';
 import '../core/compare/tolerances.dart';
 import '../core/config/gleon_session.dart';
+import 'gleon_file_comparator.dart';
 import 'gleon_matches_golden_file.dart';
 import 'ignore_regions.dart';
 
@@ -54,10 +55,6 @@ AlchemistGoldenExpectation gleonAlchemistExpectation({
 
 /// The implementation of [gleonAlchemistExpectation].
 abstract final class AlchemistExpectation {
-  /// What alchemist names the comparator it installs for a `diffThreshold`
-  /// above 0 (gleon does not depend on alchemist to test its type).
-  static const thresholdComparator = 'AlchemistFileComparator';
-
   /// Appended to failures of goldens with obscured text.
   static const obscuredTextHint =
       'gleon: alchemist obscured the text of this golden (blocks instead of '
@@ -66,11 +63,13 @@ abstract final class AlchemistExpectation {
       'goldens config (`CiGoldensConfig`, `PlatformGoldensConfig`) and record '
       'the goldens again; `shouldHintObscuredText: false` silences this hint.';
 
-  /// Appended to failures while alchemist's threshold comparator is
-  /// installed.
-  static const thresholdNote =
-      "gleon: alchemist's `diffThreshold` does not apply to gleon's "
-      'comparison; set a gleon tolerance instead (`.gleon/gleon.yaml` or '
+  /// Appended to failures while a `LocalFileComparator` subclass other than
+  /// gleon's is installed ([comparator] names its type): alchemist installs
+  /// one for a `diffThreshold` above 0, whose threshold gleon never applies.
+  static String thresholdNote(Type comparator) =>
+      'gleon: the threshold of the golden file comparator ($comparator, '
+      "alchemist's `diffThreshold`) does not apply to gleon's comparison; "
+      'set a gleon tolerance instead (`.gleon/gleon.yaml` or '
       '`gleonAlchemistExpectation(tolerance: ...)`).';
 
   /// [gleonAlchemistExpectation], comparing in [session] (null: the
@@ -105,9 +104,13 @@ abstract final class AlchemistExpectation {
         // Alchemist keeps its comparator installed while the expectation runs.
         final comparator = flutter_test.goldenFileComparator;
         final notes = [
-          if (shouldHintObscuredText && actual is Future<ui.Image?>)
+          // Only a widget comes with the boxes of its text.
+          if (shouldHintObscuredText && actual is! flutter_test.Finder)
             obscuredTextHint,
-          if ('${comparator.runtimeType}' == thresholdComparator) thresholdNote,
+          if (comparator is flutter_test.LocalFileComparator &&
+              comparator.runtimeType != flutter_test.LocalFileComparator &&
+              comparator is! GleonFileComparator)
+            thresholdNote(comparator.runtimeType),
         ];
         if (notes.isEmpty) rethrow;
         Error.throwWithStackTrace(

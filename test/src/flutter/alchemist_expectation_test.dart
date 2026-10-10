@@ -38,11 +38,10 @@ Future<ui.Image> _swatchImage(WidgetTester tester, {Offset? dot}) async {
   return image;
 }
 
-/// Named like alchemist's comparator for a `diffThreshold` above 0, which
-/// alchemist installs around each of those golden tests.
-// ignore: avoid-top-level-members-in-tests, gleon matches alchemist's name.
-class AlchemistFileComparator extends LocalFileComparator {
-  AlchemistFileComparator(super.testFile);
+/// A comparator with a threshold of its own, like alchemist's for a
+/// `diffThreshold` above 0, which alchemist installs around those tests.
+class _ThresholdComparator extends LocalFileComparator {
+  _ThresholdComparator(super.testFile);
 }
 
 void main() {
@@ -75,14 +74,13 @@ void main() {
   testWidgets('the tolerance and ignore regions apply', (tester) async {
     await tester.pumpWidget(const Swatch(dot: Swatch.dotOffset));
 
-    expect(
-      await _failureOf(
-        gleonAlchemistExpectation(),
-        Swatch.finder,
-        Swatch.golden,
-      ),
-      contains('1 of 6000px'),
+    final exact = await _failureOf(
+      gleonAlchemistExpectation(),
+      Swatch.finder,
+      Swatch.golden,
     );
+    expect(exact, contains('1 of 6000px'));
+    expect(exact, isNot(contains('threshold')), reason: "Flutter's comparator");
     expect(
       await _failureOf(
         gleonAlchemistExpectation(tolerance: const .pixel(maxDiffRatio: 0.001)),
@@ -143,6 +141,18 @@ void main() {
       expect(message, isNot(contains('obscureText')));
     });
 
+    // Alchemist passes a future; an image itself has no text boxes either.
+    testWidgets('given as is, fails with it too', (tester) async {
+      final image = await _swatchImage(tester, dot: Swatch.dotOffset);
+      final message = await _failureOf(
+        gleonAlchemistExpectation(),
+        image,
+        Swatch.golden,
+      );
+
+      expect(message, contains('`obscureText: false`'));
+    });
+
     testWidgets('passes silently', (tester) async {
       final image = await _swatchImage(tester);
 
@@ -158,12 +168,13 @@ void main() {
   });
 
   // Alchemist installs its comparator for a `diffThreshold` above 0; gleon
-  // takes only its directory, so a failure says the threshold did not apply.
-  testWidgets("a failure under alchemist's diffThreshold says it is ignored", (
+  // takes only its directory, so a failure says the threshold did not apply,
+  // whatever the comparator's name.
+  testWidgets("a failure under a comparator's threshold says it is ignored", (
     tester,
   ) async {
     final sandbox = WorkspaceSandbox.current();
-    goldenFileComparator = AlchemistFileComparator(
+    goldenFileComparator = _ThresholdComparator(
       sandbox.dir.uri.resolve('alchemist_test.dart'),
     );
     await tester.pumpWidget(const Swatch(dot: Swatch.dotOffset));
@@ -174,6 +185,7 @@ void main() {
       Swatch.golden,
     );
     expect(message, contains('1 of 6000px'));
+    expect(message, contains('_ThresholdComparator'));
     expect(message, contains('`diffThreshold`'));
 
     await tester.pumpWidget(const Swatch());

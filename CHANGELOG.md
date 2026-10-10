@@ -13,7 +13,7 @@
   to alchemist's `goldenFileExpectationFn`, compares every alchemist golden with gleon's matcher:
   the widget with the boxes of its text, no PNG encoded to compare, no dependency on alchemist.
   Failures of obscured text (alchemist's CI default) say how to compare real text, failures under
-  alchemist's `diffThreshold` that it does not apply. The example app runs it (one set of
+  a comparator's own threshold (alchemist's `diffThreshold`) that it does not apply. The example app runs it (one set of
   real-text goldens beside the others, alchemist's runner for the edge cases), with a benchmark:
   4.78 → 0.90 ms per passing golden against alchemist's default assertion.
 - **Half the native library:** release libraries of about 1 MB instead of 2 MB (macOS arm64

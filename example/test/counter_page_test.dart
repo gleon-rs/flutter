@@ -32,7 +32,13 @@ Future<void> main() async {
       _goldensDir();
       final message = await _failureOf(tester, threshold: 0.5);
 
-      expect(message, contains("alchemist's `diffThreshold` does not apply"));
+      expect(
+        message,
+        contains(
+          "(AlchemistFileComparator, alchemist's `diffThreshold`) does not "
+          'apply',
+        ),
+      );
       expect(message, isNot(contains('obscured')));
     });
 

@@ -126,6 +126,7 @@ import 'dart:async';
 import 'package:alchemist/alchemist.dart'
     show AlchemistConfig, CiGoldensConfig, PlatformGoldensConfig;
 // Until alchemist exports it (Betterment/alchemist#188).
+// The implementation_imports lint checks only the files under lib, not tests.
 import 'package:alchemist/src/golden_test_adapter.dart' show goldenFileExpectationFn;
 import 'package:gleon/alchemist.dart';
 import 'package:gleon/gleon.dart';
@@ -158,6 +159,9 @@ String _goldenPath(String fileName, String environmentName) => 'goldens/$fileNam
   text, compared like path 2; a failure then says how to compare real text
   (`shouldHintObscuredText: false` silences that). After switching `obscureText`, record the
   goldens again (`--update-goldens`): blocks and glyphs never match.
+- Do not install `GleonFileComparator` as well: alchemist refuses a `diffThreshold` above 0 with
+  any comparator but Flutter's own (`UnsupportedError` before comparing), and the adapter needs
+  none.
 - alchemist's `diffThreshold` does not apply, and a failure says so: set a tolerance instead. Its
   `forceUpdateGoldenFiles` writes like `--update-goldens` (see
   [Recording per-platform goldens](#recording-per-platform-goldens)).
