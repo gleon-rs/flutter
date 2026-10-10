@@ -52,7 +52,7 @@ final class CaseCheck {
       : '$os-$arch';
 
   /// The case report schema version gleon writes.
-  static const _schemaVersion = 3;
+  static const _schemaVersion = 4;
 
   /// What the report [content] (JSON text of one case report file at
   /// [location], `/`-separated and relative to `cases/`) shows that it

@@ -118,7 +118,7 @@ void main() {
     final message = await withGoldenUpdates(
       () => matchesGoldenFile(Swatch.golden).matchAsync(bytes),
     );
-    expect(message, contains('needs the default LocalFileComparator'));
+    expect(message, contains('needs a LocalFileComparator'));
   });
 
   test('a version names the golden of bytes', () async {

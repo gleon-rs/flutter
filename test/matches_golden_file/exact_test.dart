@@ -100,9 +100,32 @@ void main() {
     await tester.pumpWidget(const Swatch());
     expect(
       await matchesGoldenFile(Swatch.golden).matchAsync(Swatch.finder),
-      contains('needs the default LocalFileComparator'),
+      contains('needs a LocalFileComparator'),
     );
   });
+
+  testWidgets("a LocalFileComparator subclass's own threshold never applies", (
+    tester,
+  ) async {
+    // Like alchemist's or golden_screenshot's tolerant comparators: gleon
+    // takes the golden directory and compares itself.
+    goldenFileComparator = _TolerantComparator(
+      WorkspaceSandbox.current().dir.uri.resolve('tolerant_test.dart'),
+    );
+    await tester.pumpWidget(const Swatch(dot: Swatch.dotOffset));
+
+    expect(
+      await matchesGoldenFile(Swatch.golden).matchAsync(Swatch.finder),
+      contains('gleon exact'),
+    );
+  });
+}
+
+class _TolerantComparator extends LocalFileComparator {
+  _TolerantComparator(super.testFile);
+
+  @override
+  Future<bool> compare(Uint8List imageBytes, Uri golden) async => true;
 }
 
 class _FakeComparator extends GoldenFileComparator {

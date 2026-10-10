@@ -184,8 +184,8 @@ void main() {
           .listSync()
           .map((file) => file.uri.pathSegments.lastOrNull)
           .toSet(),
-      {'a-actual.png', 'a-expected.png'},
-      reason: 'different sizes have no diff image',
+      {'a-actual.png', 'a-expected.png', 'a-diff.png'},
+      reason: 'different sizes keep a diff of both',
     );
     final corrupt = NativeEngine.golden(
       session,

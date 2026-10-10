@@ -10,6 +10,10 @@ abstract final class Tolerances {
   /// messages: enough for any threshold a developer sets.
   static const _maxDecimals = 4;
 
+  /// The largest `channelTolerance` and `edgeThreshold`, as in the engine: 255
+  /// would make every pixel equal or hide nothing.
+  static const _maxOption = 254;
+
   /// The digits of a fraction up to its trailing zeros.
   static final _withoutTrailingZeros = RegExp(r'^\d*?(?=0*$)');
 
@@ -17,8 +21,14 @@ abstract final class Tolerances {
   /// out of range.
   static void validate(GoldenTolerance tolerance) {
     switch (tolerance) {
-      case PixelTolerance(:final maxDiffRatio):
+      case PixelTolerance(
+        :final channelTolerance,
+        :final edgeThreshold,
+        :final maxDiffRatio,
+      ):
         _checkRatio(maxDiffRatio, 'maxDiffRatio');
+        _checkOption(channelTolerance, 'channelTolerance');
+        _checkOption(edgeThreshold, 'edgeThreshold');
 
       case SsimTolerance(:final colorTolerance, :final minSimilarity):
         _checkRatio(minSimilarity, 'minSimilarity');
@@ -27,6 +37,24 @@ abstract final class Tolerances {
       // Nothing to configure, nothing to reject.
       case ExactTolerance():
     }
+  }
+
+  /// A pixel tolerance as in failure messages, its options only when on:
+  /// `pixel ≤ 1.00%, ±4 per channel, aa ignored, edges >64 ignored`.
+  static String describePixel(PixelTolerance tolerance) {
+    final PixelTolerance(
+      :antiAlias,
+      :channelTolerance,
+      :edgeThreshold,
+      :maxDiffRatio,
+    ) = tolerance;
+
+    return [
+      'pixel ${atMost(maxDiffRatio)}',
+      if (channelTolerance > 0) '±$channelTolerance per channel',
+      if (antiAlias) 'aa ignored',
+      if (edgeThreshold > 0) 'edges >$edgeThreshold ignored',
+    ].join(', ');
   }
 
   /// Throws an [ArgumentError] unless [share], a `textTolerance`, is between
@@ -72,6 +100,16 @@ abstract final class Tolerances {
   static void _checkRatio(double value, String name) {
     if (value.isNaN || value < 0 || value > 1) {
       throw ArgumentError.value(value, name, 'must be between 0.0 and 1.0');
+    }
+  }
+
+  static void _checkOption(int value, String name) {
+    if (value < 0 || value > _maxOption) {
+      throw ArgumentError.value(
+        value,
+        name,
+        'must be between 0 and 254 (0 turns it off)',
+      );
     }
   }
 

@@ -26,7 +26,7 @@ void main() {
     'outcome': 'match',
     'platform': {'arch': 'aarch64', 'os': 'macos'},
     'run_id': 'run-1',
-    'schema_version': 3,
+    'schema_version': 4,
   });
 
   Future<ProcessResult> checkCases(List<String> args) {

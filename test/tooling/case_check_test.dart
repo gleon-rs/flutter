@@ -18,7 +18,7 @@ void main() {
     bool hasText = true,
     String outcome = 'match',
     String? runId,
-    int version = 3,
+    int version = 4,
   }) => json.encode({
     'comparison': {'text_tolerance': ?(hasText ? text : null)},
     'golden': {'fallback': ?fallback, 'path': path},
@@ -163,7 +163,7 @@ void main() {
       isEmpty,
     );
     expect(problemsOf(check, report(runId: 'run-2', version: 2)), [
-      'schema_version 2, expected 3',
+      'schema_version 2, expected 4',
       'outcome match, expected one of identical',
       'run_id run-2, expected run-1',
     ]);

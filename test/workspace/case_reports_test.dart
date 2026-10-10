@@ -75,11 +75,11 @@ void main() {
     expect(report.containsKey('metrics'), isFalse);
     expect(report.containsKey('artifacts'), isFalse, reason: 'a pass');
     expect(report.containsKey('run_id'), isFalse, reason: 'no GLEON_RUN_ID');
-    expect(report, containsPair('schema_version', 3));
+    expect(report, containsPair('schema_version', 4));
     expect(report, containsPair('regions', isEmpty));
     expect(report['comparison'], {
       'masks': isEmpty,
-      'policy_version': 3,
+      'policy_version': 4,
       'tolerance': {
         'color_tolerance': 8.0,
         'kind': 'ssim',
@@ -139,8 +139,21 @@ void main() {
         containsPair('headroom', containsPair('similarity', greaterThan(0))),
       ),
     );
+    // The whole image, then where the tolerated noise is, with its own
+    // metrics: no failing region on a pass.
     expect(report['regions'], [
       {'kind': 'image', 'metrics': metrics},
+      allOf(
+        containsPair('kind', 'changed'),
+        containsPair('rect', containsPair('width', greaterThan(0))),
+        containsPair(
+          'metrics',
+          allOf(
+            containsPair('kind', 'ssim'),
+            containsPair('failing_pixels', 0),
+          ),
+        ),
+      ),
     ]);
     expect(report['timings_ms'], containsPair('native', isA<num>()));
     expect(

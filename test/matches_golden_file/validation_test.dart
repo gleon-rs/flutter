@@ -56,22 +56,12 @@ void main() {
     }
   });
 
-  test('a text tolerance needs an exact or pixel tolerance', () {
-    expect(
-      () => matchesGoldenFile(
-        Swatch.golden,
-        tolerance: const .ssim(),
-        textTolerance: 1,
-      ),
-      _throwsInvalid(
-        'textTolerance',
-        'applies to exact and pixel tolerances, not ssim',
-      ),
-    );
+  test('a text tolerance is accepted with every tolerance', () {
     for (final tolerance in const <GoldenTolerance?>[
       null,
       .exact(),
       .pixel(),
+      .ssim(),
     ]) {
       expect(
         () => matchesGoldenFile(

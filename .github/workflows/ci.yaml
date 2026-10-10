@@ -62,7 +62,7 @@ jobs:
         run: echo "gleon_ref=$(tr -d '[:space:]' < native/gleon_ref)" >> "$GITHUB_OUTPUT"
 
       # Case reports are validated against the committed JSON Schema of the pinned engine
-      # (`git -C ../gleon show <pin>:gleon-model/schema/case.v3.json`), and the Dart bindings
+      # (`git -C ../gleon show <pin>:gleon-model/schema/case.v4.json`), and the Dart bindings
       # against the ABI version and struct layout the pinned `gleon-ffi/src/lib.rs` asserts; the
       # tests skip that without the checkout or the commit.
       - name: Check out the gleon schemas and C contract
