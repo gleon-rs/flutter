@@ -4,13 +4,13 @@ import 'dart:ui' as ui;
 
 import 'package:gleon/gleon.dart';
 
-import '../helpers/golden_sandbox.dart';
 import '../helpers/golden_updates.dart';
 import '../helpers/prints.dart';
 import '../helpers/swatch.dart';
+import '../helpers/workspace_sandbox.dart';
 
 void main() {
-  GoldenSandbox.install();
+  setUp(WorkspaceSandbox.withoutWorkspace);
 
   /// The swatch as an image the test owns ([dot]: with a changed pixel).
   Future<ui.Image> swatch(WidgetTester tester, {Offset? dot}) async {
@@ -70,7 +70,7 @@ void main() {
 
     expect(await withGoldenUpdates(() => matcher.matchAsync(image)), isNull);
     expect(await matcher.matchAsync(image), isNull);
-    final sandbox = '${GoldenSandbox.dir.path}/goldens';
+    final sandbox = '${WorkspaceSandbox.current().dir.path}/goldens';
     expect(File('$sandbox/versioned.2.png').existsSync(), isTrue);
     expect(File('$sandbox/versioned.png').existsSync(), isFalse);
   });
@@ -105,7 +105,8 @@ void main() {
       contains('1 of 6000px'),
     );
     expect(
-      File('${GoldenSandbox.failures.path}/swatch_testImage.png').existsSync(),
+      File('${WorkspaceSandbox.current().failures.path}/swatch_testImage.png')
+          .existsSync(),
       isTrue,
     );
   });

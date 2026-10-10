@@ -6,7 +6,6 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 
 import 'atomic_write.dart';
-import 'native_download_exception.dart';
 import 'native_target.dart';
 
 typedef _Checksums = ({Map<String, String> hashes, bool isCached});
@@ -63,7 +62,7 @@ abstract final class ReleaseDownload {
     Duration bodyTimeout = const Duration(minutes: 3),
   }) async {
     if (!_Release.isAllowedUrl(releaseUrl)) {
-      throw NativeDownloadException(
+      throw _Release.failure(
         'release_url must be an https URL (plain http only for localhost), '
         'got "$releaseUrl". For a library file on disk, set the `ffi_path` '
         'user-define instead.',
@@ -104,6 +103,10 @@ final class _Release {
       'Alternatively set the `ffi_path` user-define to a local copy of the '
       'library, `release_url` to a mirror of the release, or `gleon_repo` to '
       'build it from a gleon checkout (see the package README).';
+
+  /// A download or verification failure with an actionable [message]; hook
+  /// errors are printed verbatim.
+  static StateError failure(String message) => .new('gleon: $message');
 
   static const _attempts = 3;
   static const _maxRedirects = 5;
@@ -157,7 +160,7 @@ final class _Release {
       library = _cachedLibrary(expected, target);
     }
     if (actual != expected) {
-      throw NativeDownloadException(
+      throw failure(
         'checksum mismatch for $assetUrl (expected $expected per '
         '$_checksumsUrl, got $actual). The file was not used.'
         '$_mirrorHint',
@@ -171,7 +174,7 @@ final class _Release {
   /// The hash of [target]'s library in [checksums].
   String _expected(_Checksums checksums, NativeTarget target) =>
       checksums.hashes[target.assetName] ??
-      (throw NativeDownloadException(
+      (throw failure(
         'the release at $url has no ${target.assetName} for '
         '${target.key} in its ${ReleaseDownload.checksumsFileName}.'
         '$_mirrorHint',
@@ -202,9 +205,7 @@ final class _Release {
       utf8.decode(bytes, allowMalformed: true),
     );
     if (hashes.isEmpty) {
-      throw NativeDownloadException(
-        '$checksumsUrl is not a valid checksum list.',
-      );
+      throw failure('$checksumsUrl is not a valid checksum list.');
     }
     await AtomicWrite.bytes(file, bytes);
 
@@ -236,7 +237,7 @@ final class _Release {
       // An error page is never needed: drop it instead of reading it.
       await _drain(response);
       if (status == HttpStatus.notFound) {
-        throw NativeDownloadException(
+        throw failure(
           isMirror
               ? '$source does not exist (HTTP 404).$_mirrorHint '
                     '$_overridesHint'
@@ -247,17 +248,15 @@ final class _Release {
         );
       }
       if (status < HttpStatus.internalServerError || isLast) {
-        throw NativeDownloadException(
+        throw failure(
           'downloading $source failed with HTTP $status. $_overridesHint',
         );
       }
-    } on NativeDownloadException {
-      rethrow;
     } on Exception catch (error, stackTrace) {
       // SocketException, HttpException, TimeoutException, TLS errors, ...
       if (isLast) {
         Error.throwWithStackTrace(
-          NativeDownloadException(
+          failure(
             'could not download $source ($error). Check the network or proxy '
             '(HTTPS_PROXY is honored), or download the file manually. '
             '$_overridesHint',
@@ -285,17 +284,17 @@ final class _Release {
       await _drain(response);
       final location =
           response.headers.value(HttpHeaders.locationHeader) ??
-          (throw NativeDownloadException(
+          (throw failure(
             'downloading $source failed: redirect without a location.',
           ));
       if (redirects == _maxRedirects) {
-        throw NativeDownloadException(
+        throw failure(
           'downloading $source failed: more than $_maxRedirects redirects.',
         );
       }
       final next = current.resolve(location);
       if (!isAllowedUrl(next)) {
-        throw NativeDownloadException(
+        throw failure(
           '$source redirected to $next; refusing to download over an '
           'insecure connection.',
         );

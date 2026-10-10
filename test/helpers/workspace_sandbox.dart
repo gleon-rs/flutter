@@ -12,11 +12,14 @@ import 'package:gleon/src/flutter/gleon_matches_golden_file.dart';
 import 'package:gleon/src/flutter/ignore_regions.dart';
 import 'package:json_schema/json_schema.dart';
 
-import 'golden_sandbox.dart';
+/// The package goldens, relative to the package root (`flutter test`'s
+/// working directory).
+const goldenSource = 'test/goldens';
 
 /// The gleon commit `native/gleon_ref` pins.
 // ignore: avoid-explicit-type-declaration, not obvious from the initializer.
-final String gleonPin = File('native/gleon_ref').readAsStringSync().trim();
+final String gleonPin =
+    NativeTarget.readPin(Directory.current.uri) ?? fail('no native/gleon_ref');
 
 /// `case.v3.json` of the pinned commit ([gleonPin]) in a sibling gleon
 /// checkout (`../gleon`, as in CI), or null without that checkout or commit.
@@ -25,26 +28,36 @@ final String gleonPin = File('native/gleon_ref').readAsStringSync().trim();
 // ignore: avoid-explicit-type-declaration, not obvious from the initializer.
 final JsonSchema? caseSchema = _loadCaseSchema();
 
-/// A temporary gleon workspace for one test: `.gleon/gleon.yaml` plus copies
-/// of the package goldens under `test/goldens/` (and any `extraGoldens`),
-/// with Flutter's `LocalFileComparator` rooted at `test/`.
+/// A temporary directory for one test with copies of the package goldens
+/// `blob.png` and `swatch.png` under `test/goldens/` (and any
+/// `extraGoldens`), with Flutter's
+/// `LocalFileComparator` rooted at `test/`: a gleon workspace when given a
+/// `.gleon/gleon.yaml`.
+///
+/// `flutter test` runs test files in parallel processes, and failure
+/// artifacts are named after the golden (`failures/swatch_testImage.png`), so
+/// tests sharing a directory would race on them. The sandbox also keeps the
+/// repository clean: failures and `--update-goldens` writes land in a temp
+/// directory that is deleted after the test.
 final class WorkspaceSandbox {
-  /// Creates the workspace and installs its comparator for the running test.
+  /// Creates the sandbox and installs its comparator for the running test;
+  /// with a [yaml] config it is a workspace, else no golden in it has one.
   ///
   /// [extraGoldens] maps a path under `test/` to a package golden file name
-  /// (`swatch.png` or `blob.png`) to copy there.
+  /// (`swatch.png`, `blob.png` or `caption.png`) to copy there.
   factory WorkspaceSandbox.create(
-    String yaml, {
+    String? yaml, {
     Map<String, String> extraGoldens = const {},
   }) {
     final root = Directory(
-      Directory.systemTemp
-          .createTempSync('gleon_ws_')
-          .resolveSymbolicLinksSync(),
+      Directory.systemTemp.createTempSync(_prefix).resolveSymbolicLinksSync(),
     );
-    Directory('${root.path}/.gleon').createSync();
-    _writeConfig(root, yaml);
-    const source = GoldenSandbox.source;
+    // Before anything that may throw, so the directory never outlives the test.
+    addTearDown(() => root.deleteSync(recursive: true));
+    if (yaml != null) {
+      Directory('${root.path}/.gleon').createSync();
+      _writeConfig(root, yaml);
+    }
     final goldens = {
       'goldens/blob.png': 'blob.png',
       'goldens/swatch.png': 'swatch.png',
@@ -53,23 +66,52 @@ final class WorkspaceSandbox {
     for (final MapEntry(key: target, value: name) in goldens.entries) {
       final file = File('${root.path}/test/$target')
         ..parent.createSync(recursive: true);
-      File('$source/$name').copySync(file.path);
+      File('$goldenSource/$name').copySync(file.path);
     }
-    final sandbox = WorkspaceSandbox._(root, goldenFileComparator);
-    addTearDown(sandbox._dispose);
+    // Tear-downs run in reverse: the comparator is back before the directory
+    // goes.
+    addTearDown(_restore(goldenFileComparator));
     goldenFileComparator = LocalFileComparator(
       root.uri.resolve('test/sandbox_test.dart'),
     );
 
-    return sandbox;
+    return WorkspaceSandbox._(root);
   }
 
-  const WorkspaceSandbox._(this.root, this._original);
+  /// A sandbox whose goldens (all three) have no workspace.
+  factory WorkspaceSandbox.withoutWorkspace() =>
+      .create(null, extraGoldens: const {'goldens/caption.png': 'caption.png'});
 
-  /// The workspace root.
+  const WorkspaceSandbox._(this.root);
+
+  /// The sandbox whose comparator `goldenFileComparator` is: the last one the
+  /// running test created (for `setUp` users). Read from Flutter's global,
+  /// not kept apart, so it can never point at another test's sandbox.
+  factory WorkspaceSandbox.current() => switch (goldenFileComparator) {
+    // `<temp>/gleon_ws_…/test/` (a directory: its last segment is empty): the
+    // sandbox's own directory, not any path that happens to contain the
+    // prefix.
+    LocalFileComparator(
+      basedir: final basedir && Uri(pathSegments: [..., final name, 'test', _]),
+    )
+        when name.startsWith(_prefix) =>
+      ._(Directory.fromUri(basedir).parent),
+    final other => throw StateError(
+      'no WorkspaceSandbox in this test (goldenFileComparator is a '
+      '${other.runtimeType})',
+    ),
+  };
+
+  /// The sandbox (workspace) root.
   final Directory root;
 
-  final GoldenFileComparator _original;
+  static const _prefix = 'gleon_ws_';
+
+  /// The comparator's basedir: goldens are resolved against it.
+  Directory get dir => .new('${root.path}/test');
+
+  /// Where Flutter-style failure images of the running test are written.
+  Directory get failures => .new('${dir.path}/failures');
 
   /// Every file under `.gleon/runs/` (empty when nothing was recorded).
   List<File> get recordedFiles {
@@ -150,10 +192,9 @@ final class WorkspaceSandbox {
   /// Replaces `.gleon/gleon.yaml` with [yaml] (the engine reads it again).
   void writeConfig(String yaml) => _writeConfig(root, yaml);
 
-  void _dispose() {
-    goldenFileComparator = _original;
-    root.deleteSync(recursive: true);
-  }
+  /// A tear-down that puts [original] back as `goldenFileComparator`.
+  static VoidCallback _restore(GoldenFileComparator original) =>
+      () => goldenFileComparator = original;
 }
 
 /// The name gleon gives this platform: the directory of its own goldens, and

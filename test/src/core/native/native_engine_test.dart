@@ -47,7 +47,9 @@ void main() {
   });
 
   test('verdict codes follow gleon-ffi, unknown codes are errors', () {
-    expect(NativeVerdict.of(0), NativeVerdict.identical);
+    // Zero is an error: a summary the library never wrote is no pass.
+    expect(NativeVerdict.of(0), NativeVerdict.error);
+    expect(NativeVerdict.of(1), NativeVerdict.identical);
     expect(NativeVerdict.of(6), NativeVerdict.missing);
     expect(NativeVerdict.of(7), NativeVerdict.error);
     expect(NativeVerdict.of(-1), NativeVerdict.error);

@@ -77,20 +77,22 @@ reviews:
 
     - path: "lib/src/core/native/**"
       instructions: >
-        FFI boundary to `gleon-ffi` (safer-ffi, JSON over byte slices). The most
-        safety-critical Dart code in the package.
+        FFI boundary to `gleon-ffi` (safer-ffi, C ABI 11). The most safety-critical Dart code
+        in the package.
 
-        - Signatures must match the Rust exports exactly (`Size` for `usize`, slices returned
-          by value as `{ptr, len}`), and `NativeEngine.expectedAbiVersion` must match
-          `ABI_VERSION` in gleon-ffi.
-        - Every `gleon_compare` result is freed exactly once in `finally`; slices borrowed
-          from it are copied out before the free, never used after it.
-        - `isLeaf: true` is deliberate: it allows zero-copy `Uint8List.address` inputs, and the
-          GC pause during a comparison is acceptable for tests (see the library doc of
-          `gleon_ffi.dart`). Do not suggest `Isolate.run`, `malloc` or finalizers without a
-          measured problem.
-        - Reports are parsed with patterns into sealed types; anything off-contract becomes
-          an error, never a pass; no `as` casts.
+        - Signatures and the `GleonCall`/`GleonSummary` structs must match the Rust exports
+          exactly (`Size` for `usize`); `test/src/core/native/gleon_ffi_test.dart` checks the
+          layout against the assertions of the pinned `gleon-ffi/src/lib.rs`, and
+          `NativeEngine.expectedAbiVersion` against its `ABI_VERSION`.
+        - `gleon_golden` writes its summary into a `Struct.create`d buffer passed by `.address`,
+          never returned by value (dart-lang/sdk#64368: such leaf calls return null without
+          calling). Its non-null `texts` are freed exactly once with `gleon_texts_free` in
+          `finally`, after the slices were copied out.
+        - `isLeaf: true` is deliberate: it allows zero-copy `.address` inputs, and the GC pause
+          during a comparison is acceptable for tests (see the library doc of `gleon_ffi.dart`).
+          Do not suggest `Isolate.run`, `malloc` or finalizers without a measured problem.
+        - Codes map through enums; anything off-contract becomes an error, never a pass: verdict
+          0 is an error, so a summary the library never wrote fails; no `as` casts.
 
     - path: "lib/src/core/**"
       instructions: >
@@ -183,5 +185,5 @@ code_generation:
           network access: use local servers and temp directories.
       - path: "lib/src/flutter/**/*.dart"
         instructions: >
-          Golden tests live in test/matches_golden_file/ and use the GoldenSandbox helper so
+          Golden tests live in test/matches_golden_file/ and use the WorkspaceSandbox helper so
           parallel test files never race on failure artifacts.

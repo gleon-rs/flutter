@@ -79,7 +79,7 @@ void main() {
     expect(report, containsPair('regions', isEmpty));
     expect(report['comparison'], {
       'masks': isEmpty,
-      'policy_version': 2,
+      'policy_version': 3,
       'tolerance': {
         'color_tolerance': 8.0,
         'kind': 'ssim',

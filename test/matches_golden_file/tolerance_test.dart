@@ -3,11 +3,11 @@ import 'dart:ui';
 import 'package:gleon/gleon.dart';
 
 import '../helpers/blob.dart';
-import '../helpers/golden_sandbox.dart';
 import '../helpers/swatch.dart';
+import '../helpers/workspace_sandbox.dart';
 
 void main() {
-  GoldenSandbox.install();
+  setUp(WorkspaceSandbox.withoutWorkspace);
 
   group('pixel', () {
     testWidgets('tolerates a small change', (tester) async {

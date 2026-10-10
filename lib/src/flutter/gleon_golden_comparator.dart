@@ -57,11 +57,11 @@ class GleonGoldenComparator extends GoldenFileComparator {
   /// no per-platform golden, no case report).
   @override
   Future<void> update(Uri golden, Uint8List imageBytes) async =>
-      _run(_local, golden, imageBytes, isUpdate: true);
+      _run(golden, imageBytes, isUpdate: true);
 
   @override
   Future<bool> compare(Uint8List imageBytes, Uri golden) async {
-    _run(_local, golden, imageBytes);
+    _run(golden, imageBytes);
 
     return true;
   }
@@ -78,7 +78,6 @@ class GleonGoldenComparator extends GoldenFileComparator {
     required int height,
     List<PixelRegion> textRegions = const [],
   }) => _run(
-    _local,
     golden,
     pixels,
     rawSize: (height: height, width: width),
@@ -101,14 +100,13 @@ class GleonGoldenComparator extends GoldenFileComparator {
   /// One native call; throws a [TestFailure] with the engine's message
   /// unless the golden passes.
   void _run(
-    LocalFileComparator local,
     Uri golden,
     Uint8List imageBytes, {
     ({int height, int width})? rawSize,
     List<PixelRegion> textRegions = const [],
     bool isUpdate = false,
   }) {
-    final basedir = local.basedir;
+    final basedir = _local.basedir;
     final outcome = NativeEngine.golden(
       session,
       // Same resolution as LocalFileComparator: the key relative to basedir.

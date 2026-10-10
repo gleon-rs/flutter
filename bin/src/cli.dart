@@ -43,6 +43,14 @@ final class Cli {
         : failUsage('$flag needs a value.');
   }
 
+  /// The gleon checkout: [flag] (`--gleon-repo`), else `$GLEON_REPO`, else
+  /// the sibling `../gleon` of [packageRoot]; absolute.
+  static Directory gleonCheckout(String? flag, Uri packageRoot) => Directory(
+    flag ??
+        Platform.environment['GLEON_REPO'] ??
+        packageRoot.resolve('../gleon').toFilePath(),
+  ).absolute;
+
   /// The root of this package (the directory of its `pubspec.yaml`).
   Future<Uri> packageRoot() async {
     final lib = await Isolate.resolvePackageUri(.parse('package:gleon/'));

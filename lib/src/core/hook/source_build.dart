@@ -2,9 +2,9 @@ import 'dart:io';
 
 import 'native_target.dart';
 
-/// Result of [SourceBuild.run]: the built library and every input file whose
-/// change must re-run the build hook.
-typedef SourceBuildOutput = ({List<Uri> dependencies, Uri library});
+/// A library the build hook provides and every input file whose change must
+/// re-run the hook (`NativeLibrary.resolve`, [SourceBuild.run]).
+typedef LibraryFiles = ({List<Uri> dependencies, Uri library});
 
 /// Runs a process like [Process.run] (injectable so builds are testable
 /// without Rust).
@@ -32,14 +32,28 @@ abstract final class SourceBuild {
     'rust-toolchain.toml',
   ];
 
-  /// `path = "../<crate>"` dependencies of a `Cargo.toml`.
-  static final _pathDependency = RegExp(r'path\s*=\s*"\.\./([^"/]+)"');
+  /// `path = "<dir>"` dependencies of a `Cargo.toml`, in either quotes.
+  static final _pathDependency = RegExp(r'''path\s*=\s*["']([^"']+)["']''');
+
+  /// The arguments of a cargo build subcommand (`build`, `zigbuild`, ...)
+  /// that builds [target] into [targetDir]: release, locked, only [crate].
+  /// The library lands at [NativeTarget.builtLibrary].
+  static List<String> cargoArguments(NativeTarget target, Uri targetDir) => [
+    '--release',
+    '--locked',
+    '--package',
+    crate,
+    '--target',
+    target.rustTriple,
+    '--target-dir',
+    targetDir.toFilePath(),
+  ];
 
   /// Builds [target] from the checkout at [repoRoot] into [targetDir]
   /// (cargo's `--target-dir`), using [environment] (the hook's process
   /// environment) to find cargo and to pass its settings on; [runProcess]
   /// runs it.
-  static Future<SourceBuildOutput> run({
+  static Future<LibraryFiles> run({
     required Uri repoRoot,
     required Uri targetDir,
     required NativeTarget target,
@@ -48,34 +62,24 @@ abstract final class SourceBuild {
   }) async {
     final root = checkoutRoot(repoRoot);
     final cargo = findCargo(environment);
-    final triple = target.rustTriple;
+    final arguments = ['build', ...cargoArguments(target, targetDir)];
     final result = await runProcess(
       cargo,
-      [
-        'build',
-        '--release',
-        '--locked',
-        '--package',
-        crate,
-        '--target',
-        triple,
-        '--target-dir',
-        targetDir.toFilePath(),
-      ],
+      arguments,
       environment: target.cargoEnvironment(environment),
       workingDirectory: root.toFilePath(),
     );
     if (result.exitCode != 0) {
       throw ProcessException(
         cargo,
-        ['build', '--package', crate, '--target', triple],
+        arguments,
         'gleon: failed to build the native library (exit ${result.exitCode}).'
         '\n${result.stdout}\n${result.stderr}',
         result.exitCode,
       );
     }
 
-    final library = targetDir.resolve('$triple/release/${target.libFileName}');
+    final library = target.builtLibrary(targetDir);
     if (!File.fromUri(library).existsSync()) {
       throw StateError(
         'gleon: cargo succeeded but ${library.toFilePath()} is missing.',
@@ -164,24 +168,43 @@ abstract final class SourceBuild {
     ],
   ];
 
-  /// [crate] and its transitive `path` dependencies inside the checkout.
+  /// [crate] and its transitive `path` dependencies inside the checkout
+  /// [root], as directories relative to it. The workspace's own `path`
+  /// dependencies count too, since members inherit them with
+  /// `workspace = true`: one crate too many only rebuilds more often.
   static Set<String> _localCrates(Uri root) {
     final crates = <String>{};
-    final pending = [crate];
+    final pending = [crate, ..._pathDependencies(root, inside: root)];
     while (pending.isNotEmpty) {
       final member = pending.removeLast();
-      final manifest = File.fromUri(root.resolve('$member/Cargo.toml'));
-      if (crates.add(member) && manifest.existsSync()) {
+      if (crates.add(member)) {
         pending.addAll(
-          _pathDependency
-              .allMatches(manifest.readAsStringSync())
-              .map((match) => match.group(1))
-              .nonNulls,
+          _pathDependencies(root.resolve('$member/'), inside: root),
         );
       }
     }
 
     return crates;
+  }
+
+  /// The `path` dependencies of the manifest in [dir] that lie [inside] the
+  /// checkout, relative to it.
+  static List<String> _pathDependencies(Uri dir, {required Uri inside}) {
+    final manifest = File.fromUri(dir.resolve('Cargo.toml'));
+    // `inside` is a directory: its last segment is empty.
+    final depth = inside.pathSegments.length - 1;
+
+    return manifest.existsSync()
+        ? [
+            for (final match in _pathDependency.allMatches(
+              manifest.readAsStringSync(),
+            ))
+              if (match.group(1) case final path?)
+                if (dir.resolve(path) case final crateDir
+                    when crateDir.path.startsWith(inside.path))
+                  crateDir.pathSegments.skip(depth).join('/'),
+          ]
+        : const [];
   }
 
   static Iterable<Uri> _sources(Uri dir) {

@@ -6,10 +6,15 @@
 ///
 /// Every call is a leaf call, which is the right trade-off for tests:
 ///
-/// * Inputs are passed zero-copy via `Uint8List.address` and
-///   `Uint32List.address`, which `dart:ffi` only allows for leaf calls, and
-///   the result summary is returned by value, so this side never allocates
-///   native memory (no `package:ffi`, no `malloc`/`free` pairs).
+/// * Inputs are passed zero-copy via `Uint8List.address`,
+///   `Uint32List.address` and the `.address` of a `Struct.create`d
+///   [GleonCall], which `dart:ffi` only allows for leaf calls, and the
+///   native side writes the [GleonSummary] into a `Struct.create`d one, so
+///   this side never allocates native memory (no `package:ffi`, no
+///   `malloc`/`free` pairs). A summary without texts (a pass) owns nothing:
+///   one call per golden. (Not returned by value: leaf calls returning a
+///   struct by value with `.address` arguments return null without calling,
+///   https://github.com/dart-lang/sdk/issues/64368.)
 /// * The price: while a leaf call runs, the isolate group cannot reach a GC
 ///   safepoint. Typical goldens take milliseconds (the native side also
 ///   writes failure artifacts and case reports); large SSIM comparisons can
@@ -58,85 +63,64 @@ abstract final class GleonFfi {
   )
   external static void sessionFree(Pointer<GleonSessionHandle> session);
 
-  /// `gleon_golden`: compares (mode 0) or writes (mode 1, PNG only) one
-  /// golden given the packed call strings and the candidate (format 0 PNG
-  /// bytes, 1 raw straight RGBA8 of width x height), with the tolerance code
-  /// (0 from `.gleon/gleon.yaml`, 1 exact, 2 pixel, 3 SSIM), `[x, y, width,
-  /// height]` pixel masks and text regions, and the text tolerance (NaN
-  /// from `.gleon/gleon.yaml`). Never returns null; release with
-  /// [resultFree].
+  /// `gleon_golden`: compares or writes one golden given the scalars of
+  /// [call], the packed call strings, the candidate (PNG bytes, or raw
+  /// straight RGBA8 of the call's width x height) and `[x, y, width, height]`
+  /// pixel masks and text regions. Writes the verdict and texts to [summary];
+  /// its `texts` (null when there are none) must be released with
+  /// [textsFree].
   @Native<
-    Pointer<GleonResult> Function(
+    Void Function(
       Pointer<GleonSessionHandle> session,
-      Uint8 mode,
+      Pointer<GleonCall> call,
+      Pointer<GleonSummary> summary,
       Pointer<Uint8> strings,
       Size stringsLength,
       Pointer<Uint32> lengths,
       Size lengthsCount,
       Pointer<Uint8> candidate,
       Size candidateLength,
-      Uint8 candidateFormat,
-      Uint32 candidateWidth,
-      Uint32 candidateHeight,
-      Uint8 toleranceKind,
-      Double maxDiffRatio,
-      Double minSimilarity,
-      Double colorTolerance,
       Pointer<Uint32> masks,
       Size maskCount,
       Pointer<Uint32> textRegions,
       Size textRegionCount,
-      Double textTolerance,
     )
   >(symbol: 'gleon_golden', isLeaf: true)
-  external static Pointer<GleonResult> golden(
+  external static void golden(
     Pointer<GleonSessionHandle> session,
-    int mode,
+    Pointer<GleonCall> call,
+    Pointer<GleonSummary> summary,
     Pointer<Uint8> strings,
     int stringsLength,
     Pointer<Uint32> lengths,
     int lengthsCount,
     Pointer<Uint8> candidate,
     int candidateLength,
-    int candidateFormat,
-    int candidateWidth,
-    int candidateHeight,
-    int toleranceKind,
-    double maxDiffRatio,
-    double minSimilarity,
-    double colorTolerance,
     Pointer<Uint32> masks,
     int maskCount,
     Pointer<Uint32> textRegions,
     int textRegionCount,
-    double textTolerance,
   );
 
-  /// `gleon_result_summary`: the verdict and texts, borrowed from [result].
-  @Native<GleonSummary Function(Pointer<GleonResult> result)>(
-    symbol: 'gleon_result_summary',
+  /// `gleon_texts_free`: releases the texts of a summary (and every slice
+  /// borrowed from them), once.
+  @Native<Void Function(Pointer<GleonTexts> texts)>(
+    symbol: 'gleon_texts_free',
     isLeaf: true,
   )
-  external static GleonSummary resultSummary(Pointer<GleonResult> result);
-
-  /// `gleon_result_free`: releases [result] and every slice borrowed from it.
-  @Native<Void Function(Pointer<GleonResult> result)>(
-    symbol: 'gleon_result_free',
-    isLeaf: true,
-  )
-  external static void resultFree(Pointer<GleonResult> result);
+  external static void textsFree(Pointer<GleonTexts> texts);
 }
 
-/// Opaque `GleonResult` owned by the native library: created by
-/// `gleon_golden`, released only by `gleon_result_free`.
-final class GleonResult extends Opaque {}
+/// Opaque texts of a `GleonSummary` owned by the native library: created by
+/// `gleon_golden`, released only by `gleon_texts_free`.
+final class GleonTexts extends Opaque {}
 
 /// Opaque `GleonSession` owned by the native library: created by
 /// `gleon_session_new`, released only by `gleon_session_free`.
 final class GleonSessionHandle extends Opaque {}
 
-/// The safer-ffi `c_slice::Ref<u8>` returned by value: a borrowed view into a
-/// `GleonResult`, valid until the result is freed (empty for "none").
+/// The safer-ffi `c_slice::Ref<u8>` fields of a `GleonSummary`: a borrowed
+/// view into its texts, valid until they are freed (empty for "none").
 final class NativeSlice extends Struct {
   /// First byte (dangling when [len] is 0).
   external Pointer<Uint8> ptr;
@@ -146,8 +130,48 @@ final class NativeSlice extends Struct {
   external int len;
 }
 
-/// The `GleonSummary` returned by value from `gleon_result_summary`: the
-/// verdict code and the UTF-8 texts to show, borrowed from their result.
+/// The `GleonCall` scalars of one `gleon_golden` call, created on the Dart
+/// heap and passed by `.address` (the native side reads them unaligned).
+final class GleonCall extends Struct {
+  /// Pixel tolerance: the largest share of differing pixels.
+  @Double()
+  external double maxDiffRatio;
+
+  /// SSIM tolerance: the lowest local similarity.
+  @Double()
+  external double minSimilarity;
+
+  /// SSIM tolerance: the color deviation beyond the envelope.
+  @Double()
+  external double colorTolerance;
+
+  /// The tolerance of text, a share of a tile; NaN for the rule's.
+  @Double()
+  external double textTolerance;
+
+  /// Width of a raw candidate.
+  @Uint32()
+  external int candidateWidth;
+
+  /// Height of a raw candidate.
+  @Uint32()
+  external int candidateHeight;
+
+  /// 0 compare, 1 update (PNG only).
+  @Uint8()
+  external int mode;
+
+  /// 0 PNG bytes, 1 raw straight RGBA8 pixels.
+  @Uint8()
+  external int candidateFormat;
+
+  /// 0 the `.gleon/gleon.yaml` rule, 1 exact, 2 pixel, 3 SSIM.
+  @Uint8()
+  external int toleranceKind;
+}
+
+/// The `GleonSummary` `gleon_golden` writes: the verdict code and the UTF-8
+/// texts to show, owned by [texts].
 final class GleonSummary extends Struct {
   /// Verdict code, see `NativeVerdict`.
   @Uint8()
@@ -165,4 +189,7 @@ final class GleonSummary extends Struct {
 
   /// Warnings to print, one per line; usually empty.
   external NativeSlice warning;
+
+  /// Owns the texts until `gleon_texts_free`; null when all are empty.
+  external Pointer<GleonTexts> texts;
 }

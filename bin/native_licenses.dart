@@ -52,19 +52,15 @@ const _outputName = 'NATIVE_LICENSES.md';
 Future<void> main(List<String> args) async {
   final (:commit, :isCheck, :repo) = _parse(args);
   final packageRoot = await _cli.packageRoot();
-  final gleon = Directory(
-    repo ??
-        Platform.environment['GLEON_REPO'] ??
-        packageRoot.resolve('../gleon').toFilePath(),
-  ).absolute;
-  final pin = await File.fromUri(
-    packageRoot.resolve('native/${NativeTarget.pinFileName}'),
-  ).readAsString();
+  final gleon = Cli.gleonCheckout(repo, packageRoot);
+  final pin =
+      NativeTarget.readPin(packageRoot) ??
+      _cli.fail('native/${NativeTarget.pinFileName} is missing.');
   final gleonCommit = await _commitOf(gleon, given: commit);
-  if (gleonCommit != pin.trim()) {
+  if (gleonCommit != pin) {
     _cli.fail(
       '${gleon.path} is at $gleonCommit, but native/'
-      '${NativeTarget.pinFileName} pins ${pin.trim()}: check out the pinned '
+      '${NativeTarget.pinFileName} pins $pin: check out the pinned '
       'commit, or pass --gleon-repo with a tree of it.',
     );
   }

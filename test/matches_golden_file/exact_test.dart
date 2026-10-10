@@ -4,11 +4,11 @@ import 'dart:typed_data';
 import 'package:flutter/widgets.dart';
 import 'package:gleon/gleon.dart';
 
-import '../helpers/golden_sandbox.dart';
 import '../helpers/swatch.dart';
+import '../helpers/workspace_sandbox.dart';
 
 void main() {
-  GoldenSandbox.install();
+  setUp(WorkspaceSandbox.withoutWorkspace);
 
   group('default (exact, same as Flutter)', () {
     testWidgets('passes for an identical render', (tester) async {
@@ -36,7 +36,7 @@ void main() {
       expect(message, contains('Failure feedback can be found at'));
       for (final suffix in ['masterImage', 'testImage', 'gleonDiff']) {
         expect(
-          File('${GoldenSandbox.failures.path}/swatch_$suffix.png')
+          File('${WorkspaceSandbox.current().failures.path}/swatch_$suffix.png')
               .existsSync(),
           isTrue,
           reason: suffix,
@@ -62,7 +62,7 @@ void main() {
       expect(message, contains('golden is 100x60px'));
       expect(message, contains('test image is 100x61px'));
       expect(
-        File('${GoldenSandbox.failures.path}/swatch_testImage.png')
+        File('${WorkspaceSandbox.current().failures.path}/swatch_testImage.png')
             .existsSync(),
         isTrue,
       );
@@ -88,7 +88,7 @@ void main() {
       await tester.pumpWidget(const Swatch());
       await expectLater(Swatch.finder, matchesGoldenFile(Swatch.golden));
 
-      expect(GoldenSandbox.failures.existsSync(), isFalse);
+      expect(WorkspaceSandbox.current().failures.existsSync(), isFalse);
     });
   });
 

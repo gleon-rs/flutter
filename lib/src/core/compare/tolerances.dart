@@ -36,7 +36,15 @@ abstract final class Tolerances {
   /// A `textTolerance` as in failure messages: `text ignored` at 1 (text
   /// never fails), else e.g. `text ≤ 10.00% per tile`.
   static String describeText(double share) =>
-      share >= 1 ? 'text ignored' : 'text ≤ ${percent(share)}% per tile';
+      share >= 1 ? 'text ignored' : 'text ${atMost(share)} per tile';
+
+  /// [ratio] as an upper bound in percent: `≤ 6.25%`, or `<0.0001%` for a
+  /// positive ratio too small to show (never `≤ <0.0001%`).
+  static String atMost(double ratio) {
+    final shown = percent(ratio);
+
+    return shown.startsWith('<') ? '$shown%' : '≤ $shown%';
+  }
 
   /// [value] rounded to [max] decimals, trailing zeros dropped down to [min]
   /// (`8`, `7.5`, `0.800`); `-0.0` shows as `0`.

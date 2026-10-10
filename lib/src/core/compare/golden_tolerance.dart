@@ -61,7 +61,7 @@ sealed class GoldenTolerance {
   String toString() => switch (this) {
     ExactTolerance() => 'exact',
     PixelTolerance(:final maxDiffRatio) =>
-      'pixel \u2264 ${Tolerances.percent(maxDiffRatio)}%',
+      'pixel ${Tolerances.atMost(maxDiffRatio)}',
     SsimTolerance(:final colorTolerance, :final minSimilarity) =>
       'ssim \u2265 ${Tolerances.decimal(minSimilarity, 3)}, '
           'color \u00b1${Tolerances.decimal(colorTolerance, 0, max: 2)}',

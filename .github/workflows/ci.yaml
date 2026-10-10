@@ -9,6 +9,13 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      gleon_ref:
+        description: >-
+          gleon commit to test against instead of native/gleon_ref (e.g. the head of a gleon pull
+          request that changes the C contract), so both sides are checked before either merges.
+        required: false
+        default: ""
 
 permissions: {}
 
@@ -39,6 +46,12 @@ jobs:
           path: flutter
           persist-credentials: false
 
+      - name: Pin the requested gleon commit
+        if: ${{ inputs.gleon_ref != '' }}
+        env:
+          GLEON_REF: ${{ inputs.gleon_ref }}
+        run: printf '%s\n' "$GLEON_REF" > native/gleon_ref
+
       - name: Set up Flutter and gleon-ffi
         uses: ./flutter/.github/actions/setup
         with:
@@ -49,15 +62,18 @@ jobs:
         run: echo "gleon_ref=$(tr -d '[:space:]' < native/gleon_ref)" >> "$GITHUB_OUTPUT"
 
       # Case reports are validated against the committed JSON Schema of the pinned engine
-      # (`git -C ../gleon show <pin>:gleon-model/schema/case.v3.json`); the tests skip that without
-      # the checkout or the commit.
-      - name: Check out the gleon schemas
+      # (`git -C ../gleon show <pin>:gleon-model/schema/case.v3.json`), and the Dart bindings
+      # against the ABI version and struct layout the pinned `gleon-ffi/src/lib.rs` asserts; the
+      # tests skip that without the checkout or the commit.
+      - name: Check out the gleon schemas and C contract
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: gleon-rs/gleon
           ref: ${{ steps.pin.outputs.gleon_ref }}
           path: gleon
-          sparse-checkout: gleon-model/schema
+          sparse-checkout: |
+            gleon-model/schema
+            gleon-ffi/src
           persist-credentials: false
 
       - name: Package

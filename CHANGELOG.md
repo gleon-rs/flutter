@@ -1,6 +1,30 @@
+## 0.3.0
+
+- **Half the native library:** release libraries of about 1 MB instead of 2 MB (macOS arm64
+  1.88 → 0.98 MB, Linux x64 2.21 → 1.13 MB, Linux arm64 1.97 → 1.00 MB). Globs of
+  `.gleon/gleon.yaml` match with the small `glob` crate instead of the regex engine of `globset`,
+  and the engine runs on the calling thread instead of a thread pool per test process.
+- **Faster comparisons:** the engine reads widget and image captures in place instead of copying
+  them, equal rows and frames take one `memcmp`, the golden is decoded without a copy, and a
+  passing golden without a console line or warning is one native call. Native time per golden: passes
+  12-42% less, failures 9-26% (`gleon-model/tests/perf.rs` of the gleon repository); byte inputs
+  in `flutter test` 8-11% faster for re-encoded passes and 11-24% for failures, identical bytes
+  unchanged (`bench_press diff` against 0.2.0 on one machine).
+- **Text tiles:** a text region thinner than a 16x16 tile, or clipped at the image edge, is judged
+  as a whole tile (the rest of the square counts as equal): one differing pixel of a 4x1 strip is
+  no longer a quarter of a tile. Case reports carry `policy_version` 3 for this.
+- **Breaking:** native ABI 11 (`gleon_golden` takes its scalars as one struct and writes its
+  summary to the caller's buffer; verdict code 0 is an error): libraries of 0.2.0 from
+  `ffi_path`, `release_url` mirrors or `gleon_repo` checkouts are refused with the ABI message.
+  Globs that would match differently than written, differently on Windows, or never, are config
+  errors naming the pattern: `{a,b}` alternatives, `[^...]` (use `[!...]`), a class only `/`
+  fits (`[/]`), `\`, `**` inside a segment (`a**`, `***`), a leading `/`, a `.`, `..` or empty
+  segment (`./a`, `../a`, `a//b`), a trailing `/`, the empty pattern. `anti_alias` is no longer
+  a config key.
+
 ## 0.2.0
 
-The first pub.dev release.
+The first release (a git tag; pub.dev publishing is postponed).
 
 - **Drop-in `matchesGoldenFile`:** replace the `flutter_test` import with
   `package:gleon/gleon.dart`; without extra parameters goldens behave like Flutter's (exact,

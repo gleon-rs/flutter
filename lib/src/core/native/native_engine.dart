@@ -19,19 +19,17 @@ import 'native_outcome.dart';
 abstract final class NativeEngine {
   /// C contract version this Dart code understands (`ABI_VERSION` in
   /// `gleon-ffi`). Keep both in lockstep.
-  static const expectedAbiVersion = 10;
-
-  /// Releases sessions that are garbage collected.
-  static final sessionFinalizer = NativeFinalizer(
-    Native.addressOf<
-          NativeFunction<Void Function(Pointer<GleonSessionHandle> session)>
-        >(GleonFfi.sessionFree)
-        .cast<NativeFinalizerFunction>(),
-  );
+  static const expectedAbiVersion = 11;
 
   /// Asked once per process, on the first call.
   // ignore: avoid-explicit-type-declaration, not obvious from the initializer.
   static final int _abiVersion = loadAbiVersion(GleonFfi.abiVersion);
+
+  /// `gleon_golden` mode: compare the candidate with the golden.
+  static const _compareMode = 0;
+
+  /// `gleon_golden` mode: write the candidate as the golden.
+  static const _updateMode = 1;
 
   /// `gleon_golden` candidate format: PNG bytes.
   static const _pngFormat = 0;
@@ -116,6 +114,9 @@ abstract final class NativeEngine {
     List<PixelRegion> textRegions = const [],
     double? textTolerance,
   }) {
+    if (session.isDisposed) {
+      throw StateError('gleon: the session was disposed.');
+    }
     final (strings, lengths) = _pack([
       goldenPath,
       goldenUri,
@@ -125,35 +126,61 @@ abstract final class NativeEngine {
     final flatMasks = _flat(masks);
     final flatTextRegions = _flat(textRegions);
     final (kind, ratio, similarity, color) = _toleranceArguments(tolerance);
-    if (session.isDisposed) {
-      throw StateError('gleon: the session was disposed.');
-    }
-    final result = GleonFfi.golden(
+    final call = Struct.create<GleonCall>()
+      ..mode = isUpdate ? _updateMode : _compareMode
+      ..candidateFormat = rawSize == null ? _pngFormat : _rawFormat
+      ..candidateWidth = rawSize?.width ?? 0
+      ..candidateHeight = rawSize?.height ?? 0
+      ..toleranceKind = kind
+      ..maxDiffRatio = ratio
+      ..minSimilarity = similarity
+      ..colorTolerance = color
+      ..textTolerance = textTolerance ?? .nan;
+    final summary = Struct.create<GleonSummary>();
+    GleonFfi.golden(
       session.handle,
-      isUpdate ? 1 : 0,
+      call.address,
+      summary.address,
       strings.address,
       strings.length,
       lengths.address,
       lengths.length,
       candidate.address,
       candidate.length,
-      rawSize == null ? _pngFormat : _rawFormat,
-      rawSize?.width ?? 0,
-      rawSize?.height ?? 0,
-      kind,
-      ratio,
-      similarity,
-      color,
       flatMasks.address,
       masks.length,
       flatTextRegions.address,
       textRegions.length,
-      textTolerance ?? .nan,
     );
-    try {
-      final GleonSummary(:console, :errorKind, :message, :verdict, :warning) =
-          GleonFfi.resultSummary(result);
 
+    return _outcome(summary);
+  }
+
+  /// The outcome of [summary], its texts copied out and released. A pass
+  /// owns no texts: nothing to copy, nothing to free.
+  static NativeOutcome _outcome(GleonSummary summary) {
+    final GleonSummary(
+      :console,
+      :errorKind,
+      :message,
+      :texts,
+      :verdict,
+      :warning,
+    ) = summary;
+    if (texts == nullptr) {
+      final outcome = NativeVerdict.of(verdict);
+
+      // Every failure has a message: a textless one is a summary the library
+      // never wrote (all zeros, verdict `error`).
+      return outcome.isPass
+          ? NativeOutcome(outcome)
+          : const NativeOutcome(
+              .error,
+              errorKind: .internal,
+              message: 'gleon: the native library wrote no result.',
+            );
+    }
+    try {
       return NativeOutcome(
         NativeVerdict.of(verdict),
         errorKind: NativeErrorKind.of(errorKind),
@@ -162,7 +189,7 @@ abstract final class NativeEngine {
         warning: _text(warning),
       );
     } finally {
-      GleonFfi.resultFree(result);
+      GleonFfi.textsFree(texts);
     }
   }
 
@@ -247,9 +274,8 @@ abstract final class NativeEngine {
     return (bytes.takeBytes(), lengths);
   }
 
-  /// A UTF-8 slice borrowed from a result, copied out as a string. An empty
-  /// slice (the common case: a pass has no texts) has a dangling pointer that
-  /// is never touched.
+  /// A UTF-8 slice borrowed from the texts of a summary, copied out as a
+  /// string. An empty slice has a dangling pointer that is never touched.
   static String _text(NativeSlice slice) => slice.len == 0
       ? _noText
       : utf8.decode(slice.ptr.asTypedList(slice.len), allowMalformed: true);

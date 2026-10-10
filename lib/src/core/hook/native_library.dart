@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'native_download_exception.dart';
 import 'native_target.dart';
 import 'release_download.dart';
 import 'source_build.dart';
@@ -66,9 +65,7 @@ final class NativeLibrary {
 
   /// The library and the files it came from, in the order of the class
   /// documentation; [runProcess] runs cargo for `gleon_repo` builds.
-  Future<({List<Uri> dependencies, Uri library})> resolve({
-    ProcessRunner runProcess = Process.run,
-  }) async {
+  Future<LibraryFiles> resolve({ProcessRunner runProcess = Process.run}) async {
     if (_path('ffi_path') case final override?) {
       if (!File.fromUri(override).existsSync()) {
         throw StateError(
@@ -106,19 +103,27 @@ final class NativeLibrary {
     return path;
   }
 
-  Future<({List<Uri> dependencies, Uri library})> _prebuilt() async {
+  Future<LibraryFiles> _prebuilt() async {
     const pinFile = NativeTarget.pinFileName;
     final nativeDir = packageRoot.resolve('native/');
     final targetDir = nativeDir.resolve('${target.key}/');
     final bundled = File.fromUri(targetDir.resolve(target.libFileName));
-    final pin = File.fromUri(nativeDir.resolve(pinFile));
     final stamp = File.fromUri(targetDir.resolve(pinFile));
     // Present or not: the hooks runner hashes a directory by its direct
     // children only and re-runs the hook when a missing file appears, so a
     // later local build (or a moved pin) is seen in either branch.
-    final inputs = [nativeDir, bundled.uri, pin.uri, stamp.uri];
+    final inputs = [
+      nativeDir,
+      bundled.uri,
+      nativeDir.resolve(pinFile),
+      stamp.uri,
+    ];
     if (bundled.existsSync()) {
-      _rejectStaleBuild(pin: pin, stamp: stamp, targetDir: targetDir);
+      _rejectStaleBuild(
+        pinned: NativeTarget.readPin(packageRoot),
+        stamp: stamp,
+        targetDir: targetDir,
+      );
 
       return (dependencies: inputs, library: bundled.uri);
     }
@@ -135,22 +140,17 @@ final class NativeLibrary {
         'gleon: user-define `release_url` must be a string, got $other',
       ),
     };
-    try {
-      final library = await ReleaseDownload.fetchLibrary(
-        releaseUrl: releaseUrl,
-        packageVersion: version,
-        target: target,
-        cacheDir: Directory.fromUri(sharedOutputDir),
-      );
+    final library = await ReleaseDownload.fetchLibrary(
+      releaseUrl: releaseUrl,
+      packageVersion: version,
+      target: target,
+      cacheDir: Directory.fromUri(sharedOutputDir),
+    );
 
-      return (
-        dependencies: [...inputs, pubspec, library.uri],
-        library: library.uri,
-      );
-    } on NativeDownloadException catch (error, stackTrace) {
-      // Hook errors are printed verbatim; keep the actionable message on top.
-      Error.throwWithStackTrace(StateError(error.toString()), stackTrace);
-    }
+    return (
+      dependencies: [...inputs, pubspec, library.uri],
+      library: library.uri,
+    );
   }
 
   /// The `release_url` [url] as the directory its files are resolved in.
@@ -171,15 +171,14 @@ final class NativeLibrary {
 
   /// A local build records the gleon commit it was made from in its
   /// [stamp] (see `bin/build_native.dart`); a build of another commit, or of
-  /// an old [pin] after the pin moved, would silently test another engine.
-  /// The pub.dev archive ships no pin, so no check.
+  /// an old pin after the pin moved to [pinned], would silently test another
+  /// engine. The pub.dev archive ships no pin, so no check.
   static void _rejectStaleBuild({
-    required File pin,
+    required String? pinned,
     required File stamp,
     required Uri targetDir,
   }) {
-    if (!pin.existsSync()) return;
-    final pinned = pin.readAsStringSync().trim();
+    if (pinned == null) return;
     final builtFrom = stamp.existsSync()
         ? stamp.readAsStringSync().trim()
         : null;

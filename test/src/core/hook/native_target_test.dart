@@ -4,6 +4,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gleon/src/core/hook/native_target.dart';
 
 void main() {
+  test('the built library lies in the target directory, slash or not', () {
+    const linux = NativeTarget.linuxX64;
+    final expected = Uri.file(
+      '/w/target/x86_64-unknown-linux-gnu/release/libgleon_ffi.so',
+    );
+    expect(linux.builtLibrary(.file('/w/target/')), expected);
+    expect(linux.builtLibrary(.file('/w/target')), expected);
+  });
+
   test('gleon names every target like Rust std::env::consts', () {
     expect(
       {for (final target in NativeTarget.values) target.gleonPlatform},
@@ -68,8 +77,8 @@ void main() {
   });
 
   test('the hook asks for a library of supported targets only', () {
-    expect(NativeTarget.requested('linux', 'arm64'), NativeTarget.linuxArm64);
-    expect(NativeTarget.requested('macos', 'arm64'), NativeTarget.macosArm64);
+    expect(NativeTarget.byKey('linux-arm64'), NativeTarget.linuxArm64);
+    expect(NativeTarget.byKey('macos-arm64'), NativeTarget.macosArm64);
     // Flutter runs the hooks of dev_dependencies for app builds too: those
     // get no library instead of a failing build.
     for (final (os, arch) in [
@@ -78,7 +87,7 @@ void main() {
       ('linux', 'riscv64'),
       ('macos', 'x64'),
     ]) {
-      expect(NativeTarget.requested(os, arch), isNull, reason: '$os-$arch');
+      expect(NativeTarget.byKey('$os-$arch'), isNull, reason: '$os-$arch');
     }
   });
 
