@@ -12,14 +12,15 @@
   unchanged (`bench_press diff` against 0.2.0 on one machine).
 - **Text tiles:** a text region thinner than a 16x16 tile, or clipped at the image edge, is judged
   as a whole tile (the rest of the square counts as equal): one differing pixel of a 4x1 strip is
-  no longer a quarter of a tile.
+  no longer a quarter of a tile. Case reports carry `policy_version` 3 for this.
 - **Breaking:** native ABI 11 (`gleon_golden` takes its scalars as one struct and writes its
   summary to the caller's buffer; verdict code 0 is an error): libraries of 0.2.0 from
   `ffi_path`, `release_url` mirrors or `gleon_repo` checkouts are refused with the ABI message.
   Globs that would match differently than written, differently on Windows, or never, are config
-  errors naming the pattern: `{a,b}` alternatives, `[^...]` (use `[!...]`), `\`, `**` inside a
-  segment (`a**`, `***`), a leading `/`, a `.`, `..` or empty segment (`./a`, `../a`, `a//b`), a
-  trailing `/`, the empty pattern. `anti_alias` is no longer a config key.
+  errors naming the pattern: `{a,b}` alternatives, `[^...]` (use `[!...]`), a class only `/`
+  fits (`[/]`), `\`, `**` inside a segment (`a**`, `***`), a leading `/`, a `.`, `..` or empty
+  segment (`./a`, `../a`, `a//b`), a trailing `/`, the empty pattern. `anti_alias` is no longer
+  a config key.
 
 ## 0.2.0
 
