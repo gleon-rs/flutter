@@ -72,11 +72,6 @@ void main() {
       '${const GoldenTolerance.pixel(maxDiffRatio: 0, antiAlias: true)}',
       'pixel ≤ 0.00%, aa ignored',
     );
-    expect(
-      '${const GoldenTolerance.pixel(edgeThreshold: 255)}',
-      'pixel ≤ 1.00%',
-      reason: '255 hides nothing',
-    );
   });
 
   test('text tolerances are described per tile', () {
@@ -109,12 +104,13 @@ void main() {
       rejects('colorTolerance'),
     );
     for (final tolerance in const [
-      PixelTolerance(edgeThreshold: 255),
-      PixelTolerance(channelTolerance: 255),
+      PixelTolerance(edgeThreshold: 254),
+      PixelTolerance(channelTolerance: 254),
     ]) {
       expect(() => Tolerances.validate(tolerance), returnsNormally);
     }
-    for (final byte in [-1, 256]) {
+    // 255 would compare nothing or hide nothing: invalid, like in `.gleon/gleon.yaml`.
+    for (final byte in [-1, 255, 256]) {
       expect(
         () => Tolerances.validate(PixelTolerance(channelTolerance: byte)),
         rejects('channelTolerance'),

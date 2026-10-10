@@ -34,14 +34,19 @@ void main() {
 
     testWidgets('antiAlias takes most sub-pixel noise', (tester) async {
       await tester.pumpWidget(const Blob(offset: 0.3));
-      // 611 of 9600 pixels differ (6.4%); anti-aliased ones count as equal.
-      expect(
-        await matchesGoldenFile(
-          Blob.golden,
-          tolerance: const .pixel(),
-        ).matchAsync(Blob.finder),
-        contains('(611 of 9600px)'),
-      );
+      // Bounds, not counts: rasterizers of other Flutter versions draw the
+      // anti-aliasing a little differently (macOS today: 611 of 9600).
+      final exact = await matchesGoldenFile(
+        Blob.golden,
+        tolerance: const .pixel(maxDiffRatio: 0),
+      ).matchAsync(Blob.finder);
+      final withAntiAlias = await matchesGoldenFile(
+        Blob.golden,
+        tolerance: const .pixel(maxDiffRatio: 0, antiAlias: true),
+      ).matchAsync(Blob.finder);
+
+      expect(_differing(exact), greaterThan(9600 * 0.04));
+      expect(_differing(withAntiAlias), lessThan(_differing(exact) ~/ 4));
       await expectLater(
         Blob.finder,
         matchesGoldenFile(
@@ -58,7 +63,8 @@ void main() {
         tolerance: const .pixel(maxDiffRatio: 0, edgeThreshold: 64),
       ).matchAsync(Blob.finder);
 
-      expect(message, contains('(22 of 9600px)'));
+      // On macOS today 22 of 9600 are left, less than 1% of the frame.
+      expect(_differing(message), lessThan(9600 * 0.01));
       expect(message, contains('(gleon pixel ≤ 0.00%, edges >64 ignored)'));
     });
 
@@ -185,4 +191,12 @@ void main() {
       );
     });
   });
+}
+
+/// The differing pixels a failure [message] names (`(611 of 9600px)`).
+int _differing(String? message) {
+  final failure = message ?? fail('the golden passed');
+  final count = RegExp(r'\((\d+) of \d+px\)').firstMatch(failure)?.group(1);
+
+  return int.parse(count ?? fail('no pixel count in $failure'));
 }

@@ -38,17 +38,18 @@ sealed class GoldenTolerance {
 
   /// Passes when at most [maxDiffRatio] (0.0–1.0) of the pixels differ.
   ///
-  /// The options, all off by default, let some differing pixels count as
-  /// equal: rendering noise of shapes (GPU drift, anti-aliasing, sub-pixel
-  /// geometry), not a substitute for [GoldenTolerance.ssim] or per-platform
-  /// goldens:
+  /// The options, all off by default and never applied to text, let some
+  /// differing pixels count as equal: rendering noise of shapes (GPU drift,
+  /// anti-aliasing, sub-pixel geometry), not a substitute for
+  /// [GoldenTolerance.ssim] or per-platform goldens:
   ///
-  /// * `channelTolerance` (0–255): no RGBA byte differs by more than this;
+  /// * `channelTolerance` (0–254): no RGBA byte differs by more than this;
   /// * `antiAlias`: the pixel looks anti-aliased in either image (the
   ///   detection of pixelmatch);
-  /// * `edgeThreshold` (0–255, outside text): the Sobel gradient of the
-  ///   golden's luma there exceeds this. Every change on edges passes too (a
-  ///   missing glyph or small icon, a 1px move); 255 hides nothing.
+  /// * `edgeThreshold` (0–254): the Sobel gradient of the golden's luma there
+  ///   exceeds this. Every change on edges passes too (a missing glyph or
+  ///   small icon, a 1px move); the lower the value, the more pixels are
+  ///   edges.
   const factory pixel({
     double maxDiffRatio,
     int channelTolerance,
@@ -113,18 +114,18 @@ final class PixelTolerance extends GoldenTolerance {
   /// Maximum fraction (0.0–1.0) of differing pixels.
   final double maxDiffRatio;
 
-  /// A differing pixel counts as equal when no RGBA byte differs by more
-  /// than this (0–255; 0: off).
+  /// A differing pixel outside text counts as equal when no RGBA byte
+  /// differs by more than this (0–254; 0: off).
   final int channelTolerance;
 
-  /// Whether a differing pixel that looks anti-aliased in either image counts
-  /// as equal.
+  /// Whether a differing pixel outside text that looks anti-aliased in
+  /// either image counts as equal.
   // ignore: prefer-boolean-prefixes, the name of the engine's `anti_alias` key.
   final bool antiAlias;
 
   /// A differing pixel outside text counts as equal when the Sobel gradient
-  /// of the golden's luma there exceeds this (0–255; 0: off, 255 hides
-  /// nothing).
+  /// of the golden's luma there exceeds this (0–254; 0: off). Unnormalized
+  /// like Skia Gold's: a sharp step of 16 luma levels gives 64.
   final int edgeThreshold;
 
   @override

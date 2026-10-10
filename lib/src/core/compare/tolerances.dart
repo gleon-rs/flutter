@@ -10,8 +10,9 @@ abstract final class Tolerances {
   /// messages: enough for any threshold a developer sets.
   static const _maxDecimals = 4;
 
-  /// The largest value of an 8-bit channel.
-  static const _byteMax = 255;
+  /// The largest `channelTolerance` and `edgeThreshold`, as in the engine: 255
+  /// would make every pixel equal or hide nothing.
+  static const _maxOption = 254;
 
   /// The digits of a fraction up to its trailing zeros.
   static final _withoutTrailingZeros = RegExp(r'^\d*?(?=0*$)');
@@ -26,8 +27,8 @@ abstract final class Tolerances {
         :final maxDiffRatio,
       ):
         _checkRatio(maxDiffRatio, 'maxDiffRatio');
-        _checkByte(channelTolerance, 'channelTolerance');
-        _checkByte(edgeThreshold, 'edgeThreshold');
+        _checkOption(channelTolerance, 'channelTolerance');
+        _checkOption(edgeThreshold, 'edgeThreshold');
 
       case SsimTolerance(:final colorTolerance, :final minSimilarity):
         _checkRatio(minSimilarity, 'minSimilarity');
@@ -52,8 +53,7 @@ abstract final class Tolerances {
       'pixel ${atMost(maxDiffRatio)}',
       if (channelTolerance > 0) '±$channelTolerance per channel',
       if (antiAlias) 'aa ignored',
-      if (edgeThreshold > 0 && edgeThreshold < _byteMax)
-        'edges >$edgeThreshold ignored',
+      if (edgeThreshold > 0) 'edges >$edgeThreshold ignored',
     ].join(', ');
   }
 
@@ -103,9 +103,13 @@ abstract final class Tolerances {
     }
   }
 
-  static void _checkByte(int value, String name) {
-    if (value < 0 || value > _byteMax) {
-      throw ArgumentError.value(value, name, 'must be between 0 and 255');
+  static void _checkOption(int value, String name) {
+    if (value < 0 || value > _maxOption) {
+      throw ArgumentError.value(
+        value,
+        name,
+        'must be between 0 and 254 (0 turns it off)',
+      );
     }
   }
 

@@ -1,24 +1,19 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart' as ft;
 import 'package:gleon/gleon.dart';
 
+import '../helpers/blob.dart';
 import '../helpers/golden_updates.dart';
 import '../helpers/swatch.dart';
 import '../helpers/workspace_sandbox.dart';
 
 /// A sandbox (a workspace with [yaml]) with [GleonFileComparator] installed
-/// like `test/flutter_test_config.dart` would, on top of the sandbox's
-/// comparator (restored by the sandbox's tear-down).
-WorkspaceSandbox _installed({String? yaml}) {
-  final sandbox = yaml == null
-      ? WorkspaceSandbox.withoutWorkspace()
-      : WorkspaceSandbox.create(yaml);
-  goldenFileComparator = GleonFileComparator.fromExisting(goldenFileComparator);
-
-  return sandbox;
-}
+/// like `test/flutter_test_config.dart` would (with the sandbox's session).
+WorkspaceSandbox _installed({String? yaml}) =>
+    .create(yaml, installsGleonComparator: true);
 
 void main() {
   group("flutter_test's matchesGoldenFile with GleonFileComparator", () {
@@ -89,6 +84,84 @@ screenshots:
         ft.matchesGoldenFile('goldens/new.png', version: 2),
       );
     });
+  });
+
+  group('GleonFileComparator in a workspace', () {
+    testWidgets("--update-goldens writes this platform's own golden", (
+      tester,
+    ) async {
+      final sandbox = _installed(
+        yaml:
+            '''
+required_version: ">=0.1.0"
+fallback_platform: $foreignPlatform
+screenshots:
+  - include: "test/goldens/*.png"
+''',
+      );
+      final shared = sandbox.goldenBytes(Swatch.golden);
+      await tester.pumpWidget(const Swatch(dot: Swatch.dotOffset));
+      await withGoldenUpdates(
+        () => expectLater(Swatch.finder, ft.matchesGoldenFile(Swatch.golden)),
+      );
+
+      expect(
+        sandbox.goldenBytes('goldens/$hostPlatform/swatch.png'),
+        isNotEmpty,
+      );
+      expect(
+        // ignore: use-existing-variable, read again after the update.
+        sandbox.goldenBytes(Swatch.golden),
+        shared,
+        reason: 'the shared golden is left alone',
+      );
+    });
+
+    testWidgets("applies the golden rule's pixel options", (tester) async {
+      String yaml(String diff) =>
+          '''
+required_version: ">=0.1.0"
+screenshots:
+  - include: "test/goldens/*.png"
+    diff: $diff
+''';
+      final sandbox = _installed(yaml: yaml('{ threshold: 0.01 }'));
+      // 611 of 9600 pixels differ, most of them anti-aliasing.
+      await tester.pumpWidget(const Blob(offset: 0.3));
+      expect(
+        await ft.matchesGoldenFile(Blob.golden).matchAsync(Blob.finder),
+        contains('(gleon pixel ≤ 1.00%)'),
+      );
+
+      sandbox.writeConfig(yaml('{ threshold: 0.01, anti_alias: true }'));
+      await expectLater(Blob.finder, ft.matchesGoldenFile(Blob.golden));
+    });
+  });
+
+  testWidgets('compares a ui.Image', (tester) async {
+    _installed();
+    Future<ui.Image> capture({Offset? dot}) async {
+      await tester.pumpWidget(Swatch(dot: dot));
+      final element =
+          Swatch.finder.evaluate().singleOrNull ?? fail('no swatch');
+      final image =
+          await tester.runAsync(() => captureImage(element)) ??
+          fail('no image captured');
+      addTearDown(image.dispose);
+
+      return image;
+    }
+
+    expect(
+      await ft.matchesGoldenFile(Swatch.golden).matchAsync(await capture()),
+      isNull,
+    );
+    expect(
+      await ft
+          .matchesGoldenFile(Swatch.golden)
+          .matchAsync(await capture(dot: Swatch.dotOffset)),
+      contains('gleon exact'),
+    );
   });
 
   group('GleonFileComparator.fromExisting', () {

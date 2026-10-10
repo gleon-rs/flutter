@@ -169,17 +169,17 @@ final class GleonCall extends Struct {
   @Uint8()
   external int toleranceKind;
 
-  /// Pixel tolerance: the largest RGBA byte delta a pixel may differ by and
-  /// still count as equal (0: off).
+  /// Pixel tolerance, outside text: the largest RGBA byte delta a pixel may
+  /// differ by and still count as equal (0–254; 0: off).
   @Uint8()
   external int channelTolerance;
 
-  /// Pixel tolerance: 1 lets anti-aliased pixels pass, 0 not.
+  /// Pixel tolerance, outside text: 1 lets anti-aliased pixels pass, 0 not.
   @Uint8()
   external int antiAlias;
 
-  /// Pixel tolerance: differing pixels on the golden's edges (Sobel gradient
-  /// above this) pass, outside text (0: off).
+  /// Pixel tolerance, outside text: differing pixels on the golden's edges
+  /// (Sobel gradient above this) pass (0–254; 0: off).
   @Uint8()
   external int edgeThreshold;
 }

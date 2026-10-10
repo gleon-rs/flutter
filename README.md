@@ -170,21 +170,25 @@ Suite-wide tolerances per path live in `.gleon/gleon.yaml`, see below.
 ### Pixel options
 
 Three options of `.pixel()`, all off by default, let some differing pixels count as equal (yellow
-in the diff image, cyan for edges). They are for rendering noise of shapes in a pixel comparison,
-not a substitute for `.ssim()` or for per-platform goldens of text:
+in the diff image, cyan for edges; case reports count them as `tolerated_pixels` and
+`edge_pixels`). They are for rendering noise of shapes in a pixel comparison, not a substitute for
+`.ssim()` or for per-platform goldens. They never apply to text: a changed glyph keeps its whole
+share of its tile (see [Real text](#real-text)). In `.gleon/gleon.yaml` they belong to
+`mode: pixel` rules (a config error elsewhere).
 
-| Option (yaml key)                        | A differing pixel counts as equal when                                                     |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `channelTolerance` (`channel_tolerance`) | no RGBA byte differs by more than this (0–255): GPU and color-conversion drift.            |
-| `antiAlias` (`anti_alias`)               | it looks anti-aliased in either image (the detection of pixelmatch).                       |
-| `edgeThreshold` (`edge_threshold`)       | outside text, the Sobel gradient of the golden's luma there exceeds this (0–255; 255 off). |
+| Option (yaml key)                        | A differing pixel counts as equal when                                      |
+| ---------------------------------------- | --------------------------------------------------------------------------- |
+| `channelTolerance` (`channel_tolerance`) | no RGBA byte differs by more than this (0–254): GPU and color drift.        |
+| `antiAlias` (`anti_alias`)               | it looks anti-aliased in either image (the detection of pixelmatch).        |
+| `edgeThreshold` (`edge_threshold`)       | the Sobel gradient of the golden's luma there exceeds this (0–254; 0: off). |
 
 Measured on this package's anti-aliased test shape moved by 0.3 px: 611 of 9600 pixels differ
 exactly, 75 with `antiAlias`, 22 with `edgeThreshold: 64`; a one-pixel dot on a flat area fails
 with all three. The price of `edgeThreshold` (Skia Gold's edge mask has it too): every change
 that lies on the golden's edges passes, and on the calibration corpus of the gleon engine that
-includes a missing glyph, a card moved by 1 px and, at 64, a missing small icon. Prefer
-`antiAlias` with a small `maxDiffRatio`, or `.ssim()`.
+includes a missing glyph, a card moved by 1 px and, at 64, a missing small icon. The gradient is
+unnormalized like Skia Gold's: a sharp step of 16 luma levels already gives 64. Prefer `antiAlias`
+with a small `maxDiffRatio`, or `.ssim()`.
 
 ```dart
 await expectLater(
@@ -232,7 +236,7 @@ match). Then a golden `goldens/a.png` compares in one of three ways:
    first. `flutter test --update-goldens` on that platform writes this file and never the shared
    one (see [Recording per-platform goldens](#recording-per-platform-goldens)).
 3. **On another platform without its own golden yet:** the shared golden, with text ignored by
-   default (everything else is compared exactly). Changes that move anything (a longer word,
+   default (everything else is compared under the golden's tolerance). Changes that move anything (a longer word,
    another weight, a shifted line) still fail; changes of text alone (a digit, a color) do not.
    A failure says which golden it compared and which file would compare text.
 
@@ -337,6 +341,9 @@ artifacts: .gleon/runs/latest/artifacts
   `[/]`, `\`, a leading `/`, a `.`, `..` or empty segment and a trailing `/` are config errors
   naming the pattern: they would match differently than written, differently on Windows, or
   never.
+- **Diff keys** belong to their mode (`threshold` and the pixel options to `pixel`,
+  `min_similarity` and `color_tolerance` to `ssim`): another value than the default in the other
+  mode is a config error, never silently ignored.
 - **Priority:** the `tolerance` argument of a call beats the golden's rule, which beats exact;
   `textTolerance` beats the rule's `text_tolerance`. Masks of the rule are added to the call's
   `ignoreRegions`.

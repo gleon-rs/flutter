@@ -1,7 +1,9 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meta/meta.dart';
 
+import '../core/config/gleon_session.dart';
 import 'gleon_golden_comparator.dart';
 
 /// A `goldenFileComparator` backed by the gleon engine, for golden harnesses
@@ -35,7 +37,13 @@ import 'gleon_golden_comparator.dart';
 class GleonFileComparator extends LocalFileComparator {
   /// Creates a comparator for the goldens of the test file [testFile], like
   /// [LocalFileComparator].
-  GleonFileComparator(super.testFile);
+  GleonFileComparator(super.testFile) : _session = null;
+
+  /// A comparator with its own session (workspace and environment) instead
+  /// of the process's, so a test never depends on the environment it runs
+  /// in.
+  @visibleForTesting
+  GleonFileComparator.withSession(super.testFile, GleonSession this._session);
 
   /// A comparator for the same golden directory as [existing], the
   /// [LocalFileComparator] `flutter test` installs before
@@ -59,15 +67,21 @@ class GleonFileComparator extends LocalFileComparator {
         ),
       };
 
+  /// The session of `withSession`; null: the process's.
+  final GleonSession? _session;
+
   /// Compares [imageBytes] (a PNG) with [golden]; throws a [TestFailure] with
   /// the engine's message unless it passes.
   @override
   Future<bool> compare(Uint8List imageBytes, Uri golden) =>
-      GleonGoldenComparator(this).compare(imageBytes, golden);
+      GleonGoldenComparator(
+        this,
+        session: _session,
+      ).compare(imageBytes, golden);
 
   /// Writes [imageBytes] (a PNG) as [golden] through the engine (the
   /// golden of this platform, see the README's "Real text").
   @override
   Future<void> update(Uri golden, Uint8List imageBytes) =>
-      GleonGoldenComparator(this).update(golden, imageBytes);
+      GleonGoldenComparator(this, session: _session).update(golden, imageBytes);
 }

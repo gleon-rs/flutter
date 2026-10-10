@@ -101,6 +101,29 @@ void main() {
     });
   }
 
+  // A rule's text tolerance applies under its SSIM mode too.
+  testWidgets('an ssim rule compares text under its text_tolerance', (
+    tester,
+  ) async {
+    final sandbox = WorkspaceSandbox.create(
+      '''
+required_version: ">=0.1.0"
+screenshots:
+  - include: "test/goldens/*.png"
+    mode: ssim
+    text_tolerance: 0.1
+''',
+      extraGoldens: const {'goldens/caption.png': 'caption.png'},
+    );
+    await tester.pumpWidget(const Caption(digits: '0123456780'));
+    final message = await sandbox
+        .matcher(Caption.golden)
+        .matchAsync(Caption.finder);
+
+    expect(message, contains('": text up to'));
+    expect(message, contains('text ≤ 10.00% per tile)'));
+  });
+
   // Glyph ink reaching beyond the boxes of its line must stay in the text
   // regions: outside them every pixel is compared exactly, and other OSes
   // rasterize that ink differently.

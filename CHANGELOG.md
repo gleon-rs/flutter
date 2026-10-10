@@ -18,14 +18,20 @@
   in `flutter test` 8-11% faster for re-encoded passes and 11-24% for failures, identical bytes
   unchanged (`bench_press diff` against 0.2.0 on one machine).
 - **Pixel options:** `.pixel(channelTolerance:, antiAlias:, edgeThreshold:)` (yaml
-  `channel_tolerance`, `anti_alias`, `edge_threshold`), all off by default, let small channel
-  deltas, anti-aliased pixels and pixels on the golden's edges count as equal (see the README's
-  "Pixel options" for what each one hides). Case reports count them as `tolerated_pixels`.
+  `channel_tolerance`, `anti_alias`, `edge_threshold`, for `mode: pixel` rules only), all off by
+  default and never applied to text, let small channel deltas, anti-aliased pixels and pixels on
+  the golden's edges count as equal (see the README's "Pixel options" for what each one hides).
+  Values are 0–254. Case reports count them as `tolerated_pixels` and `edge_pixels`. A rule's
+  diff keys of the other mode (`threshold` under `ssim`, `min_similarity`/`color_tolerance` under
+  `pixel`) are config errors instead of being ignored.
 - **Text under `ssim`:** `textTolerance` (and a rule's `text_tolerance`) works with `.ssim()`
   too: text is judged by its tiles and left out of both SSIM gates, so another OS's glyphs no
-  longer fail an SSIM comparison of a widget.
-- **Diffs of every failure:** images of different sizes keep a diff image of both sizes; SSIM
-  case reports list the `changed` and `failing` regions with their own metrics.
+  longer fail an SSIM comparison of a widget. Text and masks are left out by taking the golden's
+  pixels, so the pixels around them are compared as strictly as any other (they were painted
+  black before, which hid color changes right next to a mask).
+- **Diffs of every failure:** images of different sizes keep a diff image of both sizes (masked
+  pixels unmarked); SSIM case reports list the `changed` and `failing` regions with their own
+  metrics, which the gleon CLI's HTML report shows.
 - **Text tiles:** a text region thinner than a 16x16 tile, or clipped at the image edge, is judged
   as a whole tile (the rest of the square counts as equal): one differing pixel of a 4x1 strip is
   no longer a quarter of a tile.

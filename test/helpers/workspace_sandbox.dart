@@ -8,6 +8,7 @@ import 'package:gleon/src/core/compare/golden_tolerance.dart';
 import 'package:gleon/src/core/config/gleon_session.dart';
 import 'package:gleon/src/core/hook/native_target.dart';
 import 'package:gleon/src/flutter/flutter_session.dart';
+import 'package:gleon/src/flutter/gleon_file_comparator.dart';
 import 'package:gleon/src/flutter/gleon_matches_golden_file.dart';
 import 'package:gleon/src/flutter/ignore_regions.dart';
 import 'package:json_schema/json_schema.dart';
@@ -44,10 +45,14 @@ final class WorkspaceSandbox {
   /// with a [yaml] config it is a workspace, else no golden in it has one.
   ///
   /// [extraGoldens] maps a path under `test/` to a package golden file name
-  /// (`swatch.png`, `blob.png` or `caption.png`) to copy there.
+  /// (`swatch.png`, `blob.png` or `caption.png`) to copy there. With
+  /// [installsGleonComparator] the comparator is a [GleonFileComparator]
+  /// with the sandbox's session, like `test/flutter_test_config.dart` would
+  /// install it (the environment of the test run never leaks in).
   factory WorkspaceSandbox.create(
     String? yaml, {
     Map<String, String> extraGoldens = const {},
+    bool installsGleonComparator = false,
   }) {
     final root = Directory(
       Directory.systemTemp.createTempSync(_prefix).resolveSymbolicLinksSync(),
@@ -71,11 +76,13 @@ final class WorkspaceSandbox {
     // Tear-downs run in reverse: the comparator is back before the directory
     // goes.
     addTearDown(_restore(goldenFileComparator));
-    goldenFileComparator = LocalFileComparator(
-      root.uri.resolve('test/sandbox_test.dart'),
-    );
+    final sandbox = WorkspaceSandbox._(root);
+    final testFile = root.uri.resolve('test/sandbox_test.dart');
+    goldenFileComparator = installsGleonComparator
+        ? GleonFileComparator.withSession(testFile, sandbox.session())
+        : LocalFileComparator(testFile);
 
-    return WorkspaceSandbox._(root);
+    return sandbox;
   }
 
   /// A sandbox whose goldens (all three) have no workspace.
@@ -238,19 +245,28 @@ void expectMatchesCaseSchema(Map<String, Object?> json) {
 }
 
 JsonSchema? _loadCaseSchema() {
-  final ProcessResult shown;
+  ProcessResult git(List<String> arguments) =>
+      Process.runSync('git', ['-C', '../gleon', ...arguments]);
+  final ProcessResult pinned;
   try {
-    shown = Process.runSync('git', [
-      '-C',
-      '../gleon',
-      'show',
-      '$gleonPin:gleon-model/schema/case.v4.json',
-    ]);
+    pinned = git(['cat-file', '-e', '$gleonPin^{commit}']);
   } on ProcessException {
     return null;
   }
+  // No checkout, or one without the pinned commit: nothing to validate with.
+  if (pinned.exitCode != 0) return null;
+  final shown = git(['show', '$gleonPin:$_caseSchemaPath']);
+  if (shown.exitCode != 0) {
+    // Loud: a silent skip would hide every report from the schema.
+    throw StateError(
+      '$_caseSchemaPath is not in the pinned gleon $gleonPin: the schema '
+      'version of the test helpers and bin/src/case_check.dart differs from '
+      "the pin's",
+    );
+  }
 
-  return shown.exitCode == 0
-      ? JsonSchema.create(shown.stdout.toString())
-      : null;
+  return JsonSchema.create(shown.stdout.toString());
 }
+
+/// The case schema the reports of this package's engine follow.
+const _caseSchemaPath = 'gleon-model/schema/case.v4.json';
