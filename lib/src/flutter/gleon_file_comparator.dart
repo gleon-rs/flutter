@@ -37,26 +37,32 @@ import 'gleon_golden_comparator.dart';
 class GleonFileComparator extends LocalFileComparator {
   /// Creates a comparator for the goldens of the test file [testFile], like
   /// [LocalFileComparator].
-  GleonFileComparator(super.testFile) : _session = null;
+  GleonFileComparator(super.testFile) : _names = null, _session = null;
 
   /// A comparator with its own session (workspace and environment) instead
   /// of the process's, so a test never depends on the environment it runs
   /// in.
   @visibleForTesting
-  GleonFileComparator.withSession(super.testFile, GleonSession this._session);
+  GleonFileComparator.withSession(super.testFile, GleonSession this._session)
+    : _names = null;
 
-  /// A comparator for the same golden directory as [existing], the
-  /// [LocalFileComparator] `flutter test` installs before
-  /// `test/flutter_test_config.dart` runs (or a subclass of it).
+  /// Any file name in the directory of [_names]: only the directory is used.
+  GleonFileComparator._naming(LocalFileComparator this._names)
+    : _session = null,
+      super(_names.basedir.resolve('gleon_test.dart'));
+
+  /// A comparator for the goldens of [existing], the [LocalFileComparator]
+  /// `flutter test` installs before `test/flutter_test_config.dart` runs or
+  /// a subclass of it: the same directory, and the golden names of its
+  /// [getTestUri] (its own comparison never runs). [existing] itself when it
+  /// is a `GleonFileComparator` already.
   ///
   /// Throws an [ArgumentError] for any other comparator: it has no golden
   /// directory to take.
   factory GleonFileComparator.fromExisting(GoldenFileComparator existing) =>
       switch (existing) {
-        // Any file name in that directory: only its directory is used.
-        final LocalFileComparator local => .new(
-          local.basedir.resolve('gleon_test.dart'),
-        ),
+        final GleonFileComparator installed => installed,
+        final LocalFileComparator local => ._naming(local),
         final other => throw ArgumentError.value(
           other,
           'existing',
@@ -67,8 +73,16 @@ class GleonFileComparator extends LocalFileComparator {
         ),
       };
 
+  /// The comparator of `fromExisting`, which names the goldens; null: this
+  /// one.
+  final LocalFileComparator? _names;
+
   /// The session of `withSession`; null: the process's.
   final GleonSession? _session;
+
+  @override
+  Uri getTestUri(Uri key, int? version) =>
+      _names?.getTestUri(key, version) ?? super.getTestUri(key, version);
 
   /// Compares [imageBytes] (a PNG) with [golden]; throws a [TestFailure] with
   /// the engine's message unless it passes.

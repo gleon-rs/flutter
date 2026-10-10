@@ -5,8 +5,10 @@
   `flutter_test`'s own `matchesGoldenFile` (alchemist, golden_toolkit, …) with the gleon engine
   and the rules of `.gleon/gleon.yaml`. A best-effort path (PNG bytes, text compared like every
   other pixel): gleon's matcher with a widget stays the fastest and the only one that compares
-  real text right. gleon's matcher accepts any `LocalFileComparator` subclass (it only takes its
-  golden directory; the subclass's threshold does not apply).
+  real text right. `fromExisting` keeps the golden names of a `LocalFileComparator` subclass
+  (its `getTestUri`) and returns an installed `GleonFileComparator` as is. gleon's matcher accepts
+  any `LocalFileComparator` subclass (it only takes its golden directory; the subclass's threshold
+  does not apply).
 - **Half the native library:** release libraries of about 1 MB instead of 2 MB (macOS arm64
   1.88 → 0.98 MB, Linux x64 2.21 → 1.13 MB, Linux arm64 1.97 → 1.00 MB). Globs of
   `.gleon/gleon.yaml` match with the small `glob` crate instead of the regex engine of `globset`,

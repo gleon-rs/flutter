@@ -127,10 +127,14 @@ class GleonGoldenComparator extends GoldenFileComparator {
     );
     final NativeOutcome(:console, :errorKind, :message, :verdict, :warning) =
         outcome;
-    // One `debugPrint` per line: warnings come newline-separated.
-    for (final line in [...warning.split('\n'), console]) {
-      if (line.isNotEmpty) debugPrint(line);
+    // One `debugPrint` per line: warnings come newline-separated. Most
+    // comparisons have neither.
+    if (warning.isNotEmpty) {
+      for (final line in warning.split('\n')) {
+        if (line.isNotEmpty) debugPrint(line);
+      }
     }
+    if (console.isNotEmpty) debugPrint(console);
     if (!verdict.isPass) {
       throw TestFailure(errorKind.isBug ? '$message\n$bugHint' : message);
     }

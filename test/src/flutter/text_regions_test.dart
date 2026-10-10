@@ -143,6 +143,32 @@ void main() {
     ]);
   });
 
+  testWidgets('text of mixed sizes on one line is one region', (tester) async {
+    await tester.pumpWidget(
+      const _Boundary(
+        Align(
+          alignment: .topLeft,
+          child: Text.rich(
+            TextSpan(
+              style: _style,
+              children: [
+                TextSpan(text: 'ab'),
+                TextSpan(text: 'C', style: TextStyle(fontSize: 28)),
+                TextSpan(text: 'de'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    // On the baseline of the 28px `C`, the 10px runs lie within its line:
+    // 68x28 grown by 3.5px, clipped to the image.
+    expect(_regions(tester), const [
+      PixelRegion(x: 0, y: 0, width: 72, height: 32),
+    ]);
+  });
+
   testWidgets('text side by side keeps the gap between', (tester) async {
     await tester.pumpWidget(
       const _Boundary(

@@ -10,10 +10,13 @@ import '../helpers/golden_updates.dart';
 import '../helpers/swatch.dart';
 import '../helpers/workspace_sandbox.dart';
 
-/// A sandbox (a workspace with [yaml]) with [GleonFileComparator] installed
-/// like `test/flutter_test_config.dart` would (with the sandbox's session).
-WorkspaceSandbox _installed({String? yaml}) =>
-    .create(yaml, installsGleonComparator: true);
+/// A sandbox (a workspace with [yaml], with [extraGoldens]) with
+/// [GleonFileComparator] installed like `test/flutter_test_config.dart`
+/// would (with the sandbox's session).
+WorkspaceSandbox _installed({
+  String? yaml,
+  Map<String, String> extraGoldens = const {},
+}) => .create(yaml, extraGoldens: extraGoldens, installsGleonComparator: true);
 
 void main() {
   group("flutter_test's matchesGoldenFile with GleonFileComparator", () {
@@ -48,6 +51,17 @@ void main() {
         sandbox.goldenBytes(Swatch.golden),
         ft.matchesGoldenFile(Swatch.golden),
       );
+    });
+
+    testWidgets('finds goldens under names with spaces and percent signs', (
+      tester,
+    ) async {
+      const golden = 'goldens/my 100% swatch/swatch.png';
+      _installed(extraGoldens: const {golden: 'swatch.png'});
+      await tester.pumpWidget(const Swatch());
+
+      await expectLater(Swatch.finder, ft.matchesGoldenFile(golden));
+      await expectLater(Swatch.finder, matchesGoldenFile(golden));
     });
 
     testWidgets("applies the golden's yaml rule", (tester) async {
@@ -172,6 +186,26 @@ screenshots:
       expect(comparator.basedir, sandbox.dir.uri);
     });
 
+    testWidgets('keeps the golden names of a subclass', (tester) async {
+      final sandbox = WorkspaceSandbox.withoutWorkspace();
+      final comparator = GleonFileComparator.fromExisting(
+        _CiComparator(sandbox.dir.uri.resolve('ci_test.dart')),
+      );
+
+      expect(
+        comparator.getTestUri(Uri.parse('button.png'), null),
+        Uri.parse('ci/button.png'),
+      );
+    });
+
+    test('installed twice, keeps the first', () {
+      final once = GleonFileComparator.fromExisting(
+        LocalFileComparator(Uri.base.resolve('test/twice_test.dart')),
+      );
+
+      expect(GleonFileComparator.fromExisting(once), same(once));
+    });
+
     test('refuses a comparator without a golden directory', () {
       expect(
         () => GleonFileComparator.fromExisting(_RemoteComparator()),
@@ -197,6 +231,15 @@ screenshots:
 
     expect(message, contains('1 of 6000px'));
   });
+}
+
+/// Names its goldens under `ci/`, like a harness's own subclass.
+class _CiComparator extends LocalFileComparator {
+  _CiComparator(super.testFile);
+
+  @override
+  Uri getTestUri(Uri key, int? version) =>
+      super.getTestUri(Uri.parse('ci/${key.path}'), version);
 }
 
 class _RemoteComparator extends GoldenFileComparator {

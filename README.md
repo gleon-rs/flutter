@@ -91,7 +91,8 @@ Future<void> testExecutable(FutureOr<void> Function() testMain) async {
 }
 ```
 
-Goldens stay where they are; tolerances and masks come from `.gleon/gleon.yaml` (see
+Goldens stay where they are (a `LocalFileComparator` subclass keeps naming them, through its
+`getTestUri`; installing twice keeps the first); tolerances and masks come from `.gleon/gleon.yaml` (see
 [Configuration](#configuration-with-gleongleonyaml)), failures and `--update-goldens` behave as
 with gleon's matcher. Which path compares best:
 
