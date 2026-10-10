@@ -33,7 +33,8 @@ import 'gleon_golden_comparator.dart';
 /// candidate is encoded by Flutter first. gleon's `matchesGoldenFile` with a
 /// widget (`Finder`) compares the raw pixels with the boxes of their text and
 /// is faster; it works with this comparator installed too (it only takes the
-/// directory of the goldens from it).
+/// directory of the goldens from it). Alchemist takes that path for every
+/// golden through `package:gleon/alchemist.dart`.
 class GleonFileComparator extends LocalFileComparator {
   /// Creates a comparator for the goldens of the test file [testFile], like
   /// [LocalFileComparator].

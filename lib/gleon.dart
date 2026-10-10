@@ -7,9 +7,11 @@
 /// the gleon version. If a file must keep both imports, use
 /// `import 'package:flutter_test/flutter_test.dart' hide matchesGoldenFile;`.
 ///
-/// Golden harnesses that call `flutter_test`'s own `matchesGoldenFile`
-/// (alchemist, golden_toolkit, …) get the same engine through
-/// `GleonFileComparator`, installed once in `test/flutter_test_config.dart`.
+/// Alchemist hands its widgets to gleon's matcher through
+/// `package:gleon/alchemist.dart`, real text included. Other golden harnesses
+/// that call `flutter_test`'s own `matchesGoldenFile` (golden_toolkit, …) get
+/// the same engine through `GleonFileComparator`, installed once in
+/// `test/flutter_test_config.dart`.
 library;
 
 export 'package:flutter_test/flutter_test.dart' hide matchesGoldenFile;

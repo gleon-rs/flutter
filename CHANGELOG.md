@@ -9,6 +9,13 @@
   (its `getTestUri`) and returns an installed `GleonFileComparator` as is. gleon's matcher accepts
   any `LocalFileComparator` subclass (it only takes its golden directory; the subclass's threshold
   does not apply).
+- **alchemist adapter:** `package:gleon/alchemist.dart`'s `gleonAlchemistExpectation()`, assigned
+  to alchemist's `goldenFileExpectationFn`, compares every alchemist golden with gleon's matcher:
+  the widget with the boxes of its text, no PNG encoded to compare, no dependency on alchemist.
+  Failures of obscured text (alchemist's CI default) say how to compare real text, failures under
+  alchemist's `diffThreshold` that it does not apply. The example app runs it (one set of
+  real-text goldens beside the others, alchemist's runner for the edge cases), with a benchmark:
+  4.78 → 0.90 ms per passing golden against alchemist's default assertion.
 - **Half the native library:** release libraries of about 1 MB instead of 2 MB (macOS arm64
   1.88 → 0.98 MB, Linux x64 2.21 → 1.13 MB, Linux arm64 1.97 → 1.00 MB). Globs of
   `.gleon/gleon.yaml` match with the small `glob` crate instead of the regex engine of `globset`,

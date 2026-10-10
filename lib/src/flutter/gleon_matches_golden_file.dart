@@ -34,6 +34,19 @@ class GleonMatchesGoldenFile extends flutter_test.MatchesGoldenFile {
     this.session,
   });
 
+  /// The golden [key] of a matcher call, a [String] or a [Uri], as a [Uri].
+  ///
+  /// Throws an [ArgumentError] for any other type, like Flutter's matcher.
+  static Uri uriOf(Object key) => switch (key) {
+    Uri() => key,
+    String() => .parse(key),
+    _ => throw ArgumentError.value(
+      key,
+      'key',
+      'Unexpected type for golden file: ${key.runtimeType}',
+    ),
+  };
+
   /// The requested tolerance; null means the golden's `.gleon/gleon.yaml`
   /// rule, else exact.
   final GoldenTolerance? tolerance;

@@ -1,6 +1,7 @@
-# Golden comparison benchmark (Flutter SDK comparator vs gleon, see benchmark/), started by hand on
-# every supported host. Each job writes the bench_press report to its summary and uploads the JSON:
-# compare two runs with `dart run bench_press diff <old.json> <new.json>`.
+# Golden comparison benchmarks (Flutter SDK comparator vs gleon, see benchmark/; alchemist's
+# assertion vs gleon's, see example/benchmark/), started by hand on every supported host. Each job
+# writes the bench_press reports to its summary and uploads the JSON: compare two runs with
+# `dart run bench_press diff <old.json> <new.json>`.
 name: Benchmark
 
 on:
@@ -56,10 +57,24 @@ jobs:
             cat "build/benchmark/$name.md" >> "$GITHUB_STEP_SUMMARY"
           done
 
+      - name: Benchmark alchemist's assertion (example app)
+        working-directory: flutter/example
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          flutter pub get
+          flutter test benchmark/
+          dart run bench_press report --from-json build/benchmark/alchemist_expectation.json \
+            --title "alchemist_expectation on $TARGET" \
+            --output build/benchmark/alchemist_expectation.md
+          cat build/benchmark/alchemist_expectation.md >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload results
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: benchmark-${{ matrix.target }}
-          path: flutter/build/benchmark/
+          path: |
+            flutter/build/benchmark/
+            flutter/example/build/benchmark/
           if-no-files-found: error

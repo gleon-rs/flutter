@@ -12,9 +12,15 @@ dependencies:
     sdk: flutter
 
 dev_dependencies:
-  # gleon re-exports flutter_test, so tests import only package:gleon/gleon.dart.
+  # Golden harness whose tests compare with gleon (test/counter_page_test.dart).
+  alchemist: ^0.14.1
+  bench_press: ^0.4.1
   dart_code_metrics_presets: ^2.33.0
   flutter_lints: ^6.0.0 # Included by ../analysis_options.yaml.
+  # Only for Flutter's own matcher, the baseline of benchmark/: gleon re-exports the rest of
+  # flutter_test, so tests import only package:gleon/gleon.dart.
+  flutter_test:
+    sdk: flutter
   gleon:
     path: ../
 
