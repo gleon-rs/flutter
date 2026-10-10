@@ -87,7 +87,9 @@ Future<void> _pumpLikeAlchemist(WidgetTester tester) =>
 
 /// Measures both expectations on the pumped table.
 Future<void> _measureAll(WidgetTester tester) async {
-  final gleon = gleonAlchemistExpectation();
+  // Text compared exactly too, like the Flutter baseline compares every pixel
+  // (without a workspace, gleon would ignore it).
+  final gleon = gleonAlchemistExpectation(textTolerance: 0);
   // Both pass first: a measured call that failed would measure another
   // code path.
   await _measure(defaultGoldenFileExpectation);

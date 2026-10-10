@@ -116,9 +116,10 @@ Turn its threshold off and set the tolerance in `.gleon/gleon.yaml`.
 #### alchemist
 
 alchemist ends every golden test with one assertion that can be replaced. Replaced with gleon's,
-every alchemist golden takes path 1 (the widget with the boxes of its text), and neither package
-depends on the other. The setup of the example app's `test/flutter_test_config.dart`, which CI
-compiles and runs:
+every alchemist golden with real text takes path 1 (the widget with the boxes of its text), and
+neither package depends on the other. When alchemist obscures text (`obscureText`), it passes an
+image of blocks instead of the widget, so gleon cannot compare that text as text. The setup of
+the example app's `test/flutter_test_config.dart`, which CI compiles and runs:
 
 ```dart
 import 'dart:async';
@@ -167,8 +168,8 @@ String _goldenPath(String fileName, String environmentName) => 'goldens/$fileNam
   [Recording per-platform goldens](#recording-per-platform-goldens)).
 - The example app runs this setup (`example/test/counter_page_test.dart`, with alchemist's runner
   for obscured text, `diffThreshold` and forced updates). For its passing golden (480x351 pixels,
-  two scenarios, real fonts) gleon's assertion takes 0.90 ms instead of alchemist's 4.78 ms
-  (macOS arm64, `example/benchmark/`).
+  two scenarios, real fonts, text compared exactly) gleon's assertion takes 0.86 ms instead of
+  alchemist's 4.46 ms (macOS arm64, `example/benchmark/`).
 
 ## Tolerance
 
