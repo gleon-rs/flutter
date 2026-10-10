@@ -58,8 +58,9 @@ tests pass unless metrics are on (see [Metrics](#metrics)). The one difference i
 widget, see [Real text](#real-text). If a file must keep both imports, add
 `hide matchesGoldenFile` to the `flutter_test` import.
 
-To keep Flutter's own matcher for some tests (e.g. goldens of a custom `goldenFileComparator`,
-which gleon does not support), import `flutter_test` with a prefix as well and call it there:
+To keep Flutter's own matcher for some tests (e.g. goldens of a custom `goldenFileComparator`
+that is not a `LocalFileComparator` subclass, such as a remote golden store, which gleon does not
+support), import `flutter_test` with a prefix as well and call it there:
 
 ```dart
 import 'package:flutter_test/flutter_test.dart' as ft;
