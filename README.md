@@ -2,7 +2,8 @@
 
 Drop-in replacement for Flutter's `matchesGoldenFile` with **tolerance**, **SSIM**, **ignore
 regions** and **real text in goldens** (compared on the platform the goldens are recorded on), powered by the gleon Rust comparison engine (the same engine as the
-[gleon CLI](https://github.com/gleon-rs/gleon)). Golden harnesses such as alchemist or
+[gleon CLI](https://github.com/gleon-rs/gleon)). alchemist hands its widgets to gleon's matcher
+(`package:gleon/alchemist.dart`, real text included); other golden harnesses such as
 golden_toolkit get the same engine through a `goldenFileComparator` (see
 [Golden harnesses](#golden-harnesses-alchemist-golden_toolkit-)).
 
@@ -99,7 +100,8 @@ with gleon's matcher. Which path compares best:
 
 1. **A widget (`Finder`) through gleon's `matchesGoldenFile`:** its raw pixels with the boxes of
    its text, so real text is compared right (see [Real text](#real-text)), and no PNG is encoded
-   (see [Performance](#performance)). It works with `GleonFileComparator` installed too.
+   (see [Performance](#performance)). It works with `GleonFileComparator` installed too, and
+   alchemist takes it for every golden (see [alchemist](#alchemist)).
 2. **A `ui.Image` or PNG bytes through gleon's matcher, and everything through
    `GleonFileComparator`:** best effort. The same engine and rules, but without text boxes, so
    text is compared like every other pixel; a comparator also gets a PNG that Flutter encoded
@@ -110,6 +112,64 @@ Whichever `goldenFileComparator` is assigned last wins: a harness that installs 
 comparator of its own (alchemist with `diffThreshold` above 0, golden_screenshot's default
 `allowedDiffPercent`, ff_golden with a non-strict tolerance) bypasses gleon or refuses to run.
 Turn its threshold off and set the tolerance in `.gleon/gleon.yaml`.
+
+#### alchemist
+
+alchemist ends every golden test with one assertion that can be replaced. Replaced with gleon's,
+every alchemist golden with real text takes path 1 (the widget with the boxes of its text), and
+neither package depends on the other. When alchemist obscures text (`obscureText`), it passes an
+image of blocks instead of the widget, so gleon cannot compare that text as text. The setup of
+the example app's `test/flutter_test_config.dart`, which CI compiles and runs:
+
+```dart
+import 'dart:async';
+
+import 'package:alchemist/alchemist.dart'
+    show AlchemistConfig, CiGoldensConfig, PlatformGoldensConfig;
+// Until alchemist exports it (Betterment/alchemist#188).
+// The implementation_imports lint checks only the files under lib, not tests.
+import 'package:alchemist/src/golden_test_adapter.dart' show goldenFileExpectationFn;
+import 'package:gleon/alchemist.dart';
+import 'package:gleon/gleon.dart';
+
+Future<void> testExecutable(FutureOr<void> Function() testMain) async {
+  // First: alchemist loads the fonts again before each golden test, and the
+  // faces loaded first stay.
+  await loadAppFonts();
+  goldenFileExpectationFn = gleonAlchemistExpectation();
+  await AlchemistConfig.runWithConfig(
+    config: const AlchemistConfig(
+      // One set of goldens with real text, which gleon compares on every OS.
+      platformGoldensConfig: PlatformGoldensConfig(enabled: false),
+      ciGoldensConfig: CiGoldensConfig(
+        obscureText: false,
+        filePathResolver: _goldenPath,
+      ),
+    ),
+    run: testMain,
+  );
+}
+
+// Beside the other goldens: they are compared everywhere, not only on CI.
+String _goldenPath(String fileName, String environmentName) => 'goldens/$fileName.png';
+```
+
+- `gleonAlchemistExpectation(tolerance:, ignoreRegions:, textTolerance:)` applies to every
+  alchemist golden (the hook is global); left out, the golden's `.gleon/gleon.yaml` rule applies.
+- With `obscureText` (alchemist's default for CI goldens), alchemist passes an image of blocked
+  text, compared like path 2; a failure then says how to compare real text
+  (`shouldHintObscuredText: false` silences that). After switching `obscureText`, record the
+  goldens again (`--update-goldens`): blocks and glyphs never match.
+- Do not install `GleonFileComparator` as well: alchemist refuses a `diffThreshold` above 0 with
+  any comparator but Flutter's own (`UnsupportedError` before comparing), and the adapter needs
+  none.
+- alchemist's `diffThreshold` does not apply, and a failure says so: set a tolerance instead. Its
+  `forceUpdateGoldenFiles` writes like `--update-goldens` (see
+  [Recording per-platform goldens](#recording-per-platform-goldens)).
+- The example app runs this setup (`example/test/counter_page_test.dart`, with alchemist's runner
+  for obscured text, `diffThreshold` and forced updates). For its passing golden (480x351 pixels,
+  two scenarios, real fonts, text compared exactly) gleon's assertion takes 0.86 ms instead of
+  alchemist's 4.46 ms (macOS arm64, `example/benchmark/`).
 
 ## Tolerance
 
@@ -496,6 +556,8 @@ The defaults are calibrated on a corpus of benign rendering noise vs. regression
   A subclass's own comparison and threshold never run; gleon's tolerance applies. Any other
   comparator (a remote golden store) fails with a message naming the ways out: remove it, or use
   `ft.matchesGoldenFile` for those tests (see [Migrate](#migrate)).
+- alchemist with `obscureText` (its default for CI goldens) passes an image of blocked text: no
+  text is compared there (a failure says how to switch, see [alchemist](#alchemist)).
 - Web (`--platform chrome`) does not compile: the package uses `dart:ffi`.
 - On-device tests and app builds for Android, iOS or other targets get no native library (the
   build hook adds none instead of failing the build), so the first `matchesGoldenFile` there fails
@@ -512,6 +574,7 @@ One package with a hard internal boundary:
 
 ```text
 lib/gleon.dart            exports only (flutter_test minus matchesGoldenFile, plus the gleon API)
+lib/alchemist.dart        exports only gleonAlchemistExpectation (alchemist's golden assertion)
 lib/src/core/             plain Dart: never imports Flutter (dart:ui, package:flutter*)
   compare/                GoldenTolerance, PixelRegion (the call's tolerances,
                           masks and text regions)
@@ -523,9 +586,9 @@ lib/src/core/             plain Dart: never imports Flutter (dart:ui, package:fl
                           HookUserDefines adapter (imported by the hook only), native targets,
                           release download, source build, atomic writes
 lib/src/flutter/          the Flutter layer: matchesGoldenFile, the widget capture and its text
-                          regions, the comparator of a match and GleonFileComparator (for
-                          harnesses), loadAppFonts, FlutterSession (this package as an
-                          integration)
+                          regions, the comparator of a match, GleonFileComparator (for
+                          harnesses) and alchemist's expectation, loadAppFonts, FlutterSession
+                          (this package as an integration)
 hook/build.dart           thin build hook on top of lib/src/core/hook/
 bin/                      maintainer scripts (dart:*, crypto and this package only), run with
                           plain `dart`: build_native, native_licenses, check_cases (CI)
@@ -591,7 +654,8 @@ To check a change for regressions, keep the JSON of a run before it and compare
 machine: bench_press withholds ratios of unstable samples ("unresolved"). `BENCH_PRESS_ARGS`
 passes options (`--validate` for a smoke run, as CI does; `--trials 30`). The manual
 **Benchmark** workflow runs them on every supported host and puts the report into each job's
-summary.
+summary. `example/benchmark/` (run in `example/`) measures alchemist's default assertion against
+gleon's for a passing golden of the example app (see [alchemist](#alchemist)).
 
 ## Maintainers
 

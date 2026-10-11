@@ -55,15 +55,7 @@ flutter_test.MatchesGoldenFile matchesGoldenFile(
   List<Rect>? ignoreRegions,
   double? textTolerance,
 }) {
-  final uri = switch (key) {
-    Uri() => key,
-    String() => Uri.parse(key),
-    _ => throw ArgumentError.value(
-      key,
-      'key',
-      'Unexpected type for golden file: ${key.runtimeType}',
-    ),
-  };
+  final uri = GleonMatchesGoldenFile.uriOf(key);
   if (tolerance != null) Tolerances.validate(tolerance);
   if (textTolerance != null) Tolerances.validateText(textTolerance);
 

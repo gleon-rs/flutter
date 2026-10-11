@@ -1,0 +1,3 @@
+# Alchemist tags its golden tests (`flutter test --tags golden` runs only them).
+tags:
+  golden:
