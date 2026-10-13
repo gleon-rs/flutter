@@ -204,8 +204,7 @@ final class WorkspaceSandbox {
       () => goldenFileComparator = original;
 }
 
-/// The name gleon gives this platform: the directory of its own goldens, and
-/// the `fallback_platform` naming it.
+/// The name gleon gives this platform: the `fallback_platform` naming it.
 String get hostPlatform =>
     (NativeTarget.host ?? fail('tests run on a native target')).gleonPlatform;
 

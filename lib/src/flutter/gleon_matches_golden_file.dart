@@ -18,10 +18,10 @@ import 'text_regions.dart';
 /// comparator of its own wrapping `goldenFileComparator`, which it never
 /// replaces. A widget (a `Finder`) is captured like Flutter does and, like a
 /// `ui.Image`, compared as raw pixels (a widget with the boxes of its text; a
-/// PNG is encoded only to keep it: for a failure, or a pass against another
-/// platform's golden with metrics on); bytes are compared as PNG. Written by
-/// `--update-goldens` with the engine's failure as the message, like a
-/// comparison.
+/// PNG is encoded only to keep it for a failure); bytes are compared as PNG.
+/// Written by `--update-goldens` (as a PNG with the boxes of its text, which
+/// the engine compares instead on a platform other than `fallback_platform`)
+/// with the engine's failure as the message, like a comparison.
 class GleonMatchesGoldenFile extends flutter_test.MatchesGoldenFile {
   /// Creates the matcher; prefer `matchesGoldenFile`, which validates the
   /// arguments.
@@ -153,10 +153,9 @@ class GleonMatchesGoldenFile extends flutter_test.MatchesGoldenFile {
     final element = found.singleOrNull;
     if (element == null) return .value('matched too many widgets');
     // Before capturing (nothing to dispose if it throws) and before awaiting
-    // anything: the tree must be the one captured.
-    final textRegions = golden.isUpdate
-        ? const <PixelRegion>[]
-        : TextRegions.captured(element);
+    // anything: the tree must be the one captured. An update needs them too:
+    // on a platform other than `fallback_platform` it compares instead.
+    final textRegions = TextRegions.captured(element);
 
     return _matchImage(
       flutter_test.captureImage(element),
@@ -197,7 +196,7 @@ class GleonMatchesGoldenFile extends flutter_test.MatchesGoldenFile {
     }
     try {
       return golden.isUpdate
-          ? await _update(image, golden)
+          ? await _update(image, golden, textRegions)
           : await _compare(image, golden, textRegions);
     } on flutter_test.TestFailure catch (error) {
       return error.message;
@@ -206,12 +205,20 @@ class GleonMatchesGoldenFile extends flutter_test.MatchesGoldenFile {
     }
   }
 
-  /// Writes [image] as [golden].
-  static Future<String?> _update(ui.Image image, _Golden golden) async {
+  /// Writes [image] with [textRegions] as [golden].
+  static Future<String?> _update(
+    ui.Image image,
+    _Golden golden,
+    List<PixelRegion> textRegions,
+  ) async {
     final png = await image.toByteData(format: .png);
     // Flutter's own message.
     if (png == null) return 'could not encode screenshot.';
-    await golden.comparator.update(golden.uri, Uint8List.sublistView(png));
+    await golden.comparator.update(
+      golden.uri,
+      Uint8List.sublistView(png),
+      textRegions: textRegions,
+    );
 
     return null;
   }

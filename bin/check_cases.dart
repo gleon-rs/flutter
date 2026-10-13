@@ -1,10 +1,9 @@
-/// Checks the case reports of a run: that each golden was compared where the
-/// example's `fallback_platform` says it should be (CI proof of
-/// platform-aware goldens; the rules are `CaseCheck` in
-/// `src/case_check.dart`).
+/// Checks the case reports of a run: that each golden was compared the way
+/// the example's `fallback_platform` says (CI proof of platform-aware
+/// goldens; the rules are `CaseCheck` in `src/case_check.dart`).
 ///
 /// ```sh
-/// dart bin/check_cases.dart <runs dir> (--fallback-platform <key> | --own)
+/// dart bin/check_cases.dart <runs dir> --fallback-platform <key>
 ///   [--min-cases <n>] [--outcome <outcome>]... [--run-id <id>]
 /// ```
 ///
@@ -22,12 +21,11 @@ import 'src/case_check.dart';
 import 'src/cli.dart';
 
 const _cli = Cli('check_cases', '''
-Usage: dart bin/check_cases.dart <runs dir> (--fallback-platform <key> | --own)
+Usage: dart bin/check_cases.dart <runs dir> --fallback-platform <key>
   [--min-cases <n>] [--outcome <outcome>]... [--run-id <id>]
 
-  --fallback-platform  the platform key of the shared goldens (e.g.
-                       macos-aarch64)
-  --own                every golden was compared with its platform's own
+  --fallback-platform  the platform key of the platform that tracks
+                       regressions (e.g. macos-aarch64)
   --min-cases <n>      at least this many reports (default 1)
   --outcome <name>     an allowed outcome; repeatable (default identical, match)
   --run-id <id>        every report has this run id
@@ -68,7 +66,6 @@ void main(List<String> args) {
   final positional = <String>[];
   String? fallbackPlatform;
   String? runId;
-  bool isOwn = false;
   int minCases = 1;
   final outcomes = <String>{};
   final rest = args.iterator;
@@ -76,9 +73,6 @@ void main(List<String> args) {
     switch (rest.current) {
       case '--fallback-platform':
         fallbackPlatform = _cli.value(rest);
-
-      case '--own':
-        isOwn = true;
 
       case '--min-cases':
         minCases =
@@ -102,10 +96,8 @@ void main(List<String> args) {
     }
   }
   final runs = positional.singleOrNull;
-  if (runs == null || isOwn == (fallbackPlatform != null)) {
-    _cli.failUsage(
-      'pass a runs directory and one of --fallback-platform or --own.',
-    );
+  if (runs == null || fallbackPlatform == null) {
+    _cli.failUsage('pass a runs directory and --fallback-platform.');
   }
 
   return (

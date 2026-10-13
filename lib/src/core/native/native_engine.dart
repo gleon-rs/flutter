@@ -94,10 +94,10 @@ abstract final class NativeEngine {
   /// update). [tolerance] null uses the golden's `.gleon/gleon.yaml` rule,
   /// else exact; [masks] add to the rule's. [textRegions] (pixels of a raw
   /// candidate) are compared under [textTolerance] (a share of a tile), null
-  /// the rule's, else the golden's default (see `matchesGoldenFile`). The
-  /// engine may compare or write this platform's own golden beside
-  /// [goldenPath] instead (`fallback_platform`). Failure artifacts go to
-  /// [failuresDir]; [goldenUri] names the golden in messages.
+  /// the rule's, else the golden's default (see `matchesGoldenFile`). On a
+  /// platform other than `fallback_platform` an update compares instead and
+  /// writes no golden (one that would change fails). Failure artifacts go
+  /// to [failuresDir]; [goldenUri] names the golden in messages.
   ///
   /// The candidate is read in place by the native code; nothing is copied in.
   static NativeOutcome golden(

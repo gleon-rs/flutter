@@ -108,8 +108,9 @@ jobs:
           flutter analyze --fatal-infos
           flutter test
 
-      # Proves the platform-aware goldens: macOS compared its own goldens with text, every other
-      # host fell back to them (a silent fallback to one shared golden would pass otherwise).
+      # Proves the platform-aware goldens: macOS (the fallback_platform) compared the goldens with
+      # text, every other host compared them with text ignored (a silent loose comparison on
+      # macOS would pass otherwise).
       - name: Check the example's case reports
         env:
           GLEON_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
@@ -239,27 +240,6 @@ jobs:
           gleon dashboard --out build/gleon/dashboard.html
           # Every golden of the example was read, and none failed.
           grep -Eq 'tests="[1-9][0-9]*" failures="0" errors="0"' build/gleon/junit.xml
-
-      # The per-platform loop end to end: this host fell back to the macOS goldens, so
-      # `gleon approve` records its own goldens from the run, and the next run compares them.
-      - name: Approve this platform's goldens and compare with them
-        working-directory: flutter/example
-        env:
-          GLEON_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
-        run: |
-          gleon approve
-          test -f test/goldens/linux-x86_64/counter_initial.png
-          test -f test/goldens/linux-x86_64/counter_three_taps.png
-          test -f test/goldens/linux-x86_64/counter_page.png
-          GLEON_RUN_ID="$GLEON_RUN_ID-own" gleon test -- flutter test
-
-      - name: Check the rerun compared the own goldens
-        env:
-          GLEON_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}-own
-        run: |
-          goldens=$(git ls-files 'example/test/goldens/*.png' | wc -l | tr -d ' ')
-          dart bin/check_cases.dart example/.gleon/runs/latest \
-            --own --min-cases "$goldens" --outcome match --run-id "$GLEON_RUN_ID"
 
   quality:
     name: Quality gates

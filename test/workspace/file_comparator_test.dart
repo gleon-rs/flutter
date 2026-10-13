@@ -101,9 +101,11 @@ screenshots:
   });
 
   group('GleonFileComparator in a workspace', () {
-    testWidgets("--update-goldens writes this platform's own golden", (
-      tester,
-    ) async {
+    // Flutter's matcher hands over PNG bytes: on a platform other than
+    // `fallback_platform` an update compares them and writes no golden. It
+    // reports the failure of an update of a widget as an exception of the
+    // test, which fails it.
+    testWidgets('--update-goldens elsewhere writes no golden', (tester) async {
       final sandbox = _installed(
         yaml:
             '''
@@ -111,23 +113,39 @@ required_version: ">=0.1.0"
 fallback_platform: $foreignPlatform
 screenshots:
   - include: "test/goldens/*.png"
+    diff: { threshold: 0 }
 ''',
       );
       final shared = sandbox.goldenBytes(Swatch.golden);
-      await tester.pumpWidget(const Swatch(dot: Swatch.dotOffset));
-      await withGoldenUpdates(
+      Future<void> update() => withGoldenUpdates(
         () => expectLater(Swatch.finder, ft.matchesGoldenFile(Swatch.golden)),
       );
 
+      await tester.pumpWidget(const Swatch());
+      await update();
+
+      expect(tester.takeException(), isNull, reason: 'unchanged: a pass');
+
+      await tester.pumpWidget(const Swatch(dot: Swatch.dotOffset));
+      await update();
+
       expect(
-        sandbox.goldenBytes('goldens/$hostPlatform/swatch.png'),
-        isNotEmpty,
+        tester.takeException(),
+        isA<TestFailure>().having(
+          (failure) => failure.message,
+          'message',
+          contains('gleon: the golden was not updated'),
+        ),
       );
       expect(
-        // ignore: use-existing-variable, read again after the update.
+        // ignore: use-existing-variable, read again after the updates.
         sandbox.goldenBytes(Swatch.golden),
         shared,
-        reason: 'the shared golden is left alone',
+        reason: 'the golden is left alone',
+      );
+      expect(
+        Directory('${sandbox.dir.path}/goldens/$hostPlatform').existsSync(),
+        isFalse,
       );
     });
 

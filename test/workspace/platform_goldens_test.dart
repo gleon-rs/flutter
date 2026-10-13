@@ -6,18 +6,17 @@ import '../helpers/caption.dart';
 import '../helpers/golden_updates.dart';
 import '../helpers/workspace_sandbox.dart';
 
-// `fallback_platform` names the platform of the shared goldens: there text is
-// compared by default (0.05 of a tile). Any other platform records its own
-// goldens in `goldens/<os>-<arch>/` and, until it has one, compares the shared
-// golden with text ignored by default. An explicit text tolerance applies
-// everywhere. The goldens are recorded inside the tests, so they pass on every
-// OS, whatever flags the run was started with.
+// `fallback_platform` names the platform that tracks regressions: there text
+// is compared by default (0.05 of a tile) and `--update-goldens` writes the
+// goldens. Any other platform compares the same goldens with text ignored by
+// default, and its updates write no golden: one that would change fails. An
+// explicit text tolerance applies everywhere. The goldens are recorded inside
+// the tests, so they pass on every OS, whatever flags the run was started
+// with.
 void main() {
   setUpAll(loadAppFonts);
 
-  testWidgets('on the platform of the goldens a changed digit fails', (
-    tester,
-  ) async {
+  testWidgets('on the fallback platform a changed digit fails', (tester) async {
     final sandbox = WorkspaceSandbox.create(_yaml(hostPlatform));
     await _record(tester, sandbox);
     await tester.pumpWidget(const Caption(digits: '0123456780'));
@@ -54,47 +53,79 @@ void main() {
     );
   });
 
-  testWidgets(
-    'another platform compares the shared golden, then records its own',
-    (tester) async {
-      final sandbox = WorkspaceSandbox.create(_yaml(hostPlatform));
-      await _record(tester, sandbox);
-      final recorded = sandbox.goldenBytes(Caption.golden);
-      sandbox.writeConfig(_yaml(foreignPlatform));
-      final own = 'goldens/$hostPlatform/caption.png';
-      const digit = Caption(digits: '0123456780');
+  testWidgets('another platform compares the golden with text ignored', (
+    tester,
+  ) async {
+    final sandbox = WorkspaceSandbox.create(_yaml(hostPlatform));
+    await _record(tester, sandbox);
+    sandbox.writeConfig(_yaml(foreignPlatform));
 
-      await tester.pumpWidget(digit);
-      final againstShared = await _compare(sandbox);
-      final sharedGolden = sandbox.readCase(_name)['golden'];
+    await tester.pumpWidget(const Caption(digits: '0123456780'));
+    final digit = await _compare(sandbox);
+    final golden = sandbox.readCase(_name)['golden'];
 
-      expect(againstShared, isNull, reason: 'text of another OS is ignored');
-      expect(sharedGolden, containsPair('fallback', 'test/${Caption.golden}'));
-      expect(sharedGolden, containsPair('path', 'test/$own'));
-      // The pass differs from the shared golden, so it keeps its candidate:
-      // `gleon approve` can make it this platform's own golden.
+    expect(digit, isNull, reason: 'text of another OS is ignored');
+    expect(golden, containsPair('path', 'test/${Caption.golden}'));
+    expect(golden, containsPair('fallback', 'test/${Caption.golden}'));
+    expect(
+      sandbox.artifactsOf(_name).existsSync(),
+      isFalse,
+      reason: 'a pass keeps nothing',
+    );
+
+    await tester.pumpWidget(const Caption(shift: 24));
+    final shifted = await _compare(sandbox);
+
+    expect(shifted, startsWith('Golden "${Caption.golden}": '));
+    expect(
+      shifted,
+      contains(
+        'Compared with the $foreignPlatform golden, text ignored: this '
+        'workspace tracks regressions on $foreignPlatform.',
+      ),
+    );
+  });
+
+  testWidgets('another platform updates only goldens that would not change', (
+    tester,
+  ) async {
+    final sandbox = WorkspaceSandbox.create(_yaml(hostPlatform));
+    await _record(tester, sandbox);
+    final recorded = sandbox.goldenBytes(Caption.golden);
+    sandbox.writeConfig(_yaml(foreignPlatform));
+    final note =
+        'gleon: the golden was not updated: this workspace tracks regressions '
+        'on $foreignPlatform';
+    void expectUntouched() {
+      // ignore: use-existing-variable, read again after each update.
+      expect(sandbox.goldenBytes(Caption.golden), recorded);
       expect(
-        File('${sandbox.artifactsOf(_name).path}/candidate.png').existsSync(),
-        isTrue,
+        Directory('${sandbox.dir.path}/goldens/$hostPlatform').existsSync(),
+        isFalse,
+        reason: 'no folder of this platform',
       );
+    }
 
-      await _record(tester, sandbox);
-      expect(sandbox.goldenBytes(own), isNotEmpty);
-      expect(
-        // ignore: use-existing-variable, read again after the update.
-        sandbox.goldenBytes(Caption.golden),
-        recorded,
-        reason: 'the shared golden is left alone',
-      );
+    await tester.pumpWidget(const Caption(digits: '0123456780'));
+    final digit = await _update(sandbox);
 
-      await tester.pumpWidget(digit);
-      final againstOwn = await _compare(sandbox);
+    expect(digit, isNull, reason: 'only text changed: nothing to write');
+    expectUntouched();
 
-      expect(againstOwn, startsWith('Golden "$own": '));
-      expect(againstOwn, contains('text ≤ 5.00% per tile).'));
-      expect(sandbox.readCase(_name)['golden'], isNot(contains('fallback')));
-    },
-  );
+    await tester.pumpWidget(const Caption(shift: 24));
+    final shifted = await _update(sandbox);
+
+    expect(shifted, contains('Compared with the $foreignPlatform golden'));
+    expect(shifted, contains(note));
+    expectUntouched();
+
+    File('${sandbox.dir.path}/${Caption.golden}').deleteSync();
+    final missing = await _update(sandbox);
+
+    expect(missing, contains('non-existent file'));
+    expect(missing, contains(note));
+    expect(File('${sandbox.dir.path}/${Caption.golden}').existsSync(), isFalse);
+  });
 }
 
 const _name = 'test/goldens/caption';
@@ -117,6 +148,12 @@ Future<void> _record(WidgetTester tester, WorkspaceSandbox sandbox) async {
     () => expectLater(Caption.finder, sandbox.matcher(Caption.golden)),
   );
 }
+
+/// The failure of updating the golden with the pumped [Caption]
+/// (`--update-goldens`), or null.
+Future<String?> _update(WorkspaceSandbox sandbox) => withGoldenUpdates(
+  () => sandbox.matcher(Caption.golden).matchAsync(Caption.finder),
+);
 
 /// The failure of comparing the pumped [Caption] with its golden, or null.
 Future<String?> _compare(WorkspaceSandbox sandbox, {double? textTolerance}) =>

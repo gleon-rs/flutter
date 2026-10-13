@@ -1,3 +1,19 @@
+## 0.4.0
+
+- **Breaking: no per-platform golden folders.** The package no longer reads or writes
+  `goldens/<os>-<arch>/`: every platform compares the goldens next to the tests, as in Flutter.
+  `fallback_platform` only names the platform that tracks regressions: there text is compared
+  (0.05 of a tile) and `--update-goldens` rewrites the goldens; any other platform compares them
+  with text ignored. Folders written by 0.3.0 are ignored; delete them.
+- **Breaking: `--update-goldens` on another platform writes no golden.** It compares instead (with
+  the boxes of the text of a widget): a golden that would not change passes, one that would change
+  (outside the text, or missing) fails, naming the `fallback_platform`. Alchemist's forced updates
+  behave the same. Without `fallback_platform` updates rewrite the goldens everywhere.
+- Passes on another platform keep no candidate image, and their case reports name the golden
+  itself in `golden.fallback`. `gleon approve` skips the cases of integrations on platforms other
+  than the `fallback_platform`, with a warning.
+- `bin/check_cases.dart` takes `--fallback-platform` only (`--own` is gone).
+
 ## 0.3.0
 
 - **`GleonFileComparator` for golden harnesses:** installed once in
