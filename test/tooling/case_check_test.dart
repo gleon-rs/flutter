@@ -9,17 +9,17 @@ void main() {
 
   /// A case report of the golden `test/goldens/a` as JSON text.
   String report({
-    String? fallback,
+    String? recorded,
     String os = 'macos',
     String arch = 'aarch64',
     double text = 0.05,
     bool hasText = true,
     String outcome = 'match',
     String? runId,
-    int version = 4,
+    int version = 5,
   }) => json.encode({
     'comparison': {'text_tolerance': ?(hasText ? text : null)},
-    'golden': {'fallback': ?fallback, 'path': golden},
+    'golden': {'path': golden, 'platform': ?recorded},
     'name': 'test/goldens/a',
     'outcome': outcome,
     'platform': {'arch': arch, 'os': os},
@@ -45,11 +45,9 @@ void main() {
   group('with a fallback platform', () {
     const check = CaseCheck(fallbackPlatform: 'macos-aarch64');
 
-    test('it compares its golden with text', () {
+    test('it compares its goldens with text', () {
       expect(problemsOf(check, report()), isEmpty);
-      expect(problemsOf(check, report(fallback: golden)), [
-        'compared $golden, expected $golden itself',
-      ]);
+      expect(problemsOf(check, report(recorded: 'macos-aarch64')), isEmpty);
       expect(problemsOf(check, report(text: 1)), [
         'text tolerance 1.0, expected 0.05',
       ]);
@@ -58,24 +56,26 @@ void main() {
       ]);
     });
 
-    test('another platform compares the same golden, text ignored', () {
-      String linux({String? fallback, double? text}) => report(
-        fallback: fallback,
+    test('another platform compares them with text ignored', () {
+      String linux({String? recorded, double? text}) => report(
+        recorded: recorded,
         os: 'linux',
         arch: 'x86_64',
         text: text ?? 0,
         hasText: text != null,
       );
 
-      expect(problemsOf(check, linux(fallback: golden, text: 1)), isEmpty);
-      expect(problemsOf(check, linux(text: 1)), [
-        'golden.fallback none, expected $golden',
-      ]);
-      expect(problemsOf(check, linux(fallback: 'test/b.png', text: 1)), [
-        'golden.fallback test/b.png, expected $golden',
-      ]);
-      expect(problemsOf(check, linux(fallback: golden)), [
-        'text tolerance none, expected 1.0',
+      expect(problemsOf(check, linux(text: 1)), isEmpty);
+      expect(
+        problemsOf(check, linux(recorded: 'macos-aarch64', text: 1)),
+        isEmpty,
+      );
+      expect(problemsOf(check, linux()), ['text tolerance none, expected 1.0']);
+    });
+
+    test('a golden recorded on another platform is a problem', () {
+      expect(problemsOf(check, report(recorded: 'linux-x86_64')), [
+        'golden recorded on linux-x86_64, expected macos-aarch64',
       ]);
     });
 
@@ -88,12 +88,7 @@ void main() {
         CaseCheck.platformKey(os: 'ios-sim', arch: 'arm64'),
         'os=ios-sim+arch=arm64',
       );
-      final dashed = report(
-        fallback: golden,
-        os: 'ios-sim',
-        arch: 'arm64',
-        text: 1,
-      );
+      final dashed = report(os: 'ios-sim', arch: 'arm64', text: 1);
       const misplaced =
           'lies at ios-sim-arm64/test/goldens/a.json, expected '
           'os=ios-sim+arch=arm64/test/goldens/a.json';
@@ -134,7 +129,7 @@ void main() {
       isEmpty,
     );
     expect(problemsOf(check, report(runId: 'run-2', version: 2)), [
-      'schema_version 2, expected 4',
+      'schema_version 2, expected 5',
       'outcome match, expected one of identical',
       'run_id run-2, expected run-1',
     ]);

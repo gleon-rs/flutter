@@ -75,7 +75,7 @@ void main() {
     expect(report.containsKey('metrics'), isFalse);
     expect(report.containsKey('artifacts'), isFalse, reason: 'a pass');
     expect(report.containsKey('run_id'), isFalse, reason: 'no GLEON_RUN_ID');
-    expect(report, containsPair('schema_version', 4));
+    expect(report, containsPair('schema_version', 5));
     expect(report, containsPair('regions', isEmpty));
     expect(report['comparison'], {
       'masks': isEmpty,

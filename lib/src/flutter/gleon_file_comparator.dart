@@ -94,9 +94,9 @@ class GleonFileComparator extends LocalFileComparator {
         session: _session,
       ).compare(imageBytes, golden);
 
-  /// Writes [imageBytes] (a PNG) as [golden] through the engine; on a
-  /// platform other than `fallback_platform` no golden is written (see the
-  /// README's "Updating goldens on other platforms").
+  /// Writes [imageBytes] (a PNG) as [golden] through the engine, stamped
+  /// with this platform (see the README's "Recording goldens on any
+  /// platform").
   @override
   Future<void> update(Uri golden, Uint8List imageBytes) =>
       GleonGoldenComparator(this, session: _session).update(golden, imageBytes);

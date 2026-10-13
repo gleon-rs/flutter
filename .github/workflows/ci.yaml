@@ -99,6 +99,9 @@ jobs:
           # Records a case report per golden (see example/.gleon/gleon.yaml): on hosts other than
           # its fallback_platform they compare the macOS goldens with text ignored.
           GLEON_METRICS: "1"
+          # On macOS (the fallback_platform) a golden recorded elsewhere would fail: the goldens
+          # stay canonical.
+          GLEON_REQUIRE_CANONICAL: "1"
           # Stamps the reports of this run, so readers never mix them with another run's
           # (re-runs of failed jobs get their own attempt).
           GLEON_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
@@ -108,9 +111,9 @@ jobs:
           flutter analyze --fatal-infos
           flutter test
 
-      # Proves the platform-aware goldens: macOS (the fallback_platform) compared the goldens with
-      # text, every other host compared them with text ignored (a silent loose comparison on
-      # macOS would pass otherwise).
+      # Proves the platform-aware goldens: every golden was recorded on macOS (the
+      # fallback_platform), which compared them with text, every other host with text ignored (a
+      # silent loose comparison on macOS would pass otherwise).
       - name: Check the example's case reports
         env:
           GLEON_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}

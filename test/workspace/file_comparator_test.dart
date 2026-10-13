@@ -7,6 +7,7 @@ import 'package:gleon/gleon.dart';
 
 import '../helpers/blob.dart';
 import '../helpers/golden_updates.dart';
+import '../helpers/png_origin.dart';
 import '../helpers/swatch.dart';
 import '../helpers/workspace_sandbox.dart';
 
@@ -101,11 +102,11 @@ screenshots:
   });
 
   group('GleonFileComparator in a workspace', () {
-    // Flutter's matcher hands over PNG bytes: on a platform other than
-    // `fallback_platform` an update compares them and writes no golden. It
-    // reports the failure of an update of a widget as an exception of the
-    // test, which fails it.
-    testWidgets('--update-goldens elsewhere writes no golden', (tester) async {
+    // Flutter's matcher hands over PNG bytes: a golden recorded on another
+    // platform (here the `fallback_platform`'s, unstamped) stays while the
+    // update passes against it, and is recorded here, stamped, when it would
+    // change.
+    testWidgets('--update-goldens elsewhere records a change', (tester) async {
       final sandbox = _installed(
         yaml:
             '''
@@ -124,24 +125,21 @@ screenshots:
       await tester.pumpWidget(const Swatch());
       await update();
 
-      expect(tester.takeException(), isNull, reason: 'unchanged: a pass');
+      expect(
+        // ignore: use-existing-variable, read again after the update.
+        sandbox.goldenBytes(Swatch.golden),
+        shared,
+        reason: 'unchanged: the golden stays',
+      );
 
       await tester.pumpWidget(const Swatch(dot: Swatch.dotOffset));
       await update();
 
+      expect(tester.takeException(), isNull);
       expect(
-        tester.takeException(),
-        isA<TestFailure>().having(
-          (failure) => failure.message,
-          'message',
-          contains('gleon: the golden was not updated'),
-        ),
-      );
-      expect(
-        // ignore: use-existing-variable, read again after the updates.
-        sandbox.goldenBytes(Swatch.golden),
-        shared,
-        reason: 'the golden is left alone',
+        // ignore: use-existing-variable, read again after the update.
+        PngOrigin.read(sandbox.goldenBytes(Swatch.golden)),
+        hostPlatform,
       );
       expect(
         Directory('${sandbox.dir.path}/goldens/$hostPlatform').existsSync(),

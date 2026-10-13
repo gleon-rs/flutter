@@ -165,7 +165,7 @@ String _goldenPath(String fileName, String environmentName) => 'goldens/$fileNam
   none.
 - alchemist's `diffThreshold` does not apply, and a failure says so: set a tolerance instead. Its
   `forceUpdateGoldenFiles` writes like `--update-goldens` (see
-  [Updating goldens on other platforms](#updating-goldens-on-other-platforms)).
+  [Recording goldens on any platform](#recording-goldens-on-any-platform)).
 - The example app runs this setup (`example/test/counter_page_test.dart`, with alchemist's runner
   for obscured text, `diffThreshold` and forced updates). For its passing golden (480x351 pixels,
   two scenarios, real fonts, text compared exactly) gleon's assertion takes 0.86 ms instead of
@@ -284,47 +284,54 @@ Operating systems then lay text out alike (the fonts' Windows line metrics are a
 ones macOS and Linux use, so line heights on Windows can differ from the real app there), but
 rasterize glyphs differently. Measured on CI, 40% or more of the pixels of a 16x16 square of
 text differ between macOS and Linux, more than a changed digit of the same width does (24%). No
-tolerance tells them apart, so goldens compare text only on the platform that tracks regressions.
-Name that platform `fallback_platform` in `.gleon/gleon.yaml` (`<os>-<arch>` with the names a
-process reports: `macos-aarch64`, `linux-x86_64`, `linux-aarch64`, `windows-x86_64`; `macos-arm64`
-or `darwin` fail every golden of the workspace with a config error, since they would never
-match). Then a golden `goldens/a.png` compares in one of two ways:
+tolerance tells them apart, so a golden compares text only on the platform it was recorded on.
+gleon writes that platform into the golden itself: a `tEXt` chunk of the PNG (`gleon:platform`,
+e.g. `macos-aarch64`) that image decoders ignore, so the golden stays one file next to the test.
+Then a golden `goldens/a.png` compares in one of two ways:
 
-1. **On the `fallback_platform`:** text is compared too. By default at most 5% of the pixels of
-   any 16x16 square of text may differ: the same OS draws the same glyphs alike across its
-   versions (a pixel per square, measured between macOS 15 on CI and macOS 26), a changed digit
-   differs by 24%. `flutter test --update-goldens` rewrites the goldens, as in Flutter.
+1. **On the platform it was recorded on:** text is compared too. By default at most 5% of the
+   pixels of any 16x16 square of text may differ: the same OS draws the same glyphs alike across
+   its versions (a pixel per square, measured between macOS 15 on CI and macOS 26), a changed
+   digit differs by 24%.
 2. **On any other platform:** the same golden, with text ignored by default (everything else is
    compared under the golden's tolerance). Changes that move anything (a longer word, another
    weight, a shifted line) still fail; changes of text alone (a digit, a color) do not. A failure
-   names the `fallback_platform`, and `--update-goldens` writes no golden (see
-   [Updating goldens on other platforms](#updating-goldens-on-other-platforms)).
+   names the platform the golden was recorded on.
 
-Without `fallback_platform` nobody knows where the goldens were recorded, so every platform
-compares them the second way, and `--update-goldens` rewrites them everywhere, as in Flutter. The
-golden, test name, rules and failure files are the same on every platform.
+A golden without that chunk (recorded before gleon 0.4.0 or by another tool) counts as recorded
+on the `fallback_platform` of `.gleon/gleon.yaml` (`<os>-<arch>` with the names a process reports:
+`macos-aarch64`, `linux-x86_64`, `linux-aarch64`, `windows-x86_64`; `macos-arm64` or `darwin` fail
+every golden of the workspace with a config error, since they would never match), else as
+recorded nowhere known: then every platform compares it the second way. The golden, test name,
+rules and failure files are the same on every platform. Tools that strip text chunks from PNGs
+(optimizers such as `oxipng --strip`) drop the platform too.
 
-### Updating goldens on other platforms
+### Recording goldens on any platform
 
-| Where | Compare | `--update-goldens` |
-|---|---|---|
-| No `fallback_platform` | text ignored | writes the goldens |
-| The `fallback_platform` | text compared (0.05) | writes the goldens |
-| Any other platform | text ignored, layout exact | compares: a golden that would not change passes, one that would change fails, and no golden is written |
+`flutter test --update-goldens` (and alchemist's `forceUpdateGoldenFiles`) works on every
+platform, and writes the golden stamped with the platform it ran on:
 
-On a platform other than the `fallback_platform`, `--update-goldens` (and alchemist's
-`forceUpdateGoldenFiles`) never rewrites a golden with that OS's glyphs: a golden whose pixels
-are the same, or differ in text alone, passes; one that would change (anything outside the text,
-or a missing golden) fails, saying to update it on the `fallback_platform` or to change
-`fallback_platform`. Its candidate is still kept (see [Failure images](#failure-images)), so you
-see what your change renders. Update the goldens on the `fallback_platform`:
+| The golden | `--update-goldens` |
+|---|---|
+| Missing, or recorded on this platform (or nowhere known) | written, as in Flutter |
+| The same image | left as it is |
+| Recorded on another platform | left as it is while only its text differs (so it never flips between platforms over their glyphs); written when anything else would change |
+| Recorded elsewhere, updated on the `fallback_platform` | written: the `fallback_platform` records it again |
 
-- **There:** `flutter test --update-goldens`, as in Flutter.
-- **From CI, with the [gleon CLI](https://github.com/gleon-rs/gleon):** let the CI job on the
+So a contributor on Linux adds or changes a screen with `--update-goldens`, and the golden then
+compares its text on Linux and ignores it on macOS. The `fallback_platform` is the canonical
+platform: it warns about each golden recorded elsewhere (its text is not compared there), and
+`--update-goldens` there records them again. To keep every golden canonical, set
+`GLEON_REQUIRE_CANONICAL=1` in the CI job of the `fallback_platform`: it then compares goldens
+recorded elsewhere as its own, so their glyphs fail until they are recorded there. Ways to record
+them there:
+
+- **There:** `flutter test --update-goldens`.
+- **From CI, with the [gleon CLI](https://github.com/gleon-rs/gleon):** let the CI job of the
   `fallback_platform` upload its `.gleon/runs/latest` (a failure keeps its candidate and case
   report there, with or without metrics), download it and approve it. `gleon approve` writes the
-  candidates of the `fallback_platform` as the goldens and skips the cases of other platforms with
-  a warning:
+  candidates stamped with their platform; when the `fallback_platform` offers one for a golden, it
+  wins over the other platforms':
 
   ```sh
   gh run download <run id> --name <artifact> --dir ci-run
@@ -334,16 +341,11 @@ see what your change renders. Update the goldens on the `fallback_platform`:
 - **From CI, without the CLI:** a job you start by hand on the `fallback_platform` that runs
   `flutter test --update-goldens` and uploads the goldens for you to commit.
 
-If your platforms render alike (the same pixels everywhere), keep `fallback_platform`: updates
-elsewhere then pass without writing, and only real changes need the tracking platform. Or drop it
-and set a strict `text_tolerance` in the rule: text is compared, and goldens are updated, on every
-platform.
-
 `textTolerance` (0.0–1.0, or `text_tolerance` of the golden's rule) is the largest share of
-differing pixels allowed in any 16x16 square of text. Unset, it depends on the platform: 0.05 on
-the `fallback_platform`, 1 (text never fails) anywhere else. A value you set always applies: lower
-it to compare text on other operating systems too, at your own risk, or set 1 to turn text
-comparison off on the `fallback_platform` as well:
+differing pixels allowed in any 16x16 square of text. Unset, it depends on the golden: 0.05 on
+the platform it was recorded on, 1 (text never fails) anywhere else. A value you set always
+applies: lower it to compare text on other operating systems too, at your own risk, or set 1 to
+turn text comparison off on the golden's platform as well:
 
 ```dart
 await expectLater(
@@ -397,7 +399,7 @@ one.
 # .gleon/gleon.yaml (create it by hand or with `gleon init`)
 required_version: ">=0.1.0"
 
-# The platform that tracks regressions: text is compared there, see Real text.
+# The canonical platform: goldens without a platform stamp were recorded there, see Real text.
 fallback_platform: macos-aarch64
 
 exclude: "test/goldens/experimental/**"
@@ -435,14 +437,15 @@ artifacts: .gleon/runs/latest/artifacts
   `textTolerance` beats the rule's `text_tolerance`. Masks of the rule are added to the call's
   `ignoreRegions`.
 - A golden matched by `exclude` (or inside a directory the CLI never scans, such as `build/`) or
-  by no rule is compared exactly, like without the file: one golden for every platform, whatever
-  `fallback_platform` says.
+  by no rule is compared exactly, like without the file: text compared like everything else, and
+  written without a platform stamp.
 - Golden paths must be valid gleon test names (`[a-z0-9_.-]` segments, case-insensitive), as for
   `gleon stage`; an invalid config or name fails the test with the file path and the parser's
   message. Unknown keys are rejected.
 - `required_version` is only checked for syntax here; the CLI enforces it. `fallback_platform`
-  is the platform that tracks regressions (see Real text; OS and architecture only, renderer and labels
-  are ignored). `platform` and the `GLEON_PLATFORM` / `GLEON_FALLBACK_PLATFORM` variables are the
+  is the canonical platform (see Real text; OS and architecture only, renderer and labels are
+  ignored); `GLEON_REQUIRE_CANONICAL` (1/0, like `GLEON_METRICS`) makes it compare goldens recorded
+  elsewhere as its own. `platform` and the `GLEON_PLATFORM` / `GLEON_FALLBACK_PLATFORM` variables are the
   CLI's and unused by the package.
 - Without `.gleon/gleon.yaml` everything behaves like Flutter: exact by default, no metrics, and
   nothing is written on passing tests.
@@ -479,8 +482,8 @@ variable `GLEON_METRICS` (which beats the file): `1` or `true` turns them on, `0
 (any case, surrounding spaces ignored), an empty value counts as unset, and any other value fails
 every golden. `metrics: {console: false}` keeps the files and drops the lines. A
 report that cannot be written is printed as a warning and never fails the test. A case report
-records the golden SHA-256 and size (`golden.fallback` names it too on a platform other than the
-`fallback_platform`, whose goldens it compared with text ignored), the candidate size and SHA-256
+records the golden SHA-256 and size (and `golden.platform`, the platform its stamp names), the
+candidate size and SHA-256
 (a widget's raw pixels have one only when its PNG is kept), the effective tolerance and masks, the
 outcome
 (`identical`, `match`, `mismatch`, `dimension_mismatch`, `error` with its kind, `updated`,

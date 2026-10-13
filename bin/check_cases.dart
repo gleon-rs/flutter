@@ -1,6 +1,7 @@
-/// Checks the case reports of a run: that each golden was compared the way
-/// the example's `fallback_platform` says (CI proof of platform-aware
-/// goldens; the rules are `CaseCheck` in `src/case_check.dart`).
+/// Checks the case reports of a run: that each golden was recorded on the
+/// example's `fallback_platform` and compared the way it says (CI proof of
+/// platform-aware goldens; the rules are `CaseCheck` in
+/// `src/case_check.dart`).
 ///
 /// ```sh
 /// dart bin/check_cases.dart <runs dir> --fallback-platform <key>
@@ -24,8 +25,8 @@ const _cli = Cli('check_cases', '''
 Usage: dart bin/check_cases.dart <runs dir> --fallback-platform <key>
   [--min-cases <n>] [--outcome <outcome>]... [--run-id <id>]
 
-  --fallback-platform  the platform key of the platform that tracks
-                       regressions (e.g. macos-aarch64)
+  --fallback-platform  the platform key of the canonical platform, which
+                       records every golden (e.g. macos-aarch64)
   --min-cases <n>      at least this many reports (default 1)
   --outcome <name>     an allowed outcome; repeatable (default identical, match)
   --run-id <id>        every report has this run id

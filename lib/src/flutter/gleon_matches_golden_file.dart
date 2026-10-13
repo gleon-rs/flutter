@@ -20,7 +20,7 @@ import 'text_regions.dart';
 /// `ui.Image`, compared as raw pixels (a widget with the boxes of its text; a
 /// PNG is encoded only to keep it for a failure); bytes are compared as PNG.
 /// Written by `--update-goldens` (as a PNG with the boxes of its text, which
-/// the engine compares instead on a platform other than `fallback_platform`)
+/// the engine compares first with a golden recorded on another platform)
 /// with the engine's failure as the message, like a comparison.
 class GleonMatchesGoldenFile extends flutter_test.MatchesGoldenFile {
   /// Creates the matcher; prefer `matchesGoldenFile`, which validates the
@@ -154,7 +154,7 @@ class GleonMatchesGoldenFile extends flutter_test.MatchesGoldenFile {
     if (element == null) return .value('matched too many widgets');
     // Before capturing (nothing to dispose if it throws) and before awaiting
     // anything: the tree must be the one captured. An update needs them too:
-    // on a platform other than `fallback_platform` it compares instead.
+    // it compares first with a golden recorded on another platform.
     final textRegions = TextRegions.captured(element);
 
     return _matchImage(

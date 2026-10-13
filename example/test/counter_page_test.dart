@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:alchemist/alchemist.dart';
@@ -42,19 +43,17 @@ Future<void> main() async {
       expect(message, isNot(contains('obscured')));
     });
 
-    // Another platform tracks the goldens of this workspace: alchemist's
-    // forced update compares instead and writes no golden, failing when the
-    // golden would change.
-    testWidgets('a forced update elsewhere fails on a change', (tester) async {
+    // The goldens of this workspace are recorded on another platform (the
+    // fallback platform of its config): alchemist's forced update records a
+    // change here, stamped with this platform, and leaves a golden that only
+    // differs in its text.
+    testWidgets('a forced update elsewhere records a change', (tester) async {
       final dir = _goldensDir(isTrackedElsewhere: true);
-      final message = await _failureOf(tester, shouldForceUpdate: true);
+      await _run(tester, shouldForceUpdate: true);
 
-      expect(message, contains('gleon: the golden was not updated'));
-      expect(
-        File('${dir.path}/$_golden').readAsBytesSync(),
-        File(_otherPage).readAsBytesSync(),
-        reason: 'the golden stays',
-      );
+      final golden = File('${dir.path}/$_golden').readAsBytesSync();
+      expect(golden, isNot(File(_otherPage).readAsBytesSync()));
+      expect(latin1.decode(golden), contains('gleon:platform\u0000'));
       expect(_platformDirs(dir), isEmpty);
     });
 
@@ -65,7 +64,7 @@ Future<void> main() async {
       expect(
         File('${dir.path}/$_golden').readAsBytesSync(),
         File(_table).readAsBytesSync(),
-        reason: 'text of another OS is ignored: nothing to write',
+        reason: 'only text of another OS differs: the golden stays',
       );
       expect(_platformDirs(dir), isEmpty);
     });
@@ -135,17 +134,11 @@ Future<void> _run(
 /// the golden passes.
 Future<String> _failureOf(
   WidgetTester tester, {
-  bool shouldForceUpdate = false,
   bool isTextObscured = false,
   double threshold = 0,
 }) async {
   try {
-    await _run(
-      tester,
-      shouldForceUpdate: shouldForceUpdate,
-      isTextObscured: isTextObscured,
-      threshold: threshold,
-    );
+    await _run(tester, isTextObscured: isTextObscured, threshold: threshold);
   } on TestFailure catch (error) {
     return error.message ?? fail('a failure without a message');
   }

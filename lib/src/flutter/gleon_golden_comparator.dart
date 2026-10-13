@@ -54,12 +54,12 @@ class GleonGoldenComparator extends GoldenFileComparator {
   @override
   Uri getTestUri(Uri key, int? version) => delegate.getTestUri(key, version);
 
-  /// Writes [imageBytes] as [golden] through the engine; like [compare], a
-  /// custom comparator fails (it would write the golden behind gleon's back:
-  /// no case report). On a platform other than `fallback_platform` nothing
-  /// is written: the engine compares instead, with [textRegions] (the boxes
-  /// of the text, in pixels of the image), and fails if the golden would
-  /// change (see the README's "Updating goldens on other platforms").
+  /// Writes [imageBytes] as [golden] through the engine, stamped with this
+  /// platform; like [compare], a custom comparator fails (it would write the
+  /// golden behind gleon's back: no case report). A golden recorded on
+  /// another platform stays while [imageBytes] passes against it, compared
+  /// with [textRegions] (the boxes of the text, in pixels of the image; see
+  /// the README's "Recording goldens on any platform").
   @override
   Future<void> update(
     Uri golden,

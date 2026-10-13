@@ -4,11 +4,12 @@ import 'dart:convert';
 /// the way the workspace's `fallback_platform` says (the CI proof of
 /// platform-aware goldens, `bin/check_cases.dart`).
 ///
-/// Reports of [fallbackPlatform] compared their golden with text (no
-/// `golden.fallback`, the default text tolerance of the platform that tracks
-/// regressions), and reports of every other platform compared the same
-/// golden with text ignored (`golden.fallback` naming it). Expects unset
-/// text tolerances (the defaults).
+/// Every golden was recorded on [fallbackPlatform] (its `golden.platform`
+/// names it, or no other platform: no golden of another platform crept in).
+/// Reports of [fallbackPlatform] compared it with text (the default text
+/// tolerance of the platform a golden was recorded on), reports of every
+/// other platform with text ignored. Expects unset text tolerances (the
+/// defaults).
 ///
 /// Plain Dart (no Flutter imports): maintainer tooling, tested directly.
 final class CaseCheck {
@@ -20,8 +21,7 @@ final class CaseCheck {
     this.runId,
   });
 
-  /// The platform key of the platform that tracks regressions (e.g.
-  /// `macos-aarch64`).
+  /// The platform key of the canonical platform (e.g. `macos-aarch64`).
   final String fallbackPlatform;
 
   /// The fewest reports.
@@ -36,8 +36,8 @@ final class CaseCheck {
   /// The outcomes allowed unless others are given: passes.
   static const defaultOutcomes = {'identical', 'match'};
 
-  /// The default text tolerance on the platform that tracks regressions.
-  static const _trackingText = 0.05;
+  /// The default text tolerance on the platform a golden was recorded on.
+  static const _ownText = 0.05;
 
   /// The default text tolerance on any other platform.
   static const _otherText = 1.0;
@@ -52,7 +52,7 @@ final class CaseCheck {
       : '$os-$arch';
 
   /// The case report schema version gleon writes.
-  static const _schemaVersion = 4;
+  static const _schemaVersion = 5;
 
   /// What the report [content] (JSON text of one case report file at
   /// [location], `/`-separated and relative to `cases/`) shows that it
@@ -67,8 +67,17 @@ final class CaseCheck {
     }
     final report = _Case.of(decoded);
     if (report == null) return const ['not a case report'];
-    final _Case(:name, :outcome, :platform, runId: recorded, :version) = report;
+    final _Case(
+      :name,
+      :outcome,
+      :platform,
+      :recorded,
+      runId: reportRunId,
+      :text,
+      :version,
+    ) = report;
     final belongs = '$platform/$name.json';
+    final expectedText = platform == fallbackPlatform ? _ownText : _otherText;
 
     return [
       if (location != belongs) 'lies at $location, expected $belongs',
@@ -76,11 +85,12 @@ final class CaseCheck {
         'schema_version $version, expected $_schemaVersion',
       if (!outcomes.contains(outcome))
         'outcome $outcome, expected one of ${outcomes.join(', ')}',
-      if (runId case final expected? when recorded != expected)
-        'run_id ${recorded ?? 'none'}, expected $expected',
-      ...platform == fallbackPlatform
-          ? _trackingProblemsOf(report)
-          : _otherProblemsOf(report),
+      if (runId case final expected? when reportRunId != expected)
+        'run_id ${reportRunId ?? 'none'}, expected $expected',
+      if (recorded case final origin? when origin != fallbackPlatform)
+        'golden recorded on $origin, expected $fallbackPlatform',
+      if (text != expectedText)
+        'text tolerance ${text ?? 'none'}, expected $expectedText',
     ];
   }
 
@@ -88,40 +98,14 @@ final class CaseCheck {
   String? tooFew(int count) => count < minCases
       ? '$count case reports, expected at least $minCases.'
       : null;
-
-  /// A report of the platform that tracks regressions: it compared its
-  /// golden with text.
-  static List<String> _trackingProblemsOf(_Case report) {
-    final _Case(:fallback, :path, :text) = report;
-
-    return [
-      if (fallback != null) 'compared $fallback, expected $path itself',
-      if (text != _trackingText)
-        'text tolerance ${text ?? 'none'}, expected $_trackingText',
-    ];
-  }
-
-  /// A report of another platform: it compared the same golden, named by
-  /// `golden.fallback` too, with text ignored.
-  static List<String> _otherProblemsOf(_Case report) {
-    final _Case(:fallback, :path, :text) = report;
-
-    return [
-      if (fallback != path)
-        'golden.fallback ${fallback ?? 'none'}, expected $path',
-      if (text != _otherText)
-        'text tolerance ${text ?? 'none'}, expected $_otherText',
-    ];
-  }
 }
 
 /// The fields of a case report that are checked.
 final class _Case {
   const _Case({
-    required this.fallback,
+    required this.recorded,
     required this.name,
     required this.outcome,
-    required this.path,
     required this.platform,
     required this.runId,
     required this.text,
@@ -132,18 +116,16 @@ final class _Case {
   static _Case? of(Object? report) => switch (report) {
     {
       'comparison': final Map<String, Object?> comparison,
-      'golden':
-          {'path': final String path} && final Map<String, Object?> golden,
+      'golden': final Map<String, Object?> golden,
       'name': final String name,
       'outcome': final String outcome,
       'platform': {'arch': final String arch, 'os': final String os},
       'schema_version': final int version,
     } =>
       .new(
-        fallback: golden['fallback']?.toString(),
+        recorded: golden['platform']?.toString(),
         name: name,
         outcome: outcome,
-        path: path,
         platform: CaseCheck.platformKey(os: os, arch: arch),
         runId: report['run_id']?.toString(),
         text: _share(comparison['text_tolerance']),
@@ -152,18 +134,14 @@ final class _Case {
     _ => null,
   };
 
-  /// The golden of the platform that tracks regressions, when another
-  /// platform compared it.
-  final String? fallback;
+  /// The platform the golden was recorded on (its stamp), if it has one.
+  final String? recorded;
 
   /// The canonical name of the golden, the same on every platform.
   final String name;
 
   /// How the comparison ended.
   final String outcome;
-
-  /// The golden (`/`-separated).
-  final String path;
 
   /// The key of the recording platform ([CaseCheck.platformKey]).
   final String platform;

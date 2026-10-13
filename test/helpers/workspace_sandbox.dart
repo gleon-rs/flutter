@@ -22,7 +22,7 @@ const goldenSource = 'test/goldens';
 final String gleonPin =
     NativeTarget.readPin(Directory.current.uri) ?? fail('no native/gleon_ref');
 
-/// `case.v4.json` of the pinned commit ([gleonPin]) in a sibling gleon
+/// `case.v5.json` of the pinned commit ([gleonPin]) in a sibling gleon
 /// checkout (`../gleon`, as in CI), or null without that checkout or commit.
 /// Read from git, not the working tree: the checkout may be at another
 /// commit.
@@ -144,13 +144,14 @@ final class WorkspaceSandbox {
       .new('${root.path}/.gleon/runs/latest/cases/$hostPlatform/$name.json');
 
   /// A session with the given values of `GLEON_METRICS`,
-  /// `GLEON_ARTIFACTS_DIR` and `GLEON_RUN_ID` (unset by default, whatever the
-  /// environment of the test run); its goldens under [root] belong to this
-  /// workspace.
+  /// `GLEON_ARTIFACTS_DIR`, `GLEON_RUN_ID` and `GLEON_REQUIRE_CANONICAL`
+  /// (unset by default, whatever the environment of the test run); its
+  /// goldens under [root] belong to this workspace.
   GleonSession session({
     String metrics = '',
     String artifactsDir = '',
     String runId = '',
+    String requireCanonical = '',
   }) => _disposedWithTest(
     .new(
       integration: FlutterSession.integration,
@@ -158,6 +159,7 @@ final class WorkspaceSandbox {
         metrics: metrics,
         artifactsDir: artifactsDir,
         runId: runId,
+        requireCanonical: requireCanonical,
       ),
     ),
   );
@@ -204,7 +206,8 @@ final class WorkspaceSandbox {
       () => goldenFileComparator = original;
 }
 
-/// The name gleon gives this platform: the `fallback_platform` naming it.
+/// The name gleon gives this platform: the `fallback_platform` naming it, and
+/// the platform of the goldens it records.
 String get hostPlatform =>
     (NativeTarget.host ?? fail('tests run on a native target')).gleonPlatform;
 
@@ -268,4 +271,4 @@ JsonSchema? _loadCaseSchema() {
 }
 
 /// The case schema the reports of this package's engine follow.
-const _caseSchemaPath = 'gleon-model/schema/case.v4.json';
+const _caseSchemaPath = 'gleon-model/schema/case.v5.json';
