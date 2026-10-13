@@ -316,9 +316,23 @@ On a platform other than the `fallback_platform`, `--update-goldens` (and alchem
 `forceUpdateGoldenFiles`) never rewrites a golden with that OS's glyphs: a golden whose pixels
 are the same, or differ in text alone, passes; one that would change (anything outside the text,
 or a missing golden) fails, saying to update it on the `fallback_platform` or to change
-`fallback_platform`. Update goldens there: locally, in Docker when Linux tracks them
-(`linux-aarch64` on Apple silicon, `linux-x86_64` with `--platform linux/amd64`), or in a CI job
-you start by hand that uploads them for you to commit.
+`fallback_platform`. Its candidate is still kept (see [Failure images](#failure-images)), so you
+see what your change renders. Update the goldens on the `fallback_platform`:
+
+- **There:** `flutter test --update-goldens`, as in Flutter.
+- **From CI, with the [gleon CLI](https://github.com/gleon-rs/gleon):** let the CI job on the
+  `fallback_platform` upload its `.gleon/runs/latest` (a failure keeps its candidate and case
+  report there, with or without metrics), download it and approve it. `gleon approve` writes the
+  candidates of the `fallback_platform` as the goldens and skips the cases of other platforms with
+  a warning:
+
+  ```sh
+  gh run download <run id> --name <artifact> --dir ci-run
+  gleon approve --from ci-run
+  ```
+
+- **From CI, without the CLI:** a job you start by hand on the `fallback_platform` that runs
+  `flutter test --update-goldens` and uploads the goldens for you to commit.
 
 If your platforms render alike (the same pixels everywhere), keep `fallback_platform`: updates
 elsewhere then pass without writing, and only real changes need the tracking platform. Or drop it

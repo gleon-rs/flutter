@@ -11,7 +11,9 @@
   behave the same. Without `fallback_platform` updates rewrite the goldens everywhere.
 - Passes on another platform keep no candidate image, and their case reports name the golden
   itself in `golden.fallback`. `gleon approve` skips the cases of integrations on platforms other
-  than the `fallback_platform`, with a warning.
+  than the `fallback_platform` (matched like the package matches it: OS, and architecture when
+  named), with a warning; approving a CI run of the `fallback_platform` is how to update goldens
+  from another OS (see the README's "Updating goldens on other platforms").
 - `bin/check_cases.dart` takes `--fallback-platform` only (`--own` is gone).
 
 ## 0.3.0

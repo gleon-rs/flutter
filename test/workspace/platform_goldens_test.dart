@@ -115,8 +115,15 @@ void main() {
     await tester.pumpWidget(const Caption(shift: 24));
     final shifted = await _update(sandbox);
 
-    expect(shifted, contains('Compared with the $foreignPlatform golden'));
+    expect(shifted, contains('text ignored).'));
     expect(shifted, contains(note));
+    expect(
+      shifted,
+      predicate<String>(
+        (message) => 'tracks regressions on'.allMatches(message).length == 1,
+        'names the platform once, in the note',
+      ),
+    );
     expectUntouched();
 
     File('${sandbox.dir.path}/${Caption.golden}').deleteSync();
