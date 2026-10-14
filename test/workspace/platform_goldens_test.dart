@@ -40,6 +40,36 @@ void main() {
     expect(textOff, isNull, reason: 'an explicit 1 turns text comparison off');
   });
 
+  testWidgets('without a fallback platform text is strict where recorded', (
+    tester,
+  ) async {
+    final sandbox = WorkspaceSandbox.create(_yaml(null));
+    await _record(tester, sandbox);
+    await tester.pumpWidget(const Caption(digits: '0123456780'));
+    final message = await _compare(sandbox);
+
+    expect(PngOrigin.read(sandbox.goldenBytes(Caption.golden)), hostPlatform);
+    expect(message, contains('text ≤ 5.00% per tile).'));
+  });
+
+  testWidgets('an invalid GLEON_REQUIRE_CANONICAL fails every golden', (
+    tester,
+  ) async {
+    final sandbox = WorkspaceSandbox.create(_yaml(hostPlatform));
+    await tester.pumpWidget(const Caption());
+    final message = await _compare(
+      sandbox,
+      session: sandbox.session(requireCanonical: 'maybe'),
+    );
+
+    expect(
+      message,
+      contains(
+        "GLEON_REQUIRE_CANONICAL must be 1, 0, true or false (got 'maybe')",
+      ),
+    );
+  });
+
   testWidgets('an unknown fallback platform is a config error', (tester) async {
     final sandbox = WorkspaceSandbox.create(_yaml('macos-arm64'));
     await tester.pumpWidget(const Caption());
@@ -166,10 +196,11 @@ void _restamp(WorkspaceSandbox sandbox, String platform) =>
 
 const _name = 'test/goldens/caption';
 
-String _yaml(String fallbackPlatform) =>
+/// The config of the sandbox, with [fallbackPlatform] unless it is null.
+String _yaml(String? fallbackPlatform) =>
     '''
 required_version: ">=0.1.0"
-fallback_platform: $fallbackPlatform
+${fallbackPlatform == null ? '# no fallback_platform' : 'fallback_platform: $fallbackPlatform'}
 screenshots:
   - include: "test/goldens/**/*.png"
     mode: pixel

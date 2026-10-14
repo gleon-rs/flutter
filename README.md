@@ -437,8 +437,9 @@ artifacts: .gleon/runs/latest/artifacts
   `textTolerance` beats the rule's `text_tolerance`. Masks of the rule are added to the call's
   `ignoreRegions`.
 - A golden matched by `exclude` (or inside a directory the CLI never scans, such as `build/`) or
-  by no rule is compared exactly, like without the file: text compared like everything else, and
-  written without a platform stamp.
+  by no rule is compared exactly, like without the file: the text of a widget is ignored by default
+  (no platform is known to have recorded it), and the golden is written without a platform
+  stamp.
 - Golden paths must be valid gleon test names (`[a-z0-9_.-]` segments, case-insensitive), as for
   `gleon stage`; an invalid config or name fails the test with the file path and the parser's
   message. Unknown keys are rejected.
