@@ -27,7 +27,7 @@ void _expectSchemaRejectsOffContractCases() {
     'platform': {'arch': 'aarch64', 'os': 'macos'},
     'recorded_at': '2026-09-27T12:00:00.000Z',
     'regions': <Object>[],
-    'schema_version': 4,
+    'schema_version': 5,
     'source': {'tool': 'gleon_flutter', 'tool_version': '0.1.0'},
     'timings_ms': {'total': 1.5},
   };
@@ -43,10 +43,24 @@ void _expectSchemaRejectsOffContractCases() {
   };
   final schema = caseSchema;
 
+  final recorded = {
+    ...valid,
+    'golden': {'path': 'a.png', 'platform': 'linux-x86_64', 'sha256': '0' * 64},
+  };
+
   expect(schema?.validate(valid).isValid, isTrue);
   expect(schema?.validate(failed).isValid, isTrue);
+  expect(schema?.validate(recorded).isValid, isTrue);
   for (final broken in [
     {...valid, 'schema_version': 2},
+    {
+      ...valid,
+      'golden': {'path': 'a.png', 'platform': 'Linux x86', 'sha256': '0' * 64},
+    },
+    {
+      ...valid,
+      'golden': {'fallback': 'a.png', 'path': 'a.png', 'sha256': '0' * 64},
+    },
     {
       ...failed,
       'artifacts': {

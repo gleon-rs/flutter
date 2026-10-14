@@ -41,7 +41,7 @@ sealed class GoldenTolerance {
   /// The options, all off by default and never applied to text, let some
   /// differing pixels count as equal: rendering noise of shapes (GPU drift,
   /// anti-aliasing, sub-pixel geometry), not a substitute for
-  /// [GoldenTolerance.ssim] or per-platform goldens:
+  /// [GoldenTolerance.ssim]:
   ///
   /// * `channelTolerance` (0–254): no RGBA byte differs by more than this;
   /// * `antiAlias`: the pixel looks anti-aliased in either image (the
@@ -67,8 +67,9 @@ sealed class GoldenTolerance {
   /// (8-bit channel units, 0–255).
   ///
   /// Known limits: glyphs moved by half a pixel or more (typical of different
-  /// operating systems' font engines) fail, so keep per-platform goldens;
-  /// low-contrast color changes of one-pixel lines can pass.
+  /// operating systems' font engines) fail outside the text of a widget
+  /// (compared under the text tolerance); low-contrast color changes of
+  /// one-pixel lines can pass.
   const factory ssim({double minSimilarity, double colorTolerance}) =
       SsimTolerance;
 

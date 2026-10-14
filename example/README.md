@@ -8,6 +8,6 @@ in the package README for how other platforms compare them).
 
 ```sh
 flutter test                   # the build hook fetches the native library on first run
-flutter test --update-goldens  # rewrite this platform's goldens
+flutter test --update-goldens  # record the goldens (stamped with this platform)
 flutter run -d macos           # or linux / windows
 ```

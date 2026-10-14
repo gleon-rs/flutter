@@ -1,3 +1,25 @@
+## 0.4.0
+
+- **Breaking: no per-platform golden folders.** The package no longer reads or writes
+  `goldens/<os>-<arch>/`: every platform compares the goldens next to the tests, as in Flutter.
+  Folders written by 0.3.0 are ignored; delete them.
+- **Goldens name the platform they were recorded on.** `--update-goldens` stamps each golden with
+  its platform in a PNG text chunk (`gleon:platform`, ignored by decoders). Its text is compared
+  there (0.05 of a tile) and ignored elsewhere, with or without `fallback_platform`; a golden
+  without the stamp counts as recorded on `fallback_platform`. A failure names the platform the
+  golden was recorded on.
+- **`--update-goldens` works on every platform.** A golden recorded on another platform stays
+  while only its text differs (no flip-flop between operating systems over their glyphs) and is
+  written, stamped, when anything else changes; alchemist's forced updates behave the same.
+- **`fallback_platform` is the canonical platform.** It warns about goldens recorded elsewhere,
+  `--update-goldens` there records them again, and `GLEON_REQUIRE_CANONICAL=1` makes it compare
+  them as its own (for its CI job). `gleon approve` stamps the goldens it writes with the platform
+  of their case and prefers the `fallback_platform`'s candidate when several platforms offer one.
+- **Breaking: case reports v5.** `golden.platform` names the stamp; `golden.fallback` is gone.
+  Native ABI 13 (the `GLEON_REQUIRE_CANONICAL` session value).
+- `bin/check_cases.dart` takes `--fallback-platform` only (`--own` is gone) and fails on goldens
+  recorded on another platform.
+
 ## 0.3.0
 
 - **`GleonFileComparator` for golden harnesses:** installed once in

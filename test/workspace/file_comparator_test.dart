@@ -7,6 +7,7 @@ import 'package:gleon/gleon.dart';
 
 import '../helpers/blob.dart';
 import '../helpers/golden_updates.dart';
+import '../helpers/png_origin.dart';
 import '../helpers/swatch.dart';
 import '../helpers/workspace_sandbox.dart';
 
@@ -101,9 +102,11 @@ screenshots:
   });
 
   group('GleonFileComparator in a workspace', () {
-    testWidgets("--update-goldens writes this platform's own golden", (
-      tester,
-    ) async {
+    // Flutter's matcher hands over PNG bytes: a golden recorded on another
+    // platform (here the `fallback_platform`'s, unstamped) stays while the
+    // update passes against it, and is recorded here, stamped, when it would
+    // change.
+    testWidgets('--update-goldens elsewhere records a change', (tester) async {
       final sandbox = _installed(
         yaml:
             '''
@@ -111,23 +114,36 @@ required_version: ">=0.1.0"
 fallback_platform: $foreignPlatform
 screenshots:
   - include: "test/goldens/*.png"
+    diff: { threshold: 0 }
 ''',
       );
       final shared = sandbox.goldenBytes(Swatch.golden);
-      await tester.pumpWidget(const Swatch(dot: Swatch.dotOffset));
-      await withGoldenUpdates(
+      Future<void> update() => withGoldenUpdates(
         () => expectLater(Swatch.finder, ft.matchesGoldenFile(Swatch.golden)),
       );
 
-      expect(
-        sandbox.goldenBytes('goldens/$hostPlatform/swatch.png'),
-        isNotEmpty,
-      );
+      await tester.pumpWidget(const Swatch());
+      await update();
+
       expect(
         // ignore: use-existing-variable, read again after the update.
         sandbox.goldenBytes(Swatch.golden),
         shared,
-        reason: 'the shared golden is left alone',
+        reason: 'unchanged: the golden stays',
+      );
+
+      await tester.pumpWidget(const Swatch(dot: Swatch.dotOffset));
+      await update();
+
+      expect(tester.takeException(), isNull);
+      expect(
+        // ignore: use-existing-variable, read again after the update.
+        PngOrigin.read(sandbox.goldenBytes(Swatch.golden)),
+        hostPlatform,
+      );
+      expect(
+        Directory('${sandbox.dir.path}/goldens/$hostPlatform').existsSync(),
+        isFalse,
       );
     });
 

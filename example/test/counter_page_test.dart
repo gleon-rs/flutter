@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:alchemist/alchemist.dart';
@@ -42,30 +43,30 @@ Future<void> main() async {
       expect(message, isNot(contains('obscured')));
     });
 
-    // Another platform's goldens in this workspace: alchemist's forced update
-    // writes this platform's own golden beside them, never the shared one.
-    testWidgets("a forced update writes this platform's own", (tester) async {
-      final dir = _goldensDir();
-      Directory('${dir.path}/.gleon').createSync();
-      File('${dir.path}/.gleon/gleon.yaml').writeAsStringSync('''
-required_version: ">=0.1.0"
-fallback_platform: fuchsia-x86_64
-screenshots:
-  - include: "goldens/*.png"
-''');
+    // The goldens of this workspace are recorded on another platform (the
+    // fallback platform of its config): alchemist's forced update records a
+    // change here, stamped with this platform, and leaves a golden that only
+    // differs in its text.
+    testWidgets('a forced update elsewhere records a change', (tester) async {
+      final dir = _goldensDir(isTrackedElsewhere: true);
+      await _run(tester, shouldForceUpdate: true);
+
+      final golden = File('${dir.path}/$_golden').readAsBytesSync();
+      expect(golden, isNot(File(_otherPage).readAsBytesSync()));
+      expect(latin1.decode(golden), contains('gleon:platform\u0000'));
+      expect(_platformDirs(dir), isEmpty);
+    });
+
+    testWidgets('a forced update elsewhere passes unchanged', (tester) async {
+      final dir = _goldensDir(source: _table, isTrackedElsewhere: true);
       await _run(tester, shouldForceUpdate: true);
 
       expect(
         File('${dir.path}/$_golden').readAsBytesSync(),
-        File(_otherPage).readAsBytesSync(),
-        reason: 'the shared golden stays',
+        File(_table).readAsBytesSync(),
+        reason: 'only text of another OS differs: the golden stays',
       );
-      final own = Directory('${dir.path}/goldens')
-          .listSync()
-          .whereType<Directory>()
-          .map((platform) => File('${platform.path}/table.png'))
-          .where((file) => file.existsSync());
-      expect(own, hasLength(1));
+      expect(_platformDirs(dir), isEmpty);
     });
   });
 }
@@ -76,19 +77,40 @@ const _golden = 'goldens/table.png';
 /// A golden of another page, never like the table.
 const _otherPage = 'test/goldens/counter_initial.png';
 
+/// The golden of the table (recorded on macOS).
+const _table = 'test/goldens/counter_page.png';
+
 /// A directory of goldens for this test, installed as the directory of
-/// `goldenFileComparator`, with another page as [_golden]: the table never
-/// matches it, whatever the OS.
-Directory _goldensDir() {
+/// `goldenFileComparator`, with [source] as [_golden] (by default another
+/// page: the table never matches it, whatever the OS). [isTrackedElsewhere]
+/// makes it a workspace whose `fallback_platform` is no platform of CI.
+Directory _goldensDir({
+  String source = _otherPage,
+  bool isTrackedElsewhere = false,
+}) {
   final dir = Directory.systemTemp.createTempSync('gleon_alchemist_');
   addTearDown(() => dir.deleteSync(recursive: true));
   addTearDown(_restoring(goldenFileComparator));
   goldenFileComparator = LocalFileComparator(dir.uri.resolve('a_test.dart'));
   final golden = File('${dir.path}/$_golden')..parent.createSync();
-  File(_otherPage).copySync(golden.path);
+  File(source).copySync(golden.path);
+  if (isTrackedElsewhere) {
+    File('${dir.path}/.gleon/gleon.yaml')
+      ..parent.createSync()
+      ..writeAsStringSync('''
+required_version: ">=0.1.0"
+fallback_platform: fuchsia-x86_64
+screenshots:
+  - include: "goldens/*.png"
+''');
+  }
 
   return dir;
 }
+
+/// The directories beside [_golden] in [dir]: gleon writes none.
+List<Directory> _platformDirs(Directory dir) =>
+    Directory('${dir.path}/goldens').listSync().whereType<Directory>().toList();
 
 /// Runs alchemist's runner on the counter page table against [_golden].
 Future<void> _run(

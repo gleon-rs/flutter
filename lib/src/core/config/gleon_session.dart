@@ -12,7 +12,8 @@ import '../native/native_engine.dart';
 /// Per-process gleon state held by the native engine: the workspaces of the
 /// goldens (each golden belongs to the nearest directory above it with
 /// `.gleon/gleon.yaml`), their configs (read again when they change) and the
-/// environment: `GLEON_METRICS`, `GLEON_ARTIFACTS_DIR` and `GLEON_RUN_ID`.
+/// environment: `GLEON_METRICS`, `GLEON_ARTIFACTS_DIR`, `GLEON_RUN_ID` and
+/// `GLEON_REQUIRE_CANONICAL`.
 final class GleonSession implements Finalizable {
   /// Opens a session; without [hasWorkspaces] no golden belongs to a
   /// workspace (tests of the behavior without one). The native engine reads
@@ -68,6 +69,7 @@ final class GleonEnvironment {
     this.metrics = '',
     this.artifactsDir = '',
     this.runId = '',
+    this.requireCanonical = '',
   });
 
   /// `GLEON_METRICS`: whether case reports are recorded.
@@ -78,6 +80,10 @@ final class GleonEnvironment {
 
   /// `GLEON_RUN_ID`: the run in case reports.
   final String runId;
+
+  /// `GLEON_REQUIRE_CANONICAL`: whether the `fallback_platform` compares the
+  /// goldens other platforms recorded as its own.
+  final String requireCanonical;
 }
 
 /// Who talks to the engine: recorded in case reports and used to name the

@@ -90,8 +90,7 @@ enum NativeTarget {
   String get key => '$os-$arch';
 
   /// The name gleon gives this platform (Rust's `std::env::consts` names),
-  /// e.g. `macos-aarch64`: the directory of its own goldens beside the shared
-  /// ones, and the `fallback_platform` that names it.
+  /// e.g. `macos-aarch64`: the `fallback_platform` that names it.
   String get gleonPlatform => switch (rustTriple.split('-')) {
     [final rustArch, ...] => '$os-$rustArch',
     _ => key,

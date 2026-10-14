@@ -17,9 +17,9 @@ import 'flutter_session.dart';
 ///
 /// Golden paths come from the comparator it wraps (Flutter's
 /// [LocalFileComparator], a subclass of it, or a `GleonFileComparator`), so
-/// golden files live where they would without this package (per-platform
-/// goldens: see the README's "Real text"). Only that comparator's directory
-/// is used: its own comparison (and any threshold of a subclass) never runs.
+/// golden files live where they would without this package, on every
+/// platform. Only that comparator's directory is used: its own comparison
+/// (and any threshold of a subclass) never runs.
 class GleonGoldenComparator extends GoldenFileComparator {
   /// Wraps [delegate]; [tolerance], [masks] and [textTolerance] come from
   /// the matcher call. [session] defaults to [FlutterSession.process].
@@ -54,12 +54,19 @@ class GleonGoldenComparator extends GoldenFileComparator {
   @override
   Uri getTestUri(Uri key, int? version) => delegate.getTestUri(key, version);
 
-  /// Writes [imageBytes] as [golden] through the engine; like [compare], a
-  /// custom comparator fails (it would write the golden behind gleon's back:
-  /// no per-platform golden, no case report).
+  /// Writes [imageBytes] as [golden] through the engine, stamped with this
+  /// platform; like [compare], a custom comparator fails (it would write the
+  /// golden behind gleon's back: no case report). A golden recorded on
+  /// another platform stays while [imageBytes] passes against it, compared
+  /// with [textRegions] (the boxes of the text, in pixels of the image; see
+  /// the README's "Recording goldens on any platform").
   @override
-  Future<void> update(Uri golden, Uint8List imageBytes) async =>
-      _run(golden, imageBytes, isUpdate: true);
+  Future<void> update(
+    Uri golden,
+    Uint8List imageBytes, {
+    List<PixelRegion> textRegions = const [],
+  }) async =>
+      _run(golden, imageBytes, textRegions: textRegions, isUpdate: true);
 
   @override
   Future<bool> compare(Uint8List imageBytes, Uri golden) async {

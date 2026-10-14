@@ -1,18 +1,19 @@
 import 'dart:convert';
 
 /// What the case reports of a run must show: that each golden was compared
-/// where the workspace's `fallback_platform` says it should be (the CI proof
-/// of platform-aware goldens, `bin/check_cases.dart`).
+/// the way the workspace's `fallback_platform` says (the CI proof of
+/// platform-aware goldens, `bin/check_cases.dart`).
 ///
-/// With a [fallbackPlatform], reports of that platform compared the shared
-/// golden with text (no `golden.fallback`, the default text tolerance of the
-/// goldens' platform), and reports of every other platform fell back to it
-/// with text ignored. Without, every report compared its platform's own
-/// golden, with text. Expects unset text tolerances (the defaults).
+/// Every golden was recorded on [fallbackPlatform] (its `golden.platform`
+/// names it, or no other platform: no golden of another platform crept in).
+/// Reports of [fallbackPlatform] compared it with text (the default text
+/// tolerance of the platform a golden was recorded on), reports of every
+/// other platform with text ignored. Expects unset text tolerances (the
+/// defaults).
 ///
 /// Plain Dart (no Flutter imports): maintainer tooling, tested directly.
 final class CaseCheck {
-  /// Checks reports against [fallbackPlatform] (null: own goldens only).
+  /// Checks reports against [fallbackPlatform].
   const CaseCheck({
     required this.fallbackPlatform,
     this.minCases = 1,
@@ -20,9 +21,8 @@ final class CaseCheck {
     this.runId,
   });
 
-  /// The platform key of the shared goldens (e.g. `macos-aarch64`); null:
-  /// every report compared its platform's own golden.
-  final String? fallbackPlatform;
+  /// The platform key of the canonical platform (e.g. `macos-aarch64`).
+  final String fallbackPlatform;
 
   /// The fewest reports.
   final int minCases;
@@ -36,14 +36,14 @@ final class CaseCheck {
   /// The outcomes allowed unless others are given: passes.
   static const defaultOutcomes = {'identical', 'match'};
 
-  /// The default text tolerance on the goldens' own platform.
-  static const _ownPlatformText = 0.05;
+  /// The default text tolerance on the platform a golden was recorded on.
+  static const _ownText = 0.05;
 
-  /// The default text tolerance against another platform's golden.
-  static const _fallbackText = 1.0;
+  /// The default text tolerance on any other platform.
+  static const _otherText = 1.0;
 
-  /// The key gleon gives a platform, which names the directory of its own
-  /// goldens: `<os>-<arch>`, or `os=<os>+arch=<arch>` when either contains
+  /// The key gleon gives a platform, which names the directory of its case
+  /// reports: `<os>-<arch>`, or `os=<os>+arch=<arch>` when either contains
   /// `-`, so no two platforms share one (`PlatformInfo::to_key` in
   /// gleon-model's `src/platform.rs`).
   static String platformKey({required String os, required String arch}) =>
@@ -52,7 +52,7 @@ final class CaseCheck {
       : '$os-$arch';
 
   /// The case report schema version gleon writes.
-  static const _schemaVersion = 4;
+  static const _schemaVersion = 5;
 
   /// What the report [content] (JSON text of one case report file at
   /// [location], `/`-separated and relative to `cases/`) shows that it
@@ -67,8 +67,17 @@ final class CaseCheck {
     }
     final report = _Case.of(decoded);
     if (report == null) return const ['not a case report'];
-    final _Case(:name, :outcome, :platform, runId: recorded, :version) = report;
+    final _Case(
+      :name,
+      :outcome,
+      :platform,
+      :recorded,
+      runId: reportRunId,
+      :text,
+      :version,
+    ) = report;
     final belongs = '$platform/$name.json';
+    final expectedText = platform == fallbackPlatform ? _ownText : _otherText;
 
     return [
       if (location != belongs) 'lies at $location, expected $belongs',
@@ -76,11 +85,12 @@ final class CaseCheck {
         'schema_version $version, expected $_schemaVersion',
       if (!outcomes.contains(outcome))
         'outcome $outcome, expected one of ${outcomes.join(', ')}',
-      if (runId case final expected? when recorded != expected)
-        'run_id ${recorded ?? 'none'}, expected $expected',
-      ...platform == fallbackPlatform
-          ? _sharedProblemsOf(report)
-          : _ownProblemsOf(report),
+      if (runId case final expected? when reportRunId != expected)
+        'run_id ${reportRunId ?? 'none'}, expected $expected',
+      if (recorded case final origin? when origin != fallbackPlatform)
+        'golden recorded on $origin, expected $fallbackPlatform',
+      if (text != expectedText)
+        'text tolerance ${text ?? 'none'}, expected $expectedText',
     ];
   }
 
@@ -88,46 +98,14 @@ final class CaseCheck {
   String? tooFew(int count) => count < minCases
       ? '$count case reports, expected at least $minCases.'
       : null;
-
-  /// A report of the goldens' platform: it compared the shared golden, with
-  /// text.
-  static List<String> _sharedProblemsOf(_Case report) {
-    final _Case(:fallback, :path, :text) = report;
-
-    return [
-      if (fallback != null) 'compared $fallback, expected $path itself',
-      if (text != _ownPlatformText)
-        'text tolerance ${text ?? 'none'}, expected $_ownPlatformText',
-    ];
-  }
-
-  /// A report of another platform: its own golden, or (with a
-  /// [fallbackPlatform]) the shared golden in its place, with text ignored.
-  List<String> _ownProblemsOf(_Case report) {
-    final _Case(:directory, :fallback, :path, :platform, :sharedPath, :text) =
-        report;
-    final isFallback = fallbackPlatform != null;
-    final expectedText = isFallback ? _fallbackText : _ownPlatformText;
-
-    return [
-      if (directory != platform)
-        'golden.path $path is not in a $platform/ directory',
-      if (isFallback && fallback != sharedPath)
-        'compared ${fallback ?? 'its own golden'}, expected $sharedPath',
-      if (!isFallback && fallback != null) 'compared $fallback, expected $path',
-      if (text != expectedText)
-        'text tolerance ${text ?? 'none'}, expected $expectedText',
-    ];
-  }
 }
 
 /// The fields of a case report that are checked.
 final class _Case {
   const _Case({
-    required this.fallback,
+    required this.recorded,
     required this.name,
     required this.outcome,
-    required this.path,
     required this.platform,
     required this.runId,
     required this.text,
@@ -138,18 +116,16 @@ final class _Case {
   static _Case? of(Object? report) => switch (report) {
     {
       'comparison': final Map<String, Object?> comparison,
-      'golden':
-          {'path': final String path} && final Map<String, Object?> golden,
+      'golden': final Map<String, Object?> golden,
       'name': final String name,
       'outcome': final String outcome,
       'platform': {'arch': final String arch, 'os': final String os},
       'schema_version': final int version,
     } =>
       .new(
-        fallback: golden['fallback']?.toString(),
+        recorded: golden['platform']?.toString(),
         name: name,
         outcome: outcome,
-        path: path,
         platform: CaseCheck.platformKey(os: os, arch: arch),
         runId: report['run_id']?.toString(),
         text: _share(comparison['text_tolerance']),
@@ -158,17 +134,14 @@ final class _Case {
     _ => null,
   };
 
-  /// The shared golden compared in place of [path], if any.
-  final String? fallback;
+  /// The platform the golden was recorded on (its stamp), if it has one.
+  final String? recorded;
 
   /// The canonical name of the golden, the same on every platform.
   final String name;
 
   /// How the comparison ended.
   final String outcome;
-
-  /// The golden of this platform (`/`-separated).
-  final String path;
 
   /// The key of the recording platform ([CaseCheck.platformKey]).
   final String platform;
@@ -181,17 +154,6 @@ final class _Case {
 
   /// The case report schema version.
   final int version;
-
-  /// The directory of [path], where a platform's own goldens are.
-  String? get directory => path.split('/').reversed.skip(1).firstOrNull;
-
-  /// [path] without its platform directory: the shared golden.
-  String get sharedPath {
-    final segments = path.split('/');
-    final directories = segments.length > 1 ? segments.length - 2 : 0;
-
-    return [...segments.take(directories), ?segments.lastOrNull].join('/');
-  }
 
   static double? _share(Object? value) =>
       value is num ? value.toDouble() : null;

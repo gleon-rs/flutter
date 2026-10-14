@@ -19,7 +19,7 @@ import 'native_outcome.dart';
 abstract final class NativeEngine {
   /// C contract version this Dart code understands (`ABI_VERSION` in
   /// `gleon-ffi`). Keep both in lockstep.
-  static const expectedAbiVersion = 12;
+  static const expectedAbiVersion = 13;
 
   /// Asked once per process, on the first call.
   // ignore: avoid-explicit-type-declaration, not obvious from the initializer.
@@ -41,9 +41,9 @@ abstract final class NativeEngine {
   /// above it with `.gleon/gleon.yaml`.
   static const _workspacesFlag = 1;
 
-  /// `gleon_session_new` flag: take `GLEON_METRICS`, `GLEON_ARTIFACTS_DIR`
-  /// and `GLEON_RUN_ID` from the packed strings instead of the process
-  /// environment.
+  /// `gleon_session_new` flag: take `GLEON_METRICS`, `GLEON_ARTIFACTS_DIR`,
+  /// `GLEON_RUN_ID` and `GLEON_REQUIRE_CANONICAL` from the packed strings
+  /// instead of the process environment.
   static const _environmentFlag = 2;
 
   /// Opens a native session: with [hasWorkspaces], each golden belongs to
@@ -70,6 +70,7 @@ abstract final class NativeEngine {
       environment?.metrics,
       environment?.artifactsDir,
       environment?.runId,
+      environment?.requireCanonical,
       tool,
       toolVersion,
       renderer,
@@ -94,9 +95,9 @@ abstract final class NativeEngine {
   /// update). [tolerance] null uses the golden's `.gleon/gleon.yaml` rule,
   /// else exact; [masks] add to the rule's. [textRegions] (pixels of a raw
   /// candidate) are compared under [textTolerance] (a share of a tile), null
-  /// the rule's, else the golden's default (see `matchesGoldenFile`). The
-  /// engine may compare or write this platform's own golden beside
-  /// [goldenPath] instead (`fallback_platform`). Failure artifacts go to
+  /// the rule's, else the golden's default (see `matchesGoldenFile`). An
+  /// update writes the golden stamped with this platform, unless one recorded
+  /// on another platform still passes. Failure artifacts go to
   /// [failuresDir]; [goldenUri] names the golden in messages.
   ///
   /// The candidate is read in place by the native code; nothing is copied in.

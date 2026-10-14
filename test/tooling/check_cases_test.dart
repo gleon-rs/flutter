@@ -17,8 +17,7 @@ void main() {
       ..writeAsStringSync(content);
   }
 
-  /// A report of macOS that compared the shared golden [name]`.png` with
-  /// text.
+  /// A report of macOS that compared the golden [name]`.png` with text.
   String report(String name) => json.encode({
     'comparison': {'text_tolerance': 0.05},
     'golden': {'path': '$name.png'},
@@ -26,7 +25,7 @@ void main() {
     'outcome': 'match',
     'platform': {'arch': 'aarch64', 'os': 'macos'},
     'run_id': 'run-1',
-    'schema_version': 4,
+    'schema_version': 5,
   });
 
   Future<ProcessResult> checkCases(List<String> args) {
@@ -84,9 +83,9 @@ void main() {
     expect(result.stdout, contains('FAIL'));
   });
 
-  test('a runs directory and one platform option are required', () async {
-    final result = await checkCases(['--own', '--fallback-platform', 'x']);
+  test('a runs directory and the fallback platform are required', () async {
+    final result = await checkCases(['runs']);
     expect(result.exitCode, 64);
-    expect(result.stderr, contains('one of --fallback-platform or --own'));
+    expect(result.stderr, contains('pass a runs directory and --fallback'));
   });
 }
