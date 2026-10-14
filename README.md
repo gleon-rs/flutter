@@ -491,7 +491,7 @@ outcome
 `missing` for a golden that does not exist yet), the metrics with their headroom to each threshold
 (for SSIM `min_ssim - min_similarity` and `color_tolerance - peak_excess`), the paths of the
 failure images, the test name, platform, Flutter version and timings. The format is a JSON Schema
-in the gleon repository (`gleon-model/schema/case.v4.json`), shared with the CLI.
+in the gleon repository (`gleon-model/schema/case.v5.json`), shared with the CLI.
 
 Reports of different goldens come from different test processes and stay until overwritten, so a
 report does not show by itself which run wrote it. Set `GLEON_RUN_ID` (e.g.
@@ -658,7 +658,7 @@ dcm analyze .                     # DCM 1.39.2, also in example/
 flutter test                      # also in example/
 ```
 
-Case reports written by the tests are validated against `case.v4.json` of the pinned commit
+Case reports written by the tests are validated against `case.v5.json` of the pinned commit
 (`native/gleon_ref`, read with `git show` whatever the checkout's own state) when a gleon checkout
 that has that commit sits next to this repository (`../gleon`, as in CI); without it that check is
 skipped.
