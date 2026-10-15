@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:gleon/gleon.dart';
 
 import '../helpers/golden_updates.dart';
+import '../helpers/png_origin.dart';
 import '../helpers/swatch.dart';
 import '../helpers/workspace_sandbox.dart';
 
@@ -130,7 +131,11 @@ void main() {
     expect(await withGoldenUpdates(() => matcher.matchAsync(bytes)), isNull);
     expect(await matcher.matchAsync(bytes), isNull);
     final sandbox = '${WorkspaceSandbox.current().dir.path}/goldens';
-    expect(File('$sandbox/versioned.3.png').readAsBytesSync(), bytes);
+    // Written as given, stamped with this platform (no workspace needed).
+    expect(
+      File('$sandbox/versioned.3.png').readAsBytesSync(),
+      PngOrigin.stamp(bytes, hostPlatform),
+    );
     expect(File('$sandbox/versioned.png').existsSync(), isFalse);
   });
 

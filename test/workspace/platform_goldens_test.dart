@@ -52,6 +52,112 @@ void main() {
     expect(message, contains('text ≤ 5.00% per tile).'));
   });
 
+  // Zero configuration: the stamp alone decides where text is compared.
+  testWidgets('no workspace: an update stamps the golden', (tester) async {
+    final sandbox = WorkspaceSandbox.withoutWorkspace();
+    expect(PngOrigin.read(sandbox.goldenBytes(Caption.golden)), isNull);
+    await _record(tester, sandbox);
+
+    expect(PngOrigin.read(sandbox.goldenBytes(Caption.golden)), hostPlatform);
+    expect(
+      Directory('${sandbox.root.path}/.gleon').existsSync(),
+      isFalse,
+      reason: 'nothing recorded',
+    );
+
+    await tester.pumpWidget(const Caption(digits: '0123456780'));
+    final digit = await _compare(sandbox);
+
+    expect(digit, contains('text ≤ 5.00% per tile).'), reason: 'recorded here');
+    expect(digit, contains('Tip: tolerances per golden'));
+
+    _restamp(sandbox, foreignPlatform);
+    final elsewhere = await _compare(sandbox);
+
+    expect(elsewhere, isNull, reason: 'text of another OS is ignored');
+    await tester.pumpWidget(const Caption(shift: 24));
+    final shifted = await _compare(sandbox);
+
+    expect(shifted, contains('The golden was recorded on $foreignPlatform.'));
+  });
+
+  testWidgets(
+    'without a fallback platform an update replaces a foreign golden',
+    (tester) async {
+      // One at a time: the last sandbox created owns `goldenFileComparator`.
+      for (final create in [
+        () => WorkspaceSandbox.create(_yaml(null)),
+        WorkspaceSandbox.withoutWorkspace,
+      ]) {
+        final sandbox = create();
+        await _record(tester, sandbox);
+        _restamp(sandbox, foreignPlatform);
+        await tester.pumpWidget(const Caption(digits: '0123456780'));
+        final lines = await capturePrints(
+          () async => expect(await _update(sandbox), isNull),
+        );
+
+        expect(lines, isNot(contains(startsWith('gleon: golden'))));
+        expect(
+          PngOrigin.read(sandbox.goldenBytes(Caption.golden)),
+          hostPlatform,
+          reason: 'nothing could record it again: the update wins',
+        );
+      }
+    },
+  );
+
+  testWidgets('a kept golden names the platform that records it again', (
+    tester,
+  ) async {
+    final sandbox = WorkspaceSandbox.create(_yaml(foreignPlatform));
+    await _record(tester, sandbox);
+    _restamp(sandbox, foreignPlatform);
+    final recorded = sandbox.goldenBytes(Caption.golden);
+    await tester.pumpWidget(const Caption(digits: '0123456780'));
+    final lines = await capturePrints(
+      () async => expect(await _update(sandbox), isNull),
+    );
+
+    expect(
+      lines,
+      contains(
+        startsWith(
+          'gleon: golden "${Caption.golden}" was kept: it was recorded on '
+          '$foreignPlatform',
+        ),
+      ),
+    );
+    expect(lines, hasLength(1));
+    expect(lines.join(), contains('`--update-goldens` on $foreignPlatform'));
+    // ignore: use-existing-variable, read again after the update.
+    expect(sandbox.goldenBytes(Caption.golden), recorded, reason: 'kept');
+  });
+
+  testWidgets(
+    'a pass that ignored the text of an unstamped golden warns once',
+    (tester) async {
+      final sandbox = WorkspaceSandbox.withoutWorkspace();
+      // One session, as one test process has: the warning is per session.
+      final session = sandbox.session();
+      await tester.pumpWidget(const Caption(digits: '0123456780'));
+      final first = await capturePrints(
+        () async => expect(await _compare(sandbox, session: session), isNull),
+      );
+      final again = await capturePrints(
+        () async => expect(await _compare(sandbox, session: session), isNull),
+      );
+
+      expect(
+        first,
+        contains(
+          startsWith('gleon: golden "${Caption.golden}" has no platform stamp'),
+        ),
+      );
+      expect(again, isEmpty, reason: 'once per session');
+    },
+  );
+
   testWidgets('an invalid GLEON_REQUIRE_CANONICAL fails every golden', (
     tester,
   ) async {
@@ -71,14 +177,14 @@ void main() {
   });
 
   testWidgets('an unknown fallback platform is a config error', (tester) async {
-    final sandbox = WorkspaceSandbox.create(_yaml('macos-arm64'));
+    final sandbox = WorkspaceSandbox.create(_yaml('macos-armv9'));
     await tester.pumpWidget(const Caption());
     final compared = await _compare(sandbox);
     final updated = await withGoldenUpdates(
       () => sandbox.matcher(Caption.golden).matchAsync(Caption.finder),
     );
 
-    const error = "fallback_platform: architecture 'arm64'";
+    const error = "fallback_platform: architecture 'armv9'";
     expect(compared, contains(error));
     // The engine's message, not an exception of the test framework.
     expect(updated, contains(error));
@@ -186,6 +292,24 @@ void main() {
 
     expect(PngOrigin.read(sandbox.goldenBytes(Caption.golden)), hostPlatform);
   });
+
+  testWidgets('an excluded golden compares text like Flutter', (tester) async {
+    final sandbox = WorkspaceSandbox.create(_excluding);
+    await _record(tester, sandbox);
+    expect(
+      PngOrigin.read(sandbox.goldenBytes(Caption.golden)),
+      isNull,
+      reason: 'written like Flutter writes it',
+    );
+    await tester.pumpWidget(const Caption(digits: '0123456780'));
+
+    expect(await _compare(sandbox), isNotNull, reason: 'its text is pixels');
+    expect(
+      await _compare(sandbox, textTolerance: 1),
+      isNull,
+      reason: 'unless the call sets a text tolerance',
+    );
+  });
 }
 
 /// Stamps the golden of [sandbox] as recorded on [platform].
@@ -195,6 +319,9 @@ void _restamp(WorkspaceSandbox sandbox, String platform) =>
     );
 
 const _name = 'test/goldens/caption';
+
+/// A config that excludes the golden of [Caption]: the one opt-out.
+const _excluding = 'exclude: "test/goldens/caption.png"\n';
 
 /// The config of the sandbox, with [fallbackPlatform] unless it is null.
 String _yaml(String? fallbackPlatform) =>

@@ -29,6 +29,15 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # The history of main, to check the tagged commit belongs to it.
+          fetch-depth: 0
+      # A release is immutable: never one of a commit that was not reviewed into main.
+      - name: Tagged commit must be on main
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_REF_NAME ($GITHUB_SHA) is not a commit of main"
+            exit 1
+          fi
       - name: Tag must match pubspec version
         run: |
           version="$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml | sed 's/#.*//' | tr -d "\"' ")"
@@ -107,20 +116,83 @@ jobs:
           pattern: native-*
           merge-multiple: true
           path: dist
+      # The gleon commit of these libraries: a checkout of the package compares it with its own
+      # pin (`ReleaseDownload.pinFileName`), so `ref: main` between releases never gets the engine
+      # of another commit silently. Listed in the checksums like the libraries.
+      - name: Check out the pin
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: flutter
+          persist-credentials: false
+          sparse-checkout: native/gleon_ref
+          sparse-checkout-cone-mode: false
+      - name: Name the gleon commit of the libraries
+        run: |
+          tr -d '[:space:]' < flutter/native/gleon_ref > dist/gleon_ref.txt
+          echo >> dist/gleon_ref.txt
+          cat dist/gleon_ref.txt
       - name: Write checksums
         working-directory: dist
         run: |
           sha256sum -- * > SHA256SUMS.txt
           cat SHA256SUMS.txt
+
+      # What each library needs of its host, for the release notes (not an asset: the checksum
+      # list covers the assets): the Linux libraries name the newest glibc symbol version they
+      # link, their floor (the README says "Ubuntu 26.04"). readelf reads the ELF of either
+      # architecture on this x64 runner; an empty floor fails the release.
+      - name: Note the platform floors
+        working-directory: dist
+        run: |
+          set -euo pipefail
+          for lib in libgleon_ffi-linux-*.so; do
+            floor=$(readelf -W --dyn-syms "$lib" | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1)
+            if [ -z "$floor" ]; then echo "no glibc version found in $lib"; exit 1; fi
+            echo "$lib: glibc ${floor#GLIBC_} or newer (built on Ubuntu 26.04); musl is not supported" >> "$RUNNER_TEMP/PLATFORMS.txt"
+          done
+          echo "libgleon_ffi-macos-arm64.dylib: macOS 11 or newer, Apple silicon" >> "$RUNNER_TEMP/PLATFORMS.txt"
+          echo "gleon_ffi-windows-x64.dll: Windows x64, no Visual C++ redistributable needed" >> "$RUNNER_TEMP/PLATFORMS.txt"
+          cat "$RUNNER_TEMP/PLATFORMS.txt"
       # Assets go onto a draft first: an immutable release rejects uploads once published.
       - name: Create and publish the release
+        id: publish
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           gh release create "$GITHUB_REF_NAME" dist/* --draft --verify-tag \
-            --title "$GITHUB_REF_NAME" --generate-notes
+            --title "$GITHUB_REF_NAME" --generate-notes --notes-file "$RUNNER_TEMP/PLATFORMS.txt"
           gh release edit "$GITHUB_REF_NAME" --draft=false
+      # A draft left by a failed upload or publish would make a rerun's `gh release create` fail:
+      # it goes, the tag stays. A published release is never touched.
+      - name: Remove the draft of a failed publish
+        if: ${{ failure() && steps.publish.outcome == 'failure' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if [ "$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft 2>/dev/null)" = true ]; then
+            gh release delete "$GITHUB_REF_NAME" --yes
+          fi
+      # The hook trusts a library by the checksum list of the same release: only an immutable
+      # release keeps both from being replaced later. The setting is not readable with this token,
+      # the published release is: a mutable one fails (enable immutability, delete and re-create
+      # the release), an answer without the field only warns.
+      - name: Check the release is immutable
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          immutable=$(gh api "repos/$GH_REPO/releases/tags/$GITHUB_REF_NAME" --jq '.immutable')
+          case "$immutable" in
+            true) echo "release $GITHUB_REF_NAME is immutable" ;;
+            false)
+              echo "::error::release $GITHUB_REF_NAME is mutable: enable release immutability in the repository settings, then delete and re-create the release"
+              exit 1
+              ;;
+            *) echo "::warning::could not tell whether release $GITHUB_REF_NAME is immutable (got '$immutable')" ;;
+          esac
 
   verify:
     name: Verify download ${{ matrix.target }}

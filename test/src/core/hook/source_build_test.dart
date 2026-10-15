@@ -114,7 +114,13 @@ void main() {
         target: .linuxX64,
         environment: {'HOME': empty, 'PATH': empty},
       ),
-      throwsState(contains('`cargo` was not found')),
+      // Names the variables the hook never sees.
+      throwsState(
+        allOf(
+          contains('`cargo` was not found'),
+          contains(SourceBuild.hookEnvironmentHint),
+        ),
+      ),
     );
     expect(Directory.fromUri(targetDir).existsSync(), isFalse);
   });
@@ -210,6 +216,88 @@ void main() {
         endsWith('/cargo/x86_64-unknown-linux-gnu/release/libgleon_ffi.so'),
       );
       expect(built.dependencies, isNotEmpty);
+    });
+
+    // Cargo's dep-info names every file it compiled: a crate-root `build.rs`
+    // and `include_bytes!` data too, which no glob of `src/` sees; files
+    // outside the checkout (the standard library) are no inputs of it.
+    test('depends on what cargo compiled inside the checkout', () async {
+      final root = fakeCheckout();
+      // The standard library, and a sibling reached through `..`: outside.
+      final outside = [
+        '${tempPath()}/rustlib/src/core/lib.rs',
+        '$root/../gleon-sibling/src/lib.rs',
+      ];
+      for (final file in [
+        '$root/gleon-ffi/build.rs',
+        '$root/gleon-ffi/data/a table.bin',
+        ...outside,
+      ]) {
+        File(file)
+          ..createSync(recursive: true)
+          ..writeAsStringSync('x');
+      }
+      final cargo = FakeCargo(
+        compiled: [
+          '$root/gleon-ffi/build.rs',
+          '$root/gleon-ffi/src/lib.rs',
+          // As rustc joins an `include_bytes!` path to its source file.
+          '$root/gleon-ffi/src/../data/a table.bin',
+          ...outside,
+        ],
+      );
+
+      final built = await SourceBuild.run(
+        repoRoot: .file(root),
+        targetDir: .directory('${tempPath()}/cargo'),
+        target: .linuxX64,
+        environment: cargoEnvironment(),
+        runProcess: cargo.run,
+      );
+      final checkout = Uri.directory(root);
+      expect(
+        built.dependencies,
+        containsAll([
+          checkout.resolve('Cargo.toml'),
+          // The versions of the registry crates, whose sources lie outside.
+          checkout.resolve('Cargo.lock'),
+          checkout.resolve('gleon-ffi/Cargo.toml'),
+          checkout.resolve('gleon-ffi/build.rs'),
+          checkout.resolve('gleon-ffi/src/lib.rs'),
+          Uri.file('$root/gleon-ffi/data/a table.bin'),
+        ]),
+      );
+      expect(
+        built.dependencies,
+        isNot(contains(checkout.resolve('gleon-model/src/rules.rs'))),
+        reason: 'not compiled: the dep-info replaces the glob of src/',
+      );
+      for (final file in outside) {
+        expect(
+          built.dependencies,
+          isNot(contains(Uri.file(file))),
+          reason: file,
+        );
+      }
+    });
+
+    // `build.dep-info-basedir` makes cargo write paths relative to a
+    // directory of its config: without knowing it, every input is tracked.
+    test('relative dep-info paths fall back to every input', () async {
+      final root = fakeCheckout();
+      final cargo = FakeCargo(compiled: ['gleon-ffi/src/lib.rs']);
+
+      final built = await SourceBuild.run(
+        repoRoot: .file(root),
+        targetDir: .directory('${tempPath()}/cargo'),
+        target: .linuxX64,
+        environment: cargoEnvironment(),
+        runProcess: cargo.run,
+      );
+      expect(
+        built.dependencies,
+        unorderedEquals(SourceBuild.inputs(.directory(root))),
+      );
     });
 
     test('a failing cargo is an error with its output', () async {

@@ -15,6 +15,7 @@ screenshots:
     mode: ssim
     diff: { min_similarity: 0.8, color_tolerance: 8 }
   - include: "test/masked/*.png"
+    mode: pixel
     diff: { threshold: 0 }
     masks:
       - path: "**/swatch.png"

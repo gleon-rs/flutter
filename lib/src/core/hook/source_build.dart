@@ -22,6 +22,15 @@ typedef ProcessRunner = Future<ProcessResult> Function(
 /// Plain Dart (no Flutter imports): used by `hook/build.dart` and tested
 /// directly.
 abstract final class SourceBuild {
+  /// Why a toolchain that works in a shell may fail in the build hook: the
+  /// hooks runner forwards only a few variables (`PATH`, `HOME`, proxies),
+  /// not `RUSTUP_HOME`, `CARGO_HOME` or `RUSTFLAGS`.
+  static const hookEnvironmentHint =
+      'Build hooks see only PATH, HOME and a few other variables: a Rust '
+      'toolchain under a custom RUSTUP_HOME or CARGO_HOME (the rust Docker '
+      'image) is not found there; build with `dart bin/build_native.dart` '
+      'outside the hook instead.';
+
   /// The Rust crate that produces the library.
   static const crate = 'gleon-ffi';
 
@@ -74,7 +83,7 @@ abstract final class SourceBuild {
         cargo,
         arguments,
         'gleon: failed to build the native library (exit ${result.exitCode}).'
-        '\n${result.stdout}\n${result.stderr}',
+        '\n${result.stdout}\n${result.stderr}\n$hookEnvironmentHint',
         result.exitCode,
       );
     }
@@ -86,7 +95,7 @@ abstract final class SourceBuild {
       );
     }
 
-    return (dependencies: inputs(root), library: library);
+    return (dependencies: dependencies(root, library), library: library);
   }
 
   /// The gleon checkout at [repoRoot] as a directory URI (with a trailing
@@ -136,7 +145,8 @@ abstract final class SourceBuild {
       'gleon: `cargo` was not found (searched '
       '${['PATH', ...cargoBin].join(' and ')}), but the '
       '`gleon_repo` user-define asks for a source build. Install Rust via '
-      'rustup, or remove `gleon_repo` to use the prebuilt library.',
+      'rustup, or remove `gleon_repo` to use the prebuilt library. '
+      '$hookEnvironmentHint',
     );
   }
 
@@ -156,6 +166,67 @@ abstract final class SourceBuild {
         ..._sources(root.resolve('$member/src/')),
       ],
   ];
+
+  /// What the build of [library] read inside the checkout [root]: the
+  /// workspace files (`Cargo.lock` among them: the sources of registry
+  /// crates lie outside) and crate manifests of [inputs], and every file
+  /// cargo's dep-info next to the library names there (`<name>.d`: the
+  /// sources, a crate-root `build.rs`, `include_bytes!` data, which no glob
+  /// of `src/` sees); the sources of [inputs] without a usable dep-info.
+  static List<Uri> dependencies(Uri root, Uri library) {
+    final compiled = _compiled(root, library);
+    if (compiled == null) return inputs(root);
+    final manifests = inputs(root).where(
+      (input) => switch (input.pathSegments.lastOrNull) {
+        final name? => name.endsWith('.toml') || name == 'Cargo.lock',
+        null => false,
+      },
+    );
+
+    return {...manifests, ...compiled}.toList();
+  }
+
+  /// The files of the dep-info cargo wrote next to [library] that lie inside
+  /// [root] and exist; null without a dep-info, or with a relative path in
+  /// it (`build.dep-info-basedir` of a cargo config, whose directory is
+  /// unknown here). Each line is `<output>: <input> <input> ...`, a space in
+  /// a path escaped as `\ `.
+  static List<Uri>? _compiled(Uri root, Uri library) {
+    final depInfo = File(
+      library.toFilePath().replaceFirst(RegExp(r'\.[a-z]+$'), '.d'),
+    );
+    if (!depInfo.existsSync()) return null;
+    final paths = [
+      for (final line in depInfo.readAsLinesSync())
+        if (_rule.firstMatch(line)?.group(1) case final inputs?)
+          for (final match in _depInfoPath.allMatches(inputs))
+            ?match.group(0)?.replaceAll(r'\ ', ' '),
+    ];
+    if (!paths.every((path) => File(path).isAbsolute)) return null;
+    // Compared as URIs: separators and `..` normalized (rustc joins the path
+    // of `include_bytes!` to its source file as written), and on Windows
+    // without case.
+    final inside = _comparable(root);
+
+    return [
+      for (final path in paths)
+        if (Uri.file(path) case final uri
+            when _comparable(uri).startsWith(inside) &&
+                File.fromUri(uri).existsSync())
+          uri,
+    ];
+  }
+
+  /// The path of [uri] as compared on this host's file system.
+  static String _comparable(Uri uri) =>
+      Platform.isWindows ? uri.path.toLowerCase() : uri.path;
+
+  /// The inputs of a dep-info rule, after its first `: ` (a Windows drive
+  /// letter is followed by a backslash, not a space).
+  static final _rule = RegExp(r'^.+?: (.*)$');
+
+  /// One path of a dep-info rule: anything up to an unescaped space.
+  static final _depInfoPath = RegExp(r'(?:\\ |[^ ])+');
 
   /// The inputs of [inputs] as git pathspecs relative to the checkout
   /// [root]: a change anywhere else (another crate, docs, untracked notes)

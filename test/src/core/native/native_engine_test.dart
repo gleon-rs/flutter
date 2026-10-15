@@ -46,6 +46,83 @@ void main() {
     );
   });
 
+  // A library the host's dynamic loader refuses is told apart from one the
+  // hook never provided: the advice differs (a supported host, or a build for
+  // this one, against a desktop `flutter test`).
+  test('a library the host cannot load is reported with its floor', () {
+    // As `dart:ffi` words them (the macOS ones taken from a run).
+    for (final reason in [
+      _glibcTooOld,
+      _dependencyDenied,
+      _otherArchitecture,
+      _notWin32,
+    ]) {
+      final message = NativeEngine.describeLoadError(ArgumentError(reason));
+
+      expect(
+        message,
+        startsWith(
+          'gleon: the native library could not be loaded on this host',
+        ),
+      );
+      expect(message, contains(reason));
+      expect(
+        message,
+        allOf(
+          contains('Ubuntu 26.04'),
+          contains('musl'),
+          contains('gleon_repo'),
+        ),
+      );
+      expect(message, isNot(contains('app builds for devices')));
+    }
+    expect(
+      NativeEngine.describeLoadError(
+        ArgumentError("Couldn't resolve native function"),
+      ),
+      allOf(contains('was not loaded'), contains('app builds for devices')),
+    );
+  });
+
+  // A file that is gone (the build output removed after the build) is
+  // neither: building it again helps, another host does not.
+  test('a library file that is gone asks for a new build', () {
+    for (final reason in [_goneMacos, _goneLinux, _goneWindows]) {
+      final message = NativeEngine.describeLoadError(ArgumentError(reason));
+
+      expect(message, startsWith('gleon: the native library file is missing'));
+      expect(message, allOf(contains(reason), contains('flutter test')));
+      expect(message, isNot(contains('musl')));
+    }
+  });
+
+  // The loaders word a missing dependency like a missing library: the
+  // library that is still there points at the host, not at a new build.
+  test('a library that is there but lacks a dependency is no gone file', () {
+    final dir = Directory.systemTemp.createTempSync('gleon_engine_');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final library = File('${dir.path}/libgleon_ffi.so')..createSync();
+    final linux =
+        "Failed to load dynamic library '${library.path}': libgcc_s.so.1: "
+        'cannot open shared object file: No such file or directory';
+    final windows =
+        "Failed to load dynamic library '${library.path}': "
+        'The specified module could not be found. (error code: 126)';
+    for (final reason in [linux, windows]) {
+      final message = NativeEngine.describeLoadError(ArgumentError(reason));
+
+      expect(
+        message,
+        startsWith(
+          'gleon: the native library could not be loaded on this host: a '
+          'library it needs is missing',
+        ),
+      );
+      expect(message, allOf(contains(reason), contains('gleon_repo')));
+      expect(message, isNot(contains('removed after the build')));
+    }
+  });
+
   test('verdict codes follow gleon-ffi, unknown codes are errors', () {
     // Zero is an error: a summary the library never wrote is no pass.
     expect(NativeVerdict.of(0), NativeVerdict.error);
@@ -236,3 +313,37 @@ void main() {
     expect(File('${dir.path}/failures/a-actual.png').existsSync(), isTrue);
   });
 }
+
+// What `dart:ffi` reports when it cannot load the library.
+
+const _glibcTooOld =
+    "Failed to load dynamic library '/x/libgleon_ffi.so': "
+    '/lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.43` not found '
+    '(required by /x/libgleon_ffi.so)';
+
+const _dependencyDenied =
+    "Failed to load dynamic library '/x/libgleon_ffi.so': libgcc_s.so.1: "
+    'cannot open shared object file: Permission denied';
+
+const _otherArchitecture =
+    "Failed to load dynamic library '/x/libgleon_ffi.dylib': "
+    'dlopen(/x/libgleon_ffi.dylib, 0x0001): tried: '
+    "'/x/libgleon_ffi.dylib' (mach-o file, but is an incompatible "
+    "architecture (have 'arm64', need 'x86_64'))";
+
+const _notWin32 =
+    r"Failed to load dynamic library 'C:\x\gleon_ffi.dll': "
+    '%1 is not a valid Win32 application. (error code: 193)';
+
+const _goneMacos =
+    "Failed to load dynamic library '/x/libgleon_ffi.dylib': "
+    'dlopen(/x/libgleon_ffi.dylib, 0x0001): tried: '
+    "'/x/libgleon_ffi.dylib' (no such file)";
+
+const _goneLinux =
+    "Failed to load dynamic library '/x/libgleon_ffi.so': /x/libgleon_ffi.so: "
+    'cannot open shared object file: No such file or directory';
+
+const _goneWindows =
+    r"Failed to load dynamic library 'C:\x\gleon_ffi.dll': "
+    'The specified module could not be found. (error code: 126)';

@@ -13,6 +13,7 @@ library;
 import 'dart:io';
 
 import 'package:code_assets/code_assets.dart';
+import 'package:gleon/src/core/hook/hook_failures.dart';
 import 'package:gleon/src/core/hook/hook_user_defines.dart';
 import 'package:gleon/src/core/hook/native_library.dart';
 import 'package:gleon/src/core/hook/native_target.dart';
@@ -21,7 +22,10 @@ import 'package:hooks/hooks.dart';
 /// Must match the `@DefaultAsset` of `lib/src/core/native/gleon_ffi.dart`.
 const _assetName = 'src/core/native/gleon_ffi.dart';
 
-Future<void> main(List<String> args) => build(args, _build);
+Future<void> main(List<String> args) => build(
+  args,
+  (input, output) => HookFailures.reporting(() => _build(input, output)),
+);
 
 Future<void> _build(BuildInput input, BuildOutputBuilder output) async {
   final BuildInput(

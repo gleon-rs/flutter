@@ -32,3 +32,7 @@ CLAUDE.local.md
 /native/gleon_ref
 # Stamps of local builds: the archive's libraries are accepted without a pin.
 /native/*/gleon_ref
+
+# The example names its fallback platform there (a dot-directory pub would skip).
+!/example/.gleon/
+!/example/.gleon/gleon.yaml

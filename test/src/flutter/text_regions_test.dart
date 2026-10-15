@@ -1,3 +1,6 @@
+import 'dart:ui' show ImageFilter;
+
+import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:gleon/gleon.dart';
 import 'package:gleon/src/core/compare/pixel_region.dart';
@@ -9,6 +12,25 @@ const _style = TextStyle(fontSize: 10, fontFamily: 'FlutterTest');
 const _boundaryKey = ValueKey<String>('boundary');
 
 const _empty = '';
+
+/// The page an `IndexedStack` lays out but does not show.
+const _hiddenPage = Text('page 2', style: _style);
+
+/// The RGBA bytes `captureImage` takes of [element].
+Future<List<int>?> _pixelsOf(Element element) async {
+  final image = await captureImage(element);
+  final bytes = await image.toByteData();
+  image.dispose();
+
+  return bytes?.buffer.asUint8List();
+}
+
+/// The layers of [root] that changed since the last frame (they need to be
+/// added to the scene again).
+List<Layer> _changed(ContainerLayer? root) => [
+  for (final layer in [?root, ...?root?.depthFirstIterateChildren()])
+    if (layer.debugSubtreeNeedsAddToScene ?? false) layer,
+];
 
 List<PixelRegion> _regions(WidgetTester tester, [Finder? finder]) =>
     TextRegions.captured(tester.element(finder ?? find.byKey(_boundaryKey)));
@@ -46,6 +68,186 @@ void main() {
     );
 
     expect(_regions(tester), isEmpty);
+  });
+
+  // Laid out but never painted, whatever `paintsChild` says: a region there
+  // would hide changes under it (text is compared under the text tolerance,
+  // ignored on other platforms by default).
+  testWidgets('text its parent does not paint has no region', (tester) async {
+    for (final hidden in <Widget>[
+      const IndexedStack(children: [SizedBox.expand(), _hiddenPage]),
+      const Visibility.maintain(
+        visible: false,
+        child: Text('hidden', style: _style),
+      ),
+      const CustomScrollView(
+        slivers: [
+          SliverOffstage(
+            sliver: SliverToBoxAdapter(child: Text('off', style: _style)),
+          ),
+        ],
+      ),
+      const CustomScrollView(
+        slivers: [
+          SliverOpacity(
+            opacity: 0,
+            sliver: SliverToBoxAdapter(child: Text('clear', style: _style)),
+          ),
+        ],
+      ),
+    ]) {
+      await tester.pumpWidget(_Boundary(hidden));
+      expect(_regions(tester), isEmpty, reason: '${hidden.runtimeType}');
+    }
+  });
+
+  testWidgets('an overlay entry under opaque ones has none', (tester) async {
+    await tester.pumpWidget(
+      _Boundary(
+        Overlay(
+          initialEntries: [
+            OverlayEntry(
+              builder: (_) => const Text('under', style: _style),
+              maintainState: true,
+            ),
+            OverlayEntry(
+              builder: (_) => const Text('over', style: _style),
+              opaque: true,
+            ),
+          ],
+        ),
+      ),
+    );
+
+    expect(_regions(tester), hasLength(1));
+  });
+
+  testWidgets('a route under a pushed page has no region', (tester) async {
+    final navigator = GlobalKey<NavigatorState>();
+    await tester.pumpWidget(
+      WidgetsApp(
+        navigatorKey: navigator,
+        pageRouteBuilder: <T>(settings, builder) => PageRouteBuilder<T>(
+          pageBuilder: (context, _, _) => builder(context),
+        ),
+        home: const Text('first page', style: _style),
+        color: const Color(0xFF000000),
+      ),
+    );
+    navigator.currentState?.push(
+      PageRouteBuilder<void>(
+        pageBuilder: (_, _, _) => const SizedBox.expand(),
+        transitionDuration: .zero,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(_regions(tester, find.byType(WidgetsApp)), isEmpty);
+  });
+
+  // Finding what is painted replays the paint of the capture: the layers it
+  // passes keep their values (a leader layer inside a nested repaint boundary
+  // keeps its offset), so the capture after it shows the same pixels.
+  testWidgets('finding text leaves the layers as they were', (tester) async {
+    await tester.pumpWidget(
+      _Boundary(
+        Padding(
+          padding: const .only(left: 7, top: 5),
+          child: Opacity(
+            opacity: 0.5,
+            child: RepaintBoundary(
+              child: Padding(
+                padding: const .only(left: 3, top: 2),
+                child: CompositedTransformTarget(
+                  link: LayerLink(),
+                  child: const Text('one', style: _style),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    final element = tester.element(find.byKey(_boundaryKey));
+    Future<List<int>?> pixels() =>
+        tester.runAsync<List<int>?>(() => _pixelsOf(element));
+    final before = await pixels();
+
+    expect(_regions(tester), hasLength(1));
+    expect(await pixels(), before);
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(await pixels(), before);
+  });
+
+  // Each kind of layer a render object writes while it paints: the replay
+  // writes the values of the last paint, so no layer changes or needs to be
+  // added to the scene again.
+  testWidgets('finding text changes no kind of layer', (tester) async {
+    final link = LayerLink();
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: .ltr,
+        child: Align(
+          alignment: .topLeft,
+          child: RepaintBoundary(
+            key: _boundaryKey,
+            child: SizedBox(
+              width: 200,
+              height: 100,
+              child: Wrap(
+                children: [
+                  const ClipRect(
+                    child: RepaintBoundary(child: Text('clip', style: _style)),
+                  ),
+                  const ColorFiltered(
+                    colorFilter: .mode(Color(0xFF00FF00), .modulate),
+                    child: Text('color', style: _style),
+                  ),
+                  ShaderMask(
+                    shaderCallback: (bounds) => const LinearGradient(
+                      colors: [Color(0xFF000000), Color(0xFFFFFFFF)],
+                    ).createShader(bounds),
+                    child: const Text('mask', style: _style),
+                  ),
+                  ClipRect(
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 1, sigmaY: 1),
+                      child: const Text('blur', style: _style),
+                    ),
+                  ),
+                  const AnimatedOpacity(
+                    opacity: 0.5,
+                    duration: Duration(seconds: 1),
+                    child: Text('fade', style: _style),
+                  ),
+                  CompositedTransformTarget(
+                    link: link,
+                    child: const Text('lead', style: _style),
+                  ),
+                  CompositedTransformFollower(
+                    link: link,
+                    offset: const Offset(0, 20),
+                    child: const Text('follow', style: _style),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    final element = tester.element(find.byKey(_boundaryKey));
+    Future<List<int>?> pixels() =>
+        tester.runAsync<List<int>?>(() => _pixelsOf(element));
+    final before = await pixels();
+
+    expect(_regions(tester), hasLength(7));
+    expect(_changed(element.renderObject?.debugLayer), isEmpty);
+    expect(await pixels(), before);
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(await pixels(), before);
   });
 
   testWidgets('text sent to infinity has no region', (tester) async {

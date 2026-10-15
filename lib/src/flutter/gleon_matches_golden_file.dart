@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -152,17 +153,32 @@ class GleonMatchesGoldenFile extends flutter_test.MatchesGoldenFile {
     }
     final element = found.singleOrNull;
     if (element == null) return .value('matched too many widgets');
-    // Before capturing (nothing to dispose if it throws) and before awaiting
-    // anything: the tree must be the one captured. An update needs them too:
-    // it compares first with a golden recorded on another platform.
-    final textRegions = TextRegions.captured(element);
+    // The capture first: its scene is built now, so the paint that finding
+    // the text replays can never reach its pixels. Both before awaiting
+    // anything: the tree must be the one captured. An update needs the text
+    // too: it compares first with a golden recorded on another platform.
+    final pending = flutter_test.captureImage(element);
+    final List<PixelRegion> textRegions;
+    try {
+      textRegions = TextRegions.captured(element);
+    } on Object {
+      unawaited(_dispose(pending));
+
+      rethrow;
+    }
 
     return _matchImage(
-      flutter_test.captureImage(element),
+      pending,
       golden,
       textRegions: textRegions,
       isOwned: true,
     );
+  }
+
+  /// Disposes the image of [pending] once it is there.
+  static Future<void> _dispose(Future<ui.Image> pending) async {
+    final image = await pending;
+    image.dispose();
   }
 
   /// Compares the image of [pending] as raw pixels with [textRegions], or

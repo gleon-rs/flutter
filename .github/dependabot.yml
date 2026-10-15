@@ -24,10 +24,32 @@ updates:
       github-actions:
         patterns: ["*"]
 
+  # The package: its constraints are what consumers resolve against, so a lower bound moves only
+  # when a new version needs it (the SDK pins meta and test_api).
   - package-ecosystem: pub
-    directories:
-      - "/"
-      - "/example"
+    directory: "/"
+    versioning-strategy: increase-if-necessary
+    schedule:
+      interval: weekly
+      day: sunday
+      time: "09:00"
+      timezone: Europe/Vienna
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: chore
+      include: scope
+    labels:
+      - dependencies
+      - dart
+    open-pull-requests-limit: 5
+    groups:
+      pub-minor-and-patch:
+        update-types: [minor, patch]
+
+  # The example app: no consumers, so its constraints follow the latest versions.
+  - package-ecosystem: pub
+    directory: "/example"
     versioning-strategy: increase
     schedule:
       interval: weekly

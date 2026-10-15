@@ -1,9 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:meta/meta.dart';
 
-import '../core/config/gleon_session.dart';
 import 'gleon_golden_comparator.dart';
 
 /// A `goldenFileComparator` backed by the gleon engine, for golden harnesses
@@ -38,19 +36,11 @@ import 'gleon_golden_comparator.dart';
 class GleonFileComparator extends LocalFileComparator {
   /// Creates a comparator for the goldens of the test file [testFile], like
   /// [LocalFileComparator].
-  GleonFileComparator(super.testFile) : _names = null, _session = null;
-
-  /// A comparator with its own session (workspace and environment) instead
-  /// of the process's, so a test never depends on the environment it runs
-  /// in.
-  @visibleForTesting
-  GleonFileComparator.withSession(super.testFile, GleonSession this._session)
-    : _names = null;
+  GleonFileComparator(super.testFile) : _names = null;
 
   /// Any file name in the directory of [_names]: only the directory is used.
   GleonFileComparator._naming(LocalFileComparator this._names)
-    : _session = null,
-      super(_names.basedir.resolve('gleon_test.dart'));
+    : super(_names.basedir.resolve('gleon_test.dart'));
 
   /// A comparator for the goldens of [existing], the [LocalFileComparator]
   /// `flutter test` installs before `test/flutter_test_config.dart` runs or
@@ -78,9 +68,6 @@ class GleonFileComparator extends LocalFileComparator {
   /// one.
   final LocalFileComparator? _names;
 
-  /// The session of `withSession`; null: the process's.
-  final GleonSession? _session;
-
   @override
   Uri getTestUri(Uri key, int? version) =>
       _names?.getTestUri(key, version) ?? super.getTestUri(key, version);
@@ -89,15 +76,12 @@ class GleonFileComparator extends LocalFileComparator {
   /// the engine's message unless it passes.
   @override
   Future<bool> compare(Uint8List imageBytes, Uri golden) =>
-      GleonGoldenComparator(
-        this,
-        session: _session,
-      ).compare(imageBytes, golden);
+      GleonGoldenComparator(this).compare(imageBytes, golden);
 
   /// Writes [imageBytes] (a PNG) as [golden] through the engine, stamped
   /// with this platform (see the README's "Recording goldens on any
   /// platform").
   @override
   Future<void> update(Uri golden, Uint8List imageBytes) =>
-      GleonGoldenComparator(this, session: _session).update(golden, imageBytes);
+      GleonGoldenComparator(this).update(golden, imageBytes);
 }

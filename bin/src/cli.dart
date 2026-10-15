@@ -20,8 +20,15 @@ final class Cli {
 
   /// Prints [message] and exits with 64.
   Never fail(String message) {
-    stderr.writeln('$name: $message');
+    report(message);
     exit(64);
+  }
+
+  /// Prints [message] and sets the exit code to 64 without exiting, so
+  /// cleanup still runs (`exit` skips `finally` blocks).
+  void report(String message) {
+    stderr.writeln('$name: $message');
+    exitCode = 64;
   }
 
   /// [fail] with [message] followed by the [usage].

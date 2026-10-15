@@ -12,8 +12,9 @@ on:
     inputs:
       gleon_ref:
         description: >-
-          gleon commit to test against instead of native/gleon_ref (e.g. the head of a gleon pull
-          request that changes the C contract), so both sides are checked before either merges.
+          gleon commit (its full SHA) to test against instead of native/gleon_ref (e.g. the head of
+          a gleon pull request that changes the C contract), so both sides are checked before
+          either merges.
         required: false
         default: ""
 
@@ -46,15 +47,10 @@ jobs:
           path: flutter
           persist-credentials: false
 
-      - name: Pin the requested gleon commit
-        if: ${{ inputs.gleon_ref != '' }}
-        env:
-          GLEON_REF: ${{ inputs.gleon_ref }}
-        run: printf '%s\n' "$GLEON_REF" > native/gleon_ref
-
       - name: Set up Flutter and gleon-ffi
         uses: ./flutter/.github/actions/setup
         with:
+          gleon_ref: ${{ inputs.gleon_ref }}
           target: ${{ matrix.target }}
 
       - name: Read the gleon pin
@@ -120,6 +116,8 @@ jobs:
         run: |
           # One case per committed golden of the example.
           goldens=$(git ls-files 'example/test/goldens/*.png' | wc -l | tr -d ' ')
+          # With none (a moved directory), --min-cases 0 would pass on no reports at all.
+          [ "$goldens" -gt 0 ] || { echo "no goldens under example/test/goldens"; exit 1; }
           dart bin/check_cases.dart example/.gleon/runs/latest \
             --fallback-platform macos-aarch64 --min-cases "$goldens" --outcome match \
             --run-id "$GLEON_RUN_ID"
@@ -154,7 +152,6 @@ jobs:
           files: flutter/coverage/lcov.info
           flags: flutter
           name: flutter
-          override_branch: ${{ github.base_ref }}
           verbose: true
 
       - name: Upload golden failures
@@ -164,6 +161,47 @@ jobs:
           name: golden-failures-${{ matrix.target }}
           path: flutter/example/test/failures/
           if-no-files-found: ignore
+
+  consumer:
+    name: Consumer ${{ matrix.target }}
+    # The package as a consumer meets it (bin/consumer_check.dart): a fresh app with gleon as a
+    # dependency without `native/`, no Rust on PATH, the library downloaded by the build hook from
+    # a local release (checksums verified), reused offline, then bundled as in the pub.dev
+    # archive; no `.gleon/gleon.yaml`, a stray one in the home directory, a golden stamped by
+    # `--update-goldens` and its text compared on this platform.
+    if: ${{ github.event_name != 'push' }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-15, target: macos-arm64 }
+          - { os: ubuntu-26.04, target: linux-x64 }
+    defaults:
+      run:
+        shell: bash
+        working-directory: flutter
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: flutter
+          persist-credentials: false
+
+      # The library the local release serves (built from the pin, or restored from the cache).
+      - name: Set up Flutter and gleon-ffi
+        uses: ./flutter/.github/actions/setup
+        with:
+          gleon_ref: ${{ inputs.gleon_ref }}
+          target: ${{ matrix.target }}
+
+      - name: Consumer check
+        run: |
+          flutter pub get
+          dart bin/consumer_check.dart --target ${{ matrix.target }} --stray-home-config
 
   cli:
     name: gleon CLI on the example
@@ -188,6 +226,7 @@ jobs:
       - name: Set up Flutter and gleon-ffi
         uses: ./flutter/.github/actions/setup
         with:
+          gleon_ref: ${{ inputs.gleon_ref }}
           target: linux-x64
 
       - name: Read the gleon pin
@@ -255,10 +294,8 @@ jobs:
     env:
       # Pinned like Flutter itself, so a tool release never changes results on its own.
       PANA_VERSION: "0.23.19"
-      # Points pana may lose (out of 160); locally 150/160. The 10 lost points are the
-      # repository check: pana clones the default branch, which still has `publish_to: none`.
-      # TODO(owner): set to "0" once that is merged and the first CI run confirms 160.
-      PANA_MAX_LOST_POINTS: "10"
+      # Points pana may lose (out of 160): none, 160/160 since main publishes (no `publish_to`).
+      PANA_MAX_LOST_POINTS: "0"
     defaults:
       run:
         shell: bash
@@ -274,6 +311,7 @@ jobs:
       - name: Set up Flutter
         uses: ./flutter/.github/actions/setup
         with:
+          gleon_ref: ${{ inputs.gleon_ref }}
           target: linux-x64
           build: "false"
 

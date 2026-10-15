@@ -42,7 +42,10 @@ import 'ignore_regions.dart';
 ///     await tester.pumpWidget(const Placeholder());
 ///     await expectLater(
 ///       find.byType(Placeholder),
-///       matchesGoldenFile("goldens/card.png", tolerance: const .ssim()),
+///       matchesGoldenFile(
+///         "goldens/card.png",
+///         tolerance: const GoldenTolerance.ssim(),
+///       ),
 ///     );
 ///   });
 /// }

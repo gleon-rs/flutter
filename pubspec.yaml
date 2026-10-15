@@ -1,15 +1,15 @@
 name: gleon
-description: Drop-in matchesGoldenFile for Flutter tests with pixel and SSIM tolerance and ignore regions, powered by a Rust engine.
-version: 0.4.0
+description: Drop-in matchesGoldenFile for Flutter golden tests, 5-20x faster, with pixel and SSIM tolerance, ignore regions and real fonts, powered by a Rust engine.
+version: 0.5.0
 repository: https://github.com/gleon-rs/flutter
 issue_tracker: https://github.com/gleon-rs/flutter/issues
 
 topics:
+  - testing
   - golden-test
-  - golden-tests
   - visual-regression
   - ssim
-  - pixel
+  - flutter-test
 
 environment:
   sdk: ^3.13.0
@@ -26,9 +26,11 @@ dependencies:
     sdk: flutter
   hooks: ^2.2.0
   meta: ^1.18.0
-  # flutter_test pins an exact 0.7.x; `TestHandle` (test names for metrics)
-  # comes from here, so the range only has to include that pin.
-  test_api: ^0.7.0
+  # flutter_test pins one exact 0.x of test_api per SDK release; `TestHandle`
+  # (test names for metrics) comes from here. A caret would refuse the next
+  # minor and break `pub get` for every consumer until a release of gleon.
+  # ignore: prefer-caret-version-syntax, flutter_test pins one exact 0.x per SDK release; a caret breaks pub get on the next minor.
+  test_api: ">=0.7.0 <1.0.0"
 
 dev_dependencies:
   bench_press: ^0.4.1

@@ -28,13 +28,19 @@ void main() {
     for (final args in [
       ['init', '--quiet'],
       ['add', '.'],
+      // Whatever the developer's git configuration signs or hooks.
       [
         '-c',
         'user.name=gleon',
         '-c',
         'user.email=gleon@example.com',
+        '-c',
+        'commit.gpgsign=false',
+        '-c',
+        'core.hooksPath=/dev/null',
         'commit',
         '--quiet',
+        '--no-verify',
         '-m',
         'gleon',
       ],
