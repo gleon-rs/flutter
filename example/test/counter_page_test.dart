@@ -36,8 +36,8 @@ Future<void> main() async {
       expect(
         message,
         contains(
-          "(AlchemistFileComparator, alchemist's `diffThreshold`) does not "
-          'apply',
+          '(AlchemistFileComparator) and any threshold it applies '
+          "(alchemist's `diffThreshold`) did not",
         ),
       );
       expect(message, isNot(contains('obscured')));
@@ -98,10 +98,10 @@ Directory _goldensDir({
     File('${dir.path}/.gleon/gleon.yaml')
       ..parent.createSync()
       ..writeAsStringSync('''
-required_version: ">=0.1.0"
 fallback_platform: fuchsia-x86_64
 screenshots:
   - include: "goldens/*.png"
+    mode: exact
 ''');
   }
 

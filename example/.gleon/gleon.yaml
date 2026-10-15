@@ -11,9 +11,7 @@ screenshots:
   - include: "test/goldens/**/*.png"
     # Everything but text must match exactly: the tests load the app's real
     # fonts (`loadAppFonts` in test/flutter_test_config.dart).
-    mode: pixel
-    diff:
-      threshold: 0
+    mode: exact
 
 # Per-golden case reports in .gleon/runs/latest/cases/<platform>/; CI turns them
 # on with GLEON_METRICS=1.

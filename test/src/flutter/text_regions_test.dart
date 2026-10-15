@@ -1,3 +1,6 @@
+import 'dart:ui' show ImageFilter;
+
+import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:gleon/gleon.dart';
 import 'package:gleon/src/core/compare/pixel_region.dart';
@@ -21,6 +24,13 @@ Future<List<int>?> _pixelsOf(Element element) async {
 
   return bytes?.buffer.asUint8List();
 }
+
+/// The layers of [root] that changed since the last frame (they need to be
+/// added to the scene again).
+List<Layer> _changed(ContainerLayer? root) => [
+  for (final layer in [?root, ...?root?.depthFirstIterateChildren()])
+    if (layer.debugSubtreeNeedsAddToScene ?? false) layer,
+];
 
 List<PixelRegion> _regions(WidgetTester tester, [Finder? finder]) =>
     TextRegions.captured(tester.element(finder ?? find.byKey(_boundaryKey)));
@@ -164,6 +174,76 @@ void main() {
     final before = await pixels();
 
     expect(_regions(tester), hasLength(1));
+    expect(await pixels(), before);
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(await pixels(), before);
+  });
+
+  // Each kind of layer a render object writes while it paints: the replay
+  // writes the values of the last paint, so no layer changes or needs to be
+  // added to the scene again.
+  testWidgets('finding text changes no kind of layer', (tester) async {
+    final link = LayerLink();
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: .ltr,
+        child: Align(
+          alignment: .topLeft,
+          child: RepaintBoundary(
+            key: _boundaryKey,
+            child: SizedBox(
+              width: 200,
+              height: 100,
+              child: Wrap(
+                children: [
+                  const ClipRect(
+                    child: RepaintBoundary(child: Text('clip', style: _style)),
+                  ),
+                  const ColorFiltered(
+                    colorFilter: .mode(Color(0xFF00FF00), .modulate),
+                    child: Text('color', style: _style),
+                  ),
+                  ShaderMask(
+                    shaderCallback: (bounds) => const LinearGradient(
+                      colors: [Color(0xFF000000), Color(0xFFFFFFFF)],
+                    ).createShader(bounds),
+                    child: const Text('mask', style: _style),
+                  ),
+                  ClipRect(
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 1, sigmaY: 1),
+                      child: const Text('blur', style: _style),
+                    ),
+                  ),
+                  const AnimatedOpacity(
+                    opacity: 0.5,
+                    duration: Duration(seconds: 1),
+                    child: Text('fade', style: _style),
+                  ),
+                  CompositedTransformTarget(
+                    link: link,
+                    child: const Text('lead', style: _style),
+                  ),
+                  CompositedTransformFollower(
+                    link: link,
+                    offset: const Offset(0, 20),
+                    child: const Text('follow', style: _style),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    final element = tester.element(find.byKey(_boundaryKey));
+    Future<List<int>?> pixels() =>
+        tester.runAsync<List<int>?>(() => _pixelsOf(element));
+    final before = await pixels();
+
+    expect(_regions(tester), hasLength(7));
+    expect(_changed(element.renderObject?.debugLayer), isEmpty);
     expect(await pixels(), before);
     await tester.pump();
     expect(tester.takeException(), isNull);

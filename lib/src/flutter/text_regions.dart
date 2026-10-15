@@ -201,14 +201,27 @@ final class _PaintRecorder extends PaintingContext {
 
   @override
   void paintChild(RenderObject child, Offset offset) {
+    RenderObject painted = child;
+    Offset paintOffset = offset;
+    // A shader mask writes a new shader into its live layer on every paint,
+    // which would mark it changed; it paints its child, if any, at its own
+    // offset, so that child is painted instead.
+    while (painted is RenderShaderMask) {
+      // ignore: avoid-collection-mutating-methods, recording is its purpose.
+      _painted.add(painted);
+      paintOffset = painted.isRepaintBoundary ? .zero : paintOffset;
+      final masked = painted.child;
+      if (masked == null) return;
+      painted = masked;
+    }
     // ignore: avoid-collection-mutating-methods, recording is its purpose.
-    _painted.add(child);
+    _painted.add(painted);
     // In place, also a repaint boundary (compositing it would move its live
     // layer here), and with the offset of a real paint: a repaint boundary
     // paints at zero in its own layer. Render objects set their live layers
     // from the offset (a leader layer, an opacity layer): the same values
     // leave them as they are.
-    child.paint(this, child.isRepaintBoundary ? .zero : offset);
+    painted.paint(this, painted.isRepaintBoundary ? .zero : paintOffset);
   }
 
   @override

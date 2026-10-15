@@ -1,3 +1,81 @@
+## 0.5.0
+
+- **Real text works without a config.** `--update-goldens` stamps every golden it writes with
+  the platform (`gleon:platform`), with or without `.gleon/gleon.yaml` and whether or not a rule
+  matches it (only a golden the workspace `exclude`s is written and compared as Flutter does, its
+  text as pixels like the rest); an
+  unstamped golden of the same image is written once more to stamp it. The stamp alone decides
+  where text is compared: strictly (0.05 of a tile) on that platform, ignored elsewhere. A pass
+  that ignored differing text because the golden names no platform (recorded by Flutter, or
+  before this version, without a `fallback_platform`) says so once per test process.
+- **`--update-goldens` always wins without a `fallback_platform`.** A golden recorded on another
+  platform is kept while only its text differs only in a workspace with a `fallback_platform`
+  (which is the platform that records it again); kept goldens print one line naming it. Without
+  one, nothing could record the golden again, so it is written over.
+- **Breaking: `mode` is required in `.gleon/gleon.yaml` rules, and `mode: exact` exists.** A rule
+  without a mode used to tolerate 1% of the pixels silently (`pixel`'s default); `exact` compares
+  every pixel and refuses `diff` keys. A `diff` key of another mode is an error even at its
+  default (the full `diff` blocks of older `gleon init` configs keep the keys of their mode
+  only). `required_version` and `screenshots` are optional: a
+  workspace may name only its `fallback_platform`. `fallback_platform` applies to every golden of
+  the workspace, matched by a rule or not.
+- **Platform names:** `macos-arm64`, `linux-x64`, `amd64` and `darwin` (the names of the release
+  assets and of Dart's `Abi`) are read as `macos-aarch64`, `linux-x86_64` and `macos` wherever a
+  platform is parsed (the config, the CLI's `--platform`, `--os`/`--arch` and variables); a
+  custom key such as `custom-arm64` keeps its spelling.
+- **The workspace search stops at the repository root** (the first directory with `.git`, `.hg`,
+  `.jj` or `.sl`) and never takes the home directory or a directory above it unless that is a
+  repository root itself: a `~/.gleon/gleon.yaml` no longer applies to projects without one. The
+  gleon CLI searches the same way (its `.env` included).
+- **Failures of a golden covered by a rule name their case report** (its absolute path: the test
+  may run in a package below the workspace root) and `gleon report html`; the tip about
+  `.gleon/gleon.yaml` is shown only without a rule.
+- **A library the host cannot load** (an older glibc, musl) is reported as such, with the floor
+  of the released Linux libraries (Ubuntu 26.04) and the ways out, instead of the advice for
+  device builds.
+- `gleon init` of the CLI writes a Flutter template next to a `pubspec.yaml` (`**/test/**/*.png`
+  for the packages of a pub workspace too, `mode: exact`, `exclude: "**/failures/**"`,
+  `fallback_platform` = the OS and architecture of the run); `--generic` and `--flutter` choose
+  explicitly, and an existing config is kept. Like `git init` it initializes the directory it
+  runs in (a package of a monorepo gets a nested workspace, named as such). A rule without
+  `mode` names the modes in its error.
+- Package metadata: `test_api` accepts every 0.x the SDK pins (a caret would break `pub get` on
+  the next minor), pub.dev topics `testing` and `flutter-test`. `GleonFileComparator.withSession`
+  (a test seam) is gone from the public API.
+- **Only painted text is text.** Text laid out but not painted (the hidden pages of an
+  `IndexedStack`, `Visibility.maintain`, `SliverOffstage`, a zero `SliverOpacity`, a route under
+  an opaque one) no longer gets a text region, which hid the changes painted under it (text is
+  ignored on other platforms by default). The painted text is found by replaying the paint of the
+  capture without drawing or touching its layers, after the image is captured.
+- **The build hook runs only when an input changes.** It declared files that may not exist (the
+  bundled library, the pins), which the hooks runner takes for files modified during the build:
+  every `flutter test` of a git or pub.dev dependency ran the hook again and printed "File
+  modified during build. Build must be rerun.".
+- Hook failures are reported as hook errors (the message, not an unhandled `Bad state` with its
+  stack trace; network failures as infrastructure failures); HTTP 408 and 429 are retried; the
+  user and password of any URL never appear in messages; a `release_url` on this machine (any
+  loopback address) bypasses proxies; an `ffi_path` to the library of another OS is refused at
+  once, whatever the case of its extension.
+- **Downloads give up on silence, not on slowness.** A download fails (and is retried) after a
+  minute without data instead of three minutes in all, so a slow connection finishes; a body
+  larger than any library (64 MiB) is refused.
+- **A git dependency between releases gets the engine it pins or a clear failure.** Releases
+  name the gleon commit their libraries were built from (`gleon_ref.txt`, in the checksum list);
+  a checkout pinning another commit (`ref: main` after an engine change) fails the build and
+  names the tag to depend on, instead of loading an engine it was not made for. Releases without
+  the file are not checked; the pub.dev archive has no pin.
+- A `gleon_repo` build runs again only when a file it compiled (cargo's dep-info) or a manifest
+  or `Cargo.lock` changes, not any file of the checkout (every input without a dep-info of
+  absolute paths).
+- A library file removed after the build is reported as missing, not as one this host cannot
+  load; a library that is there but lacks a library it needs is reported as one this host cannot
+  load.
+- `loadAppFonts()` awaited in a test body (where it cannot finish) no longer breaks later calls;
+  `await tester.runAsync(loadAppFonts)` is the way there. Concurrent calls share one load, and a
+  failed load is started again by the next call.
+- The alchemist integration moved to `doc/alchemist.md`; maintainer notes to `CONTRIBUTING.md`.
+- Needs the gleon commit `native/gleon_ref` pins (ABI 13 and case reports v5 unchanged).
+
 ## 0.4.0
 
 - **Breaking: no per-platform golden folders.** The package no longer reads or writes

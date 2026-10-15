@@ -96,6 +96,33 @@ void main() {
     }
   });
 
+  // The loaders word a missing dependency like a missing library: the
+  // library that is still there points at the host, not at a new build.
+  test('a library that is there but lacks a dependency is no gone file', () {
+    final dir = Directory.systemTemp.createTempSync('gleon_engine_');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final library = File('${dir.path}/libgleon_ffi.so')..createSync();
+    final linux =
+        "Failed to load dynamic library '${library.path}': libgcc_s.so.1: "
+        'cannot open shared object file: No such file or directory';
+    final windows =
+        "Failed to load dynamic library '${library.path}': "
+        'The specified module could not be found. (error code: 126)';
+    for (final reason in [linux, windows]) {
+      final message = NativeEngine.describeLoadError(ArgumentError(reason));
+
+      expect(
+        message,
+        startsWith(
+          'gleon: the native library could not be loaded on this host: a '
+          'library it needs is missing',
+        ),
+      );
+      expect(message, allOf(contains(reason), contains('gleon_repo')));
+      expect(message, isNot(contains('removed after the build')));
+    }
+  });
+
   test('verdict codes follow gleon-ffi, unknown codes are errors', () {
     // Zero is an error: a summary the library never wrote is no pass.
     expect(NativeVerdict.of(0), NativeVerdict.error);

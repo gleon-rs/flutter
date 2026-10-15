@@ -249,6 +249,8 @@ void main() {
         built.dependencies,
         containsAll([
           checkout.resolve('Cargo.toml'),
+          // The versions of the registry crates, whose sources lie outside.
+          checkout.resolve('Cargo.lock'),
           checkout.resolve('gleon-ffi/Cargo.toml'),
           checkout.resolve('gleon-ffi/build.rs'),
           checkout.resolve('gleon-ffi/src/lib.rs'),
@@ -263,6 +265,25 @@ void main() {
       expect(
         built.dependencies.map((uri) => uri.path),
         isNot(contains('/rustlib/src/core/lib.rs')),
+      );
+    });
+
+    // `build.dep-info-basedir` makes cargo write paths relative to a
+    // directory of its config: without knowing it, every input is tracked.
+    test('relative dep-info paths fall back to every input', () async {
+      final root = fakeCheckout();
+      final cargo = FakeCargo(compiled: ['gleon-ffi/src/lib.rs']);
+
+      final built = await SourceBuild.run(
+        repoRoot: .file(root),
+        targetDir: .directory('${tempPath()}/cargo'),
+        target: .linuxX64,
+        environment: cargoEnvironment(),
+        runProcess: cargo.run,
+      );
+      expect(
+        built.dependencies,
+        unorderedEquals(SourceBuild.inputs(.directory(root))),
       );
     });
 

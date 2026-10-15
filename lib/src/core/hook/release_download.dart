@@ -417,12 +417,18 @@ final class _Release {
     try {
       await for (final part in response.timeout(bodyTimeout)) {
         builder.add(part);
-        if (builder.length > maxBytes) throw tooLarge;
+        if (builder.length > maxBytes) break;
       }
     } on TimeoutException {
       await _drop(response);
 
       rethrow;
+    }
+    if (builder.length > maxBytes) {
+      // The rest is never read: its connection is not reused either.
+      await _drop(response);
+
+      throw tooLarge;
     }
 
     return builder.takeBytes();

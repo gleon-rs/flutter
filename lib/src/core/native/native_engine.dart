@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:ffi';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:meta/meta.dart';
@@ -234,33 +235,47 @@ abstract final class NativeEngine {
 
   /// The signs of a library file that is not there (any more): the loader
   /// of macOS, Linux and Windows. Checked first: on Linux it also says
-  /// "cannot open shared object".
+  /// "cannot open shared object". Linux and Windows word a missing
+  /// dependency alike, so the library file itself is looked at too.
   static const _missingFile = [
     '(no such file)',
     'No such file or directory',
     'The specified module could not be found',
   ];
 
+  /// The file `dart:ffi` names in its error.
+  static final _libraryPath = RegExp(
+    "Failed to load dynamic library '([^']+)'",
+  );
+
+  /// What to do about a library the host cannot load.
+  static const _hostAdvice =
+      'The released Linux libraries are built on Ubuntu 26.04 and need its '
+      'glibc or a newer one (the PLATFORMS.txt of the release names the exact '
+      'version); musl (Alpine) is not supported; macOS needs 11 or newer. Run '
+      'the tests on a supported host, or build the library for this one with '
+      'the `gleon_repo` user-define and point `ffi_path` at it (see the '
+      'package README).';
+
   /// The message for the [error] `dart:ffi` raised loading the library.
   @visibleForTesting
   static String describeLoadError(ArgumentError error) {
     final text = '$error';
     if (_missingFile.any(text.contains)) {
-      return 'gleon: the native library file is missing ($error). The build '
-          'output it was loaded from was removed after the build: run '
-          '`flutter test` again (after `flutter clean` if it persists), and '
-          'the build hook provides it again.';
+      final library = _libraryPath.firstMatch(text)?.group(1);
+
+      return library == null || !File(library).existsSync()
+          ? 'gleon: the native library file is missing ($error). The build '
+                'output it was loaded from was removed after the build: run '
+                '`flutter test` again (after `flutter clean` if it persists), '
+                'and the build hook provides it again.'
+          : 'gleon: the native library could not be loaded on this host: a '
+                'library it needs is missing ($error). $_hostAdvice';
     }
 
     return _loaderFailures.any(text.contains)
         ? 'gleon: the native library could not be loaded on this host '
-              '($error). The released Linux libraries are built on Ubuntu '
-              '26.04 and need its glibc or a newer one (the PLATFORMS.txt of '
-              'the release names the exact version); musl (Alpine) is not '
-              'supported; macOS needs 11 or newer. Run the tests on a '
-              'supported host, or build the library for this one with the '
-              '`gleon_repo` user-define and point `ffi_path` at it (see the '
-              'package README).'
+              '($error). $_hostAdvice'
         : 'gleon: the native library was not loaded ($error). The build '
               'hook of the gleon package provides it for host `flutter test` '
               'on macOS arm64, Linux x64/arm64 and Windows x64 only: app '

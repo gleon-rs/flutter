@@ -168,37 +168,46 @@ abstract final class SourceBuild {
   ];
 
   /// What the build of [library] read inside the checkout [root]: the
-  /// workspace files and crate manifests of [inputs], and every file cargo's
-  /// dep-info next to the library names there (`<name>.d`: the sources,
-  /// a crate-root `build.rs`, `include_bytes!` data, which no glob of `src/`
-  /// sees); the sources of [inputs] without a dep-info.
+  /// workspace files (`Cargo.lock` among them: the sources of registry
+  /// crates lie outside) and crate manifests of [inputs], and every file
+  /// cargo's dep-info next to the library names there (`<name>.d`: the
+  /// sources, a crate-root `build.rs`, `include_bytes!` data, which no glob
+  /// of `src/` sees); the sources of [inputs] without a usable dep-info.
   static List<Uri> dependencies(Uri root, Uri library) {
     final compiled = _compiled(root, library);
     if (compiled == null) return inputs(root);
     final manifests = inputs(root).where(
-      (input) => input.pathSegments.lastOrNull?.endsWith('.toml') ?? false,
+      (input) => switch (input.pathSegments.lastOrNull) {
+        final name? => name.endsWith('.toml') || name == 'Cargo.lock',
+        null => false,
+      },
     );
 
     return {...manifests, ...compiled}.toList();
   }
 
   /// The files of the dep-info cargo wrote next to [library] that lie inside
-  /// [root] and exist; null without a dep-info. Each line is
-  /// `<output>: <input> <input> ...`, a space in a path escaped as `\ `.
+  /// [root] and exist; null without a dep-info, or with a relative path in
+  /// it (`build.dep-info-basedir` of a cargo config, whose directory is
+  /// unknown here). Each line is `<output>: <input> <input> ...`, a space in
+  /// a path escaped as `\ `.
   static List<Uri>? _compiled(Uri root, Uri library) {
     final depInfo = File(
       library.toFilePath().replaceFirst(RegExp(r'\.[a-z]+$'), '.d'),
     );
     if (!depInfo.existsSync()) return null;
-    final inside = root.toFilePath();
-
-    return [
+    final paths = [
       for (final line in depInfo.readAsLinesSync())
         if (_rule.firstMatch(line)?.group(1) case final inputs?)
           for (final match in _depInfoPath.allMatches(inputs))
-            if (match.group(0)?.replaceAll(r'\ ', ' ') case final path?
-                when path.startsWith(inside) && File(path).existsSync())
-              Uri.file(path),
+            ?match.group(0)?.replaceAll(r'\ ', ' '),
+    ];
+    if (!paths.every((path) => File(path).isAbsolute)) return null;
+    final inside = root.toFilePath();
+
+    return [
+      for (final path in paths)
+        if (path.startsWith(inside) && File(path).existsSync()) Uri.file(path),
     ];
   }
 

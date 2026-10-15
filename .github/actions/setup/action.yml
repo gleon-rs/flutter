@@ -24,10 +24,22 @@ inputs:
       Optional directory that also receives the library under its release asset name
       (use with cache 'false').
     default: ""
+  gleon_ref:
+    description: >-
+      Optional gleon commit that replaces the pin in native/gleon_ref for this job (the gleon_ref
+      input of a manual CI run), before anything reads the pin.
+    default: ""
 
 runs:
   using: composite
   steps:
+    - name: Pin the requested gleon commit
+      if: ${{ inputs.gleon_ref != '' }}
+      shell: bash
+      env:
+        GLEON_REF: ${{ inputs.gleon_ref }}
+      run: printf '%s\n' "$GLEON_REF" > flutter/native/gleon_ref
+
     # Flutter publishes no Linux arm64 archives; a git checkout bootstraps the arm64 Dart SDK.
     - name: Set up Flutter
       if: ${{ !(runner.os == 'Linux' && runner.arch == 'ARM64') }}
@@ -56,9 +68,11 @@ runs:
       with:
         path: flutter/native/${{ inputs.target }}
         # Only the files that decide the built and installed bytes (build_native and what it imports).
-        key: gleon-ffi-${{ inputs.target }}-${{ steps.pin.outputs.gleon_ref }}-${{ hashFiles('flutter/bin/build_native.dart', 'flutter/bin/src/*.dart', 'flutter/lib/src/core/hook/native_target.dart', 'flutter/lib/src/core/hook/source_build.dart', 'flutter/lib/src/core/hook/atomic_write.dart') }}
+        key: gleon-ffi-${{ inputs.target }}-${{ steps.pin.outputs.gleon_ref }}-${{ hashFiles('flutter/bin/build_native.dart', 'flutter/bin/src/cli.dart', 'flutter/bin/src/native_build.dart', 'flutter/lib/src/core/hook/native_target.dart', 'flutter/lib/src/core/hook/source_build.dart', 'flutter/lib/src/core/hook/atomic_write.dart') }}
+    # Also on a cache hit: the layout test of the bindings (test/src/core/native/gleon_ffi_test.dart)
+    # reads the C contract from ../gleon at the pin and would skip without it.
     - name: Check out gleon
-      if: ${{ inputs.build == 'true' && steps.cache.outputs.cache-hit != 'true' }}
+      if: ${{ inputs.build == 'true' }}
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         repository: gleon-rs/gleon
