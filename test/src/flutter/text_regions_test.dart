@@ -10,6 +10,18 @@ const _boundaryKey = ValueKey<String>('boundary');
 
 const _empty = '';
 
+/// The page an `IndexedStack` lays out but does not show.
+const _hiddenPage = Text('page 2', style: _style);
+
+/// The RGBA bytes `captureImage` takes of [element].
+Future<List<int>?> _pixelsOf(Element element) async {
+  final image = await captureImage(element);
+  final bytes = await image.toByteData();
+  image.dispose();
+
+  return bytes?.buffer.asUint8List();
+}
+
 List<PixelRegion> _regions(WidgetTester tester, [Finder? finder]) =>
     TextRegions.captured(tester.element(finder ?? find.byKey(_boundaryKey)));
 
@@ -46,6 +58,116 @@ void main() {
     );
 
     expect(_regions(tester), isEmpty);
+  });
+
+  // Laid out but never painted, whatever `paintsChild` says: a region there
+  // would hide changes under it (text is compared under the text tolerance,
+  // ignored on other platforms by default).
+  testWidgets('text its parent does not paint has no region', (tester) async {
+    for (final hidden in <Widget>[
+      const IndexedStack(children: [SizedBox.expand(), _hiddenPage]),
+      const Visibility.maintain(
+        visible: false,
+        child: Text('hidden', style: _style),
+      ),
+      const CustomScrollView(
+        slivers: [
+          SliverOffstage(
+            sliver: SliverToBoxAdapter(child: Text('off', style: _style)),
+          ),
+        ],
+      ),
+      const CustomScrollView(
+        slivers: [
+          SliverOpacity(
+            opacity: 0,
+            sliver: SliverToBoxAdapter(child: Text('clear', style: _style)),
+          ),
+        ],
+      ),
+    ]) {
+      await tester.pumpWidget(_Boundary(hidden));
+      expect(_regions(tester), isEmpty, reason: '${hidden.runtimeType}');
+    }
+  });
+
+  testWidgets('an overlay entry under opaque ones has none', (tester) async {
+    await tester.pumpWidget(
+      _Boundary(
+        Overlay(
+          initialEntries: [
+            OverlayEntry(
+              builder: (_) => const Text('under', style: _style),
+              maintainState: true,
+            ),
+            OverlayEntry(
+              builder: (_) => const Text('over', style: _style),
+              opaque: true,
+            ),
+          ],
+        ),
+      ),
+    );
+
+    expect(_regions(tester), hasLength(1));
+  });
+
+  testWidgets('a route under a pushed page has no region', (tester) async {
+    final navigator = GlobalKey<NavigatorState>();
+    await tester.pumpWidget(
+      WidgetsApp(
+        navigatorKey: navigator,
+        pageRouteBuilder: <T>(settings, builder) => PageRouteBuilder<T>(
+          pageBuilder: (context, _, _) => builder(context),
+        ),
+        home: const Text('first page', style: _style),
+        color: const Color(0xFF000000),
+      ),
+    );
+    navigator.currentState?.push(
+      PageRouteBuilder<void>(
+        pageBuilder: (_, _, _) => const SizedBox.expand(),
+        transitionDuration: .zero,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(_regions(tester, find.byType(WidgetsApp)), isEmpty);
+  });
+
+  // Finding what is painted replays the paint of the capture: the layers it
+  // passes keep their values (a leader layer inside a nested repaint boundary
+  // keeps its offset), so the capture after it shows the same pixels.
+  testWidgets('finding text leaves the layers as they were', (tester) async {
+    await tester.pumpWidget(
+      _Boundary(
+        Padding(
+          padding: const .only(left: 7, top: 5),
+          child: Opacity(
+            opacity: 0.5,
+            child: RepaintBoundary(
+              child: Padding(
+                padding: const .only(left: 3, top: 2),
+                child: CompositedTransformTarget(
+                  link: LayerLink(),
+                  child: const Text('one', style: _style),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    final element = tester.element(find.byKey(_boundaryKey));
+    Future<List<int>?> pixels() =>
+        tester.runAsync<List<int>?>(() => _pixelsOf(element));
+    final before = await pixels();
+
+    expect(_regions(tester), hasLength(1));
+    expect(await pixels(), before);
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(await pixels(), before);
   });
 
   testWidgets('text sent to infinity has no region', (tester) async {

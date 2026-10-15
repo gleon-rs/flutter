@@ -27,12 +27,19 @@ abstract final class AtomicWrite {
   }) async {
     await file.parent.create(recursive: true);
     final temp = File('${file.path}.${pid}_${_random.nextInt(1 << 32)}.tmp');
-    await temp.writeAsBytes(bytes, flush: true);
+    try {
+      await temp.writeAsBytes(bytes, flush: true);
+    } on FileSystemException {
+      // A disk that fills up leaves no partial `.tmp` file behind.
+      await _delete(temp);
+
+      rethrow;
+    }
     try {
       await temp.rename(file.path);
     } on FileSystemException {
       // A leftover `.tmp` file is harmless; the rename failure matters.
-      await temp.delete().catchError((_) => temp, test: _isFileSystemError);
+      await _delete(temp);
       final expected = expectedSha256 ?? sha256.convert(bytes).toString();
       if (!await isKept(file, expectedSha256: expected)) rethrow;
     }
@@ -54,7 +61,14 @@ abstract final class AtomicWrite {
     }
   }
 
-  static bool _isFileSystemError(Object error) => error is FileSystemException;
+  /// Deletes [temp] if it can: a file already gone or locked is no failure.
+  static Future<void> _delete(File temp) async {
+    try {
+      await temp.delete();
+    } on FileSystemException {
+      // Harmless: at worst a `.tmp` file stays.
+    }
+  }
 
   /// Lowercase hex SHA-256 of the content of [file].
   static Future<String> sha256Of(File file) async {

@@ -14,6 +14,7 @@ final class FakeCargo {
     this.exitCode = 0,
     this.isWritingLibrary = true,
     this.isAllowed = true,
+    this.compiled,
   });
 
   /// A cargo that fails the test when called.
@@ -27,6 +28,10 @@ final class FakeCargo {
 
   /// Whether cargo may run at all.
   final bool isAllowed;
+
+  /// The files a build compiled, written as cargo's dep-info next to the
+  /// library (`<library>.d`, spaces escaped); none written when null.
+  final List<String>? compiled;
 
   /// Arguments of every call.
   final calls = <List<String>>[];
@@ -57,7 +62,13 @@ final class FakeCargo {
         (target) => target.rustTriple == triple,
       );
       final targetDir = Directory(after('--target-dir')).uri;
-      File.fromUri(built.builtLibrary(targetDir)).createSync(recursive: true);
+      final library = File.fromUri(built.builtLibrary(targetDir))
+        ..createSync(recursive: true);
+      if (compiled case final files?) {
+        final escaped = [for (final file in files) file.replaceAll(' ', r'\ ')];
+        File(library.path.replaceFirst(RegExp(r'\.[a-z]+$'), '.d'))
+            .writeAsStringSync('${library.path}: ${escaped.join(' ')}\n');
+      }
     }
 
     return .value(ProcessResult(1, exitCode, 'out', 'err'));

@@ -27,6 +27,7 @@ const _disabledYaml = '''
 required_version: ">=0.1.0"
 screenshots:
   - include: "test/goldens/*.png"
+    mode: pixel
 metrics: { enabled: false, console: false }
 ''';
 

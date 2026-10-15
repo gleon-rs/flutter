@@ -2,43 +2,20 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gleon/src/core/hook/native_target.dart';
+import 'package:gleon/src/core/hook/network_failure.dart';
 import 'package:gleon/src/core/hook/release_download.dart';
 
+import '../../../helpers/download_cache.dart';
+import '../../../helpers/release.dart';
 import '../../../helpers/release_server.dart';
 
 void main() {
-  const target = NativeTarget.linuxX64;
-  final library = List<int>.generate(4096, (i) => i % 251);
-  final hash = sha256.convert(library).toString();
-  final sums = '$hash  ${target.assetName}\n'.codeUnits;
-
-  Directory? cache;
-  setUp(() => cache = Directory.systemTemp.createTempSync('gleon_hook_'));
-  tearDown(() => cache?.deleteSync(recursive: true));
-
-  Future<File> fetch(
-    Uri releaseUrl, {
-    String packageVersion = '1.0.0',
-    Duration redirectTimeout = const .new(seconds: 30),
-    Duration bodyTimeout = const .new(minutes: 3),
-  }) => ReleaseDownload.fetchLibrary(
-    releaseUrl: releaseUrl,
-    packageVersion: packageVersion,
-    target: target,
-    cacheDir: cache ?? .systemTemp,
-    redirectTimeout: redirectTimeout,
-    bodyTimeout: bodyTimeout,
-  );
-
-  // Hook errors are printed verbatim: every one names gleon first.
-  Matcher throwsDownload(Object message) => throwsA(
-    isA<StateError>().having(
-      (error) => error.message,
-      'message',
-      allOf(startsWith('gleon: '), message),
-    ),
-  );
+  const target = Release.target;
+  final library = Release.library;
+  final hash = Release.hash;
+  final sums = Release.sums;
+  final cache = DownloadCache();
+  final fetch = cache.fetch;
 
   test('downloads, verifies and then reuses the cached library', () async {
     final server = await ReleaseServer.start({
@@ -73,9 +50,9 @@ void main() {
       fetch(server.url),
       throwsDownload(contains('checksum mismatch')),
     );
-    final files = cache?.listSync(recursive: true).whereType<File>();
+    final files = cache.dir.listSync(recursive: true).whereType<File>();
     expect(
-      files?.map((file) => file.path),
+      files.map((file) => file.path),
       everyElement(isNot(endsWith('.so'))),
     );
     // A list just downloaded is not asked for again.
@@ -123,9 +100,9 @@ void main() {
     files
       ..[ReleaseDownload.checksumsFileName] = sums
       ..[target.assetName] = library;
-    final fetched = await fetch(url);
+    final downloaded = await fetch(url);
 
-    expect(fetched.readAsBytesSync(), library);
+    expect(downloaded.readAsBytesSync(), library);
     expect(hits[ReleaseDownload.checksumsFileName], 2);
   });
 
@@ -140,8 +117,8 @@ void main() {
         target.assetName: library,
       });
       addTearDown(server.close);
-      final fetched = await fetch(server.url);
-      expect(fetched.readAsBytesSync(), library);
+      final downloaded = await fetch(server.url);
+      expect(downloaded.readAsBytesSync(), library);
 
       return server;
     }
@@ -152,29 +129,27 @@ void main() {
         ..[ReleaseDownload.checksumsFileName] = upgradedSums
         ..[target.assetName] = upgraded;
 
-      final fetched = await fetch(url, packageVersion: '1.1.0');
-      expect(fetched.readAsBytesSync(), upgraded);
+      final downloaded = await fetch(url, packageVersion: '1.1.0');
+      expect(downloaded.readAsBytesSync(), upgraded);
       expect(hits[ReleaseDownload.checksumsFileName], 2);
     });
 
     test('reloads a cached list that disagrees with the library', () async {
       final ReleaseServer(:files, :hits, :url) = await mirror();
       // The cached library is gone, and the mirror changed in place.
-      Directory('${(cache ?? fail('no cache')).path}/$hash')
-          .deleteSync(recursive: true);
+      Directory('${cache.dir.path}/$hash').deleteSync(recursive: true);
       files
         ..[ReleaseDownload.checksumsFileName] = upgradedSums
         ..[target.assetName] = upgraded;
 
-      final fetched = await fetch(url);
-      expect(fetched.readAsBytesSync(), upgraded);
+      final downloaded = await fetch(url);
+      expect(downloaded.readAsBytesSync(), upgraded);
       expect(hits[ReleaseDownload.checksumsFileName], 2);
     });
 
     test('names release_url when the library still disagrees', () async {
       final ReleaseServer(:files, :hits, :url) = await mirror();
-      Directory('${(cache ?? fail('no cache')).path}/$hash')
-          .deleteSync(recursive: true);
+      Directory('${cache.dir.path}/$hash').deleteSync(recursive: true);
       files[target.assetName] = upgraded;
 
       await expectLater(
@@ -211,6 +186,29 @@ void main() {
       ReleaseDownload.defaultUrl('1.2.3').toString(),
       'https://github.com/gleon-rs/flutter/releases/download/v1.2.3/',
     );
+  });
+
+  // This machine is all of 127.0.0.0/8 (Debian names itself 127.0.1.1),
+  // `localhost` and ::1; plain http anywhere else would let a network swap
+  // the libraries and their checksum list alike.
+  test('plain http reaches this machine only', () {
+    for (final (url, isThisMachine) in [
+      ('http://localhost:8080/', true),
+      ('http://127.0.0.1/', true),
+      ('http://127.0.1.1:8080/', true),
+      ('http://127.255.0.2/', true),
+      ('http://[::1]:8080/', true),
+      ('http://128.0.0.1/', false),
+      ('http://127.0.0.1.example/', false),
+      ('http://localhost.example/', false),
+      ('http://mirror.example/', false),
+    ]) {
+      expect(
+        ReleaseDownload.isThisMachine(.parse(url)),
+        isThisMachine,
+        reason: url,
+      );
+    }
   });
 
   test('only https, or plain http to localhost, is accepted', () async {
@@ -263,6 +261,44 @@ void main() {
     expect(server.hits[target.assetName], 3);
   });
 
+  // The body timeout is one of silence, not of the whole download: a slow
+  // but steady connection gets the library, a stalled one is given up.
+  test('a slow but steady body arrives', () async {
+    final server = await ReleaseServer.start(
+      {ReleaseDownload.checksumsFileName: sums, target.assetName: library},
+      dripped: {target.assetName: const .new(milliseconds: 150)},
+    );
+    addTearDown(server.close);
+
+    final downloaded = await fetch(
+      server.url,
+      bodyTimeout: const .new(milliseconds: 400),
+    );
+    expect(downloaded.readAsBytesSync(), library);
+    expect(server.hits[target.assetName], 1);
+  });
+
+  // Announced by its Content-Length, or streamed without one.
+  test('a body beyond any library is refused at once', () async {
+    final files = {
+      ReleaseDownload.checksumsFileName: sums,
+      target.assetName: library,
+    };
+    for (final dripped in <Map<String, Duration>>[
+      const {},
+      {target.assetName: .zero},
+    ]) {
+      final server = await ReleaseServer.start(files, dripped: dripped);
+      addTearDown(server.close);
+
+      await expectLater(
+        fetch(server.url, maxBytes: 1024),
+        throwsDownload(contains('more than 1024 bytes')),
+      );
+      expect(server.hits[target.assetName], 1, reason: '$dripped');
+    }
+  });
+
   test('follows allowed redirects', () async {
     final server = await ReleaseServer.start(
       {ReleaseDownload.checksumsFileName: sums, 'stored.so': library},
@@ -270,8 +306,8 @@ void main() {
     );
     addTearDown(server.close);
 
-    final fetched = await fetch(server.url);
-    expect(fetched.readAsBytesSync(), library);
+    final downloaded = await fetch(server.url);
+    expect(downloaded.readAsBytesSync(), library);
     expect(server.hits['stored.so'], 1);
   });
 
@@ -285,8 +321,8 @@ void main() {
     );
     addTearDown(server.close);
 
-    final fetched = await fetch(server.url);
-    expect(fetched.readAsBytesSync(), library);
+    final downloaded = await fetch(server.url);
+    expect(downloaded.readAsBytesSync(), library);
     expect(storage.hits, {'stored.so': 1});
   });
 
@@ -297,11 +333,14 @@ void main() {
     });
     addTearDown(server.close);
 
-    final fetched = await Future.wait([fetch(server.url), fetch(server.url)]);
-    expect({for (final file in fetched) file.path}, hasLength(1));
-    expect(fetched.firstOrNull?.readAsBytesSync(), library);
-    final leftovers = cache
-        ?.listSync(recursive: true)
+    final downloaded = await Future.wait([
+      fetch(server.url),
+      fetch(server.url),
+    ]);
+    expect({for (final file in downloaded) file.path}, hasLength(1));
+    expect(downloaded.firstOrNull?.readAsBytesSync(), library);
+    final leftovers = cache.dir
+        .listSync(recursive: true)
         .whereType<File>()
         .where((file) => file.path.endsWith('.tmp'));
     expect(leftovers, isEmpty);
@@ -331,6 +370,86 @@ void main() {
       throwsDownload(contains('failed with HTTP 403')),
     );
     expect(server.hits[target.assetName], 1);
+  });
+
+  // Each takes the backoff of every attempt (1 s, then 2 s).
+  for (final status in [
+    HttpStatus.tooManyRequests,
+    HttpStatus.serviceUnavailable,
+  ]) {
+    test(
+      'HTTP $status is retried, then reported as a network failure',
+      () async {
+        final server = await ReleaseServer.start(
+          {ReleaseDownload.checksumsFileName: sums},
+          statuses: {target.assetName: status},
+        );
+        addTearDown(server.close);
+
+        await expectLater(
+          fetch(server.url),
+          throwsA(
+            isA<NetworkFailure>().having(
+              (error) => error.message,
+              'message',
+              allOf(startsWith('gleon: '), contains('HTTP $status')),
+            ),
+          ),
+        );
+        expect(server.hits[target.assetName], 3);
+      },
+    );
+  }
+
+  test('the credentials of a mirror never appear in a message', () async {
+    final server = await ReleaseServer.start(const {});
+    addTearDown(server.close);
+    final url = server.url.replace(userInfo: 'user:s3cret');
+
+    await expectLater(
+      fetch(url),
+      throwsDownload(allOf(contains('HTTP 404'), isNot(contains('s3cret')))),
+    );
+  });
+
+  // Any URL of a message loses its user and password, the mirror's and
+  // those of a redirect alike.
+  test('no credentials of any URL appear in a message', () async {
+    final server = await ReleaseServer.start(
+      {ReleaseDownload.checksumsFileName: sums},
+      redirects: {target.assetName: 'http://cdn:t%40ken@mirror.example/lib.so'},
+    );
+    addTearDown(server.close);
+
+    await expectLater(
+      fetch(server.url.replace(userInfo: 'user:s3cret')),
+      throwsDownload(
+        allOf(
+          contains('insecure'),
+          contains('http://mirror.example/lib.so'),
+          isNot(contains('t%40ken')),
+          isNot(contains('s3cret')),
+        ),
+      ),
+    );
+  });
+
+  test('the loopback address is reached without the proxy', () {
+    const environment = {
+      'http_proxy': 'proxy:3128',
+      'https_proxy': 'proxy:3128',
+    };
+    for (final host in ['localhost', '127.0.0.1', '[::1]']) {
+      expect(
+        ReleaseDownload.proxyFor(.parse('http://$host:8080/'), environment),
+        'DIRECT',
+        reason: host,
+      );
+    }
+    expect(
+      ReleaseDownload.proxyFor(.parse('https://github.com/'), environment),
+      'PROXY proxy:3128',
+    );
   });
 
   test('a redirect without a location fails', () async {

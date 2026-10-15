@@ -31,7 +31,8 @@ void main() {
     await tester.pumpWidget(const Swatch(accent: Color(0xFF4CAF50)));
     final message = await matcher().matchAsync(Swatch.finder);
 
-    expect(message, contains('Tip: tolerances can be set per golden in'));
+    expect(message, contains('Tip: tolerances per golden and the platform'));
     expect(message, contains('.gleon/gleon.yaml'));
+    expect(message, isNot(contains('Case report:')));
   });
 }

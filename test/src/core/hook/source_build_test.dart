@@ -114,7 +114,13 @@ void main() {
         target: .linuxX64,
         environment: {'HOME': empty, 'PATH': empty},
       ),
-      throwsState(contains('`cargo` was not found')),
+      // Names the variables the hook never sees.
+      throwsState(
+        allOf(
+          contains('`cargo` was not found'),
+          contains(SourceBuild.hookEnvironmentHint),
+        ),
+      ),
     );
     expect(Directory.fromUri(targetDir).existsSync(), isFalse);
   });
@@ -210,6 +216,54 @@ void main() {
         endsWith('/cargo/x86_64-unknown-linux-gnu/release/libgleon_ffi.so'),
       );
       expect(built.dependencies, isNotEmpty);
+    });
+
+    // Cargo's dep-info names every file it compiled: a crate-root `build.rs`
+    // and `include_bytes!` data too, which no glob of `src/` sees; files
+    // outside the checkout (the standard library) are no inputs of it.
+    test('depends on what cargo compiled inside the checkout', () async {
+      final root = fakeCheckout();
+      for (final file in ['gleon-ffi/build.rs', 'gleon-ffi/data/a table.bin']) {
+        File('$root/$file')
+          ..createSync(recursive: true)
+          ..writeAsStringSync('x');
+      }
+      final cargo = FakeCargo(
+        compiled: [
+          '$root/gleon-ffi/build.rs',
+          '$root/gleon-ffi/src/lib.rs',
+          '$root/gleon-ffi/data/a table.bin',
+          '/rustlib/src/core/lib.rs',
+        ],
+      );
+
+      final built = await SourceBuild.run(
+        repoRoot: .file(root),
+        targetDir: .directory('${tempPath()}/cargo'),
+        target: .linuxX64,
+        environment: cargoEnvironment(),
+        runProcess: cargo.run,
+      );
+      final checkout = Uri.directory(root);
+      expect(
+        built.dependencies,
+        containsAll([
+          checkout.resolve('Cargo.toml'),
+          checkout.resolve('gleon-ffi/Cargo.toml'),
+          checkout.resolve('gleon-ffi/build.rs'),
+          checkout.resolve('gleon-ffi/src/lib.rs'),
+          Uri.file('$root/gleon-ffi/data/a table.bin'),
+        ]),
+      );
+      expect(
+        built.dependencies,
+        isNot(contains(checkout.resolve('gleon-model/src/rules.rs'))),
+        reason: 'not compiled: the dep-info replaces the glob of src/',
+      );
+      expect(
+        built.dependencies.map((uri) => uri.path),
+        isNot(contains('/rustlib/src/core/lib.rs')),
+      );
     });
 
     test('a failing cargo is an error with its output', () async {

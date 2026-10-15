@@ -22,6 +22,7 @@ const _withoutMetrics = '''
 required_version: ">=0.1.0"
 screenshots:
   - include: "test/goldens/*.png"
+    mode: pixel
 artifacts: .gleon/runs/kept
 ''';
 

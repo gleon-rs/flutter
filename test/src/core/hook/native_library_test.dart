@@ -56,14 +56,21 @@ void main() {
     return library.uri;
   }
 
-  /// What a bundled library depends on, present or not: `native/`, the
-  /// library, the pin and the library's stamp.
-  List<Uri> bundleInputs() => [
-    dir('package/native'),
-    dir('package/native').resolve('$key/$libFileName'),
-    dir('package/native').resolve('gleon_ref'),
-    dir('package/native').resolve('$key/gleon_ref'),
-  ];
+  /// Checks that every one of [dependencies] exists: the hooks runner takes
+  /// a missing file for one modified during the build (it logs "File
+  /// modified during build. Build must be rerun." and re-runs the hook on
+  /// every build) and cannot hash a missing directory at all.
+  void expectExisting(List<Uri> dependencies) {
+    for (final uri in dependencies) {
+      expect(
+        uri.path.endsWith('/')
+            ? Directory.fromUri(uri).existsSync()
+            : File.fromUri(uri).existsSync(),
+        isTrue,
+        reason: '$uri is a dependency but does not exist',
+      );
+    }
+  }
 
   Future<({List<Uri> dependencies, Uri library})> resolve(
     Uri packageRoot, {
@@ -102,6 +109,36 @@ void main() {
   }
 
   group('ffi_path', () {
+    // One app-wide user-define serves every target the app builds for: a
+    // library of another OS would only fail later, at dlopen.
+    test('must be a library of the requested target', () async {
+      final override = write('lib/libgleon_ffi.dylib').uri;
+
+      await expectLater(
+        resolve(package(), userDefines: {'ffi_path': override.toFilePath()}),
+        throwsState(
+          allOf(
+            contains('libgleon_ffi.dylib'),
+            contains('a .so for linux-x64'),
+          ),
+        ),
+      );
+    });
+
+    // Windows takes `.DLL` like `.dll`; any OS may name a file so.
+    test(
+      'is a library of its target whatever the case of its extension',
+      () async {
+        final override = write('lib/LIBGLEON_FFI.SO').uri;
+
+        final (dependencies: _, :library) = await resolve(
+          package(),
+          userDefines: {'ffi_path': override.toFilePath()},
+        );
+        expect(library, override);
+      },
+    );
+
     test('wins over a checkout and a bundled library', () async {
       final override = write('lib/libgleon_ffi.so').uri;
       bundle();
@@ -200,7 +237,14 @@ void main() {
 
       final (:dependencies, :library) = await resolve(package());
       expect(library, bundled);
-      expect(dependencies, bundleInputs());
+      // The directories, hashed by the names of their children, see a pin or
+      // a stamp appear; the files only while they exist.
+      expect(dependencies, [
+        dir('package/native'),
+        dir('package/native/$key'),
+        bundled,
+      ]);
+      expectExisting(dependencies);
     });
 
     for (final stamp in [pin, '$pin${NativeTarget.dirtySuffix}']) {
@@ -216,6 +260,7 @@ void main() {
             dir('package/native').resolve('$key/gleon_ref'),
           ]),
         );
+        expectExisting(dependencies);
       });
     }
 
@@ -286,11 +331,10 @@ void main() {
           },
         );
         expect(File.fromUri(fetched).readAsBytesSync(), library);
-        expect(dependencies, [
-          ...bundleInputs(),
-          packageRoot.resolve('pubspec.yaml'),
-          fetched,
-        ]);
+        // This package has no `native/` at all: nothing to watch there. The
+        // downloaded library is an asset, which the runner hashes itself.
+        expect(dependencies, [packageRoot.resolve('pubspec.yaml')]);
+        expectExisting(dependencies);
       });
     }
 
@@ -303,9 +347,14 @@ void main() {
         userDefines: {'release_url': '${server.url}'},
       );
       expect(File.fromUri(fetched).readAsBytesSync(), library);
-      // The hooks runner hashes directories non-recursively and re-runs the
-      // hook when a missing file appears: a later local build is seen.
-      expect(dependencies, containsAll(bundleInputs()));
+      // `native/` is hashed by the names of its children: a later local
+      // build (a new `native/<target>/`) re-runs the hook.
+      expect(dependencies, [
+        dir('package/native'),
+        dir('package/native').resolve('gleon_ref'),
+        package().resolve('pubspec.yaml'),
+      ]);
+      expectExisting(dependencies);
     });
 
     test('names release_url when the mirror lacks the release', () async {

@@ -3,8 +3,10 @@ import 'dart:io';
 
 /// A local release mirror: serves [files] (name → bytes), answers [redirects]
 /// (name → location), sends redirects whose body never arrives for [stalled]
-/// and files whose body never arrives for [stalledFiles], answers [statuses]
-/// (name → bare status code) and counts requests per name in [hits].
+/// and files whose body never arrives for [stalledFiles], sends the files of
+/// [dripped] chunked in four parts with that pause before each, answers
+/// [statuses] (name → bare status code) and counts requests per name in
+/// [hits].
 class ReleaseServer {
   ReleaseServer._(
     this._server, {
@@ -12,6 +14,7 @@ class ReleaseServer {
     required this.redirects,
     required this.stalled,
     required this.stalledFiles,
+    required this.dripped,
     required this.statuses,
   });
 
@@ -26,6 +29,9 @@ class ReleaseServer {
 
   /// Names answered with 200 and a body that stalls.
   final Set<String> stalledFiles;
+
+  /// Names whose body arrives in four parts, with this pause before each.
+  final Map<String, Duration> dripped;
 
   /// Names answered with only a status code (no body, no headers).
   final Map<String, int> statuses;
@@ -46,6 +52,7 @@ class ReleaseServer {
     Map<String, String> redirects = const {},
     Set<String> stalledRedirects = const {},
     Set<String> stalledFiles = const {},
+    Map<String, Duration> dripped = const {},
     Map<String, int> statuses = const {},
   }) async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -55,6 +62,7 @@ class ReleaseServer {
       redirects: redirects,
       stalled: stalledRedirects,
       stalledFiles: stalledFiles,
+      dripped: dripped,
       statuses: statuses,
     );
     release._subscription = server.listen(release._handle);
@@ -89,6 +97,21 @@ class ReleaseServer {
         ..add(const [0]);
       // The promised body never arrives; the client must give up.
       await response.flush();
+
+      return;
+    }
+    if ((files[name], dripped[name]) case (final body?, final pause?)) {
+      // Chunked and unbuffered: each part leaves when it is flushed, and
+      // nothing announces the size.
+      response.bufferOutput = false;
+      final part = (body.length / 4).ceil();
+      for (int start = 0; start < body.length; start += part) {
+        // A slow server: the client waits for each part.
+        await Future<void>.delayed(pause);
+        response.add(body.sublist(start, (start + part).clamp(0, body.length)));
+        await response.flush();
+      }
+      await response.close();
 
       return;
     }

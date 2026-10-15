@@ -200,10 +200,13 @@ abstract final class NativeEngine {
     }
   }
 
-  /// The ABI version reported by [read], the first native call of a process.
+  /// The ABI version reported by [read], the first native call of a process
+  /// (every other call needs a session, which checks it first).
   ///
   /// Throws a [StateError] saying what to do when the library is not there:
-  /// `dart:ffi` itself only reports an unresolved symbol.
+  /// `dart:ffi` itself only reports an unresolved symbol. A library that is
+  /// there but cannot be loaded by this host (an older glibc, musl) is told
+  /// apart from one the build hook never provided (a device, the web).
   @visibleForTesting
   static int loadAbiVersion(int Function() read) {
     try {
@@ -211,18 +214,60 @@ abstract final class NativeEngine {
       // ignore: avoid_catching_errors, dart:ffi reports a missing asset so.
     } on ArgumentError catch (error, stackTrace) {
       Error.throwWithStackTrace(
-        StateError(
-          'gleon: the native library was not loaded ($error). The build '
-          'hook of the gleon package provides it for host `flutter test` on '
-          'macOS arm64, Linux x64/arm64 and Windows x64 only: app builds for '
-          'devices (Android, iOS) and other targets get none, and web cannot '
-          'load it. Run golden tests with `flutter test` on such a host, and '
-          'see the package README for the `ffi_path` and `gleon_repo` '
-          'user-defines.',
-        ),
+        StateError(describeLoadError(error)),
         stackTrace,
       );
     }
+  }
+
+  /// The signs of a library the dynamic loader of the host refused: a glibc
+  /// older than the one it was built against, a C library it does not link
+  /// (musl), a missing dependency.
+  static const _loaderFailures = [
+    'GLIBC_',
+    'cannot open shared object',
+    'dlopen',
+    'image not found',
+    'LoadLibrary',
+    'is not a valid Win32',
+  ];
+
+  /// The signs of a library file that is not there (any more): the loader
+  /// of macOS, Linux and Windows. Checked first: on Linux it also says
+  /// "cannot open shared object".
+  static const _missingFile = [
+    '(no such file)',
+    'No such file or directory',
+    'The specified module could not be found',
+  ];
+
+  /// The message for the [error] `dart:ffi` raised loading the library.
+  @visibleForTesting
+  static String describeLoadError(ArgumentError error) {
+    final text = '$error';
+    if (_missingFile.any(text.contains)) {
+      return 'gleon: the native library file is missing ($error). The build '
+          'output it was loaded from was removed after the build: run '
+          '`flutter test` again (after `flutter clean` if it persists), and '
+          'the build hook provides it again.';
+    }
+
+    return _loaderFailures.any(text.contains)
+        ? 'gleon: the native library could not be loaded on this host '
+              '($error). The released Linux libraries are built on Ubuntu '
+              '26.04 and need its glibc or a newer one (the PLATFORMS.txt of '
+              'the release names the exact version); musl (Alpine) is not '
+              'supported; macOS needs 11 or newer. Run the tests on a '
+              'supported host, or build the library for this one with the '
+              '`gleon_repo` user-define and point `ffi_path` at it (see the '
+              'package README).'
+        : 'gleon: the native library was not loaded ($error). The build '
+              'hook of the gleon package provides it for host `flutter test` '
+              'on macOS arm64, Linux x64/arm64 and Windows x64 only: app '
+              'builds for devices (Android, iOS) and other targets get none, '
+              'and web cannot load it. Run golden tests with `flutter test` '
+              'on such a host, and see the package README for the `ffi_path` '
+              'and `gleon_repo` user-defines.';
   }
 
   /// Throws a [StateError] unless [abiVersion] is [expectedAbiVersion].

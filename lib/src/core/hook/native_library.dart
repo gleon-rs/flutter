@@ -73,6 +73,18 @@ final class NativeLibrary {
           '${override.toFilePath()}',
         );
       }
+      // The user-define applies to every target an app builds for, but a
+      // library loads on one OS only: say so now rather than at dlopen.
+      // Case-insensitively: Windows takes `.DLL` like `.dll`.
+      if (target.libFileName.split('.').lastOrNull case final suffix?
+          when !override.path.toLowerCase().endsWith('.$suffix')) {
+        throw StateError(
+          'gleon: user-define `ffi_path` names ${override.toFilePath()}, but '
+          'this build needs a .$suffix for ${target.key}. The define applies '
+          'to every platform the app builds for: set it only where you test, '
+          'or use `release_url` (a mirror) or `gleon_repo` instead.',
+        );
+      }
 
       return (dependencies: [override], library: override);
     }
@@ -109,14 +121,17 @@ final class NativeLibrary {
     final targetDir = nativeDir.resolve('${target.key}/');
     final bundled = File.fromUri(targetDir.resolve(target.libFileName));
     final stamp = File.fromUri(targetDir.resolve(pinFile));
-    // Present or not: the hooks runner hashes a directory by its direct
-    // children only and re-runs the hook when a missing file appears, so a
-    // later local build (or a moved pin) is seen in either branch.
+    // Only what exists is a dependency: the hooks runner takes a missing file
+    // for one modified during the build (it re-runs the hook on every build
+    // and logs an error) and fails on a missing directory. The directories
+    // are hashed by the names of their children, so a library, stamp or pin
+    // that appears later (a local build, a moved pin) re-runs the hook; the
+    // files by their content.
     final inputs = [
-      nativeDir,
-      bundled.uri,
-      nativeDir.resolve(pinFile),
-      stamp.uri,
+      for (final dir in [nativeDir, targetDir])
+        if (Directory.fromUri(dir).existsSync()) dir,
+      for (final file in [bundled.uri, nativeDir.resolve(pinFile), stamp.uri])
+        if (File.fromUri(file).existsSync()) file,
     ];
     if (bundled.existsSync()) {
       _rejectStaleBuild(
@@ -145,12 +160,14 @@ final class NativeLibrary {
       packageVersion: version,
       target: target,
       cacheDir: Directory.fromUri(sharedOutputDir),
+      // A git checkout names the gleon commit it expects; the pub.dev
+      // archive ships no pin (and its own libraries).
+      pin: NativeTarget.readPin(packageRoot),
     );
 
-    return (
-      dependencies: [...inputs, pubspec, library.uri],
-      library: library.uri,
-    );
+    // Not the downloaded library: written during this build, it would count
+    // as modified during it; the runner hashes the asset's file itself.
+    return (dependencies: [...inputs, pubspec], library: library.uri);
   }
 
   /// The `release_url` [url] as the directory its files are resolved in.

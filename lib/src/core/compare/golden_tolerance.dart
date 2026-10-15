@@ -9,7 +9,7 @@ import 'tolerances.dart';
 ///
 /// Without a tolerance, `matchesGoldenFile` compares exactly, like Flutter.
 /// Values are validated when a matcher is created: out-of-range values throw
-/// an [ArgumentError]. Dot shorthands keep call sites short:
+/// an [ArgumentError].
 ///
 /// ```dart
 /// import "package:gleon/gleon.dart";
@@ -20,12 +20,16 @@ import 'tolerances.dart';
 ///       find.text("Card"),
 ///       matchesGoldenFile(
 ///         "goldens/card.png",
-///         tolerance: const .ssim(minSimilarity: 0.9),
+///         tolerance: const GoldenTolerance.ssim(minSimilarity: 0.9),
 ///       ),
 ///     );
 ///   });
 /// }
 /// ```
+///
+/// With a language version of 3.10 or newer (the `sdk` lower bound of the
+/// test's own package), dot shorthands keep call sites short:
+/// `tolerance: const .ssim(minSimilarity: 0.9)`.
 @immutable
 @pragma('vm:deeply-immutable')
 sealed class GoldenTolerance {

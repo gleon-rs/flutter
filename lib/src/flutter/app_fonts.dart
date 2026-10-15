@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'shared_load.dart';
+
 /// Loads the real fonts of the app into this test process, so goldens show
 /// text instead of the boxes of Flutter's test font: every family of the
 /// app's `FontManifest.json` (its own fonts, those of its packages,
@@ -11,9 +13,10 @@ import 'package:flutter_test/flutter_test.dart';
 /// from the Flutter SDK unless the app bundles it.
 ///
 /// The fonts are aligned to lay text out alike on every OS: Windows takes
-/// line heights from other font tables than macOS and Linux, which
-/// [AppFonts.withPortableLineMetrics] makes agree. Goldens therefore differ
-/// only in the rasterization of glyphs, inside the boxes of text.
+/// line heights from other font tables than macOS and Linux, so the Windows
+/// and typographic line metrics of every font are set to its `hhea` ones
+/// (TrueType collections, `.ttc`, are loaded as they are). Goldens therefore
+/// differ only in the rasterization of glyphs, inside the boxes of text.
 /// Line heights on Windows can differ from the real app there.
 ///
 /// Call it once, before the tests, from `test/flutter_test_config.dart`:
@@ -29,10 +32,23 @@ import 'package:flutter_test/flutter_test.dart';
 /// }
 /// ```
 ///
-/// Later calls reuse the first. Throws a [StateError] when the Flutter SDK
-/// has no Roboto (`flutter test` sets `FLUTTER_ROOT`).
+/// or from `setUpAll`. Inside a test body time is fake and the file reads
+/// never complete: there, call `await tester.runAsync(loadAppFonts)`.
+///
+/// Later calls reuse the first; a load that failed, or that a test left
+/// unfinished (awaited in its body without `runAsync`), is started again.
+/// Throws a [StateError] when the Flutter SDK has no Roboto (`flutter test`
+/// sets `FLUTTER_ROOT`).
 // ignore: prefer-static-class, the setup call of test configs.
-Future<void> loadAppFonts() => AppFonts._loaded ??= AppFonts._load();
+Future<void> loadAppFonts() {
+  final binding = TestWidgetsFlutterBinding.ensureInitialized();
+  final loading = AppFonts._fonts.load();
+  // A load awaited in a test body never finishes under its fake time: the
+  // next test starts its own instead of waiting for this one forever.
+  if (binding.inTest) addTearDown(AppFonts._fonts.forgetUnfinished);
+
+  return loading;
+}
 
 /// The fonts of [loadAppFonts].
 abstract final class AppFonts {
@@ -55,12 +71,17 @@ abstract final class AppFonts {
     'Roboto-BlackItalic.ttf',
   ];
 
-  static Future<void>? _loaded;
+  /// The fonts, loaded once for every caller.
+  // ignore: prefer-correct-handler-name, the loader of the fonts, no handler.
+  static final _fonts = SharedLoad(_load);
 
   static Future<void> _load() async {
-    TestWidgetsFlutterBinding.ensureInitialized();
+    // `load`, not `loadString`: the bundle caches the future of the latter,
+    // and one a test left unfinished would never complete for a later load.
     final manifest = json.decode(
-      await rootBundle.loadString('FontManifest.json'),
+      utf8.decode(
+        Uint8List.sublistView(await rootBundle.load('FontManifest.json')),
+      ),
     );
     bool hasRoboto = false;
     if (manifest is List<Object?>) {

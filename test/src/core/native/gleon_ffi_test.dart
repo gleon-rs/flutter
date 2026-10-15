@@ -180,8 +180,8 @@ void main() {
         'GleonSummary': _summaryOffsets(),
       });
     },
-    skip: lib == null || !lib.contains('offset_of!')
-        ? 'needs ../gleon at a pin with the layout assertions'
-        : false,
+    // Only without the checkout: a pin whose lib.rs lost the layout
+    // assertions (moved or removed) fails here instead of skipping forever.
+    skip: lib == null ? 'needs ../gleon at the pinned commit' : false,
   );
 }

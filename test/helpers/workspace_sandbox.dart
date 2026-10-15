@@ -13,6 +13,8 @@ import 'package:gleon/src/flutter/gleon_matches_golden_file.dart';
 import 'package:gleon/src/flutter/ignore_regions.dart';
 import 'package:json_schema/json_schema.dart';
 
+import 'session_file_comparator.dart';
+
 /// The package goldens, relative to the package root (`flutter test`'s
 /// working directory).
 const goldenSource = 'test/goldens';
@@ -79,7 +81,7 @@ final class WorkspaceSandbox {
     final sandbox = WorkspaceSandbox._(root);
     final testFile = root.uri.resolve('test/sandbox_test.dart');
     goldenFileComparator = installsGleonComparator
-        ? GleonFileComparator.withSession(testFile, sandbox.session())
+        ? SessionFileComparator(testFile, sandbox.session())
         : LocalFileComparator(testFile);
 
     return sandbox;

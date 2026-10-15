@@ -65,12 +65,14 @@ abstract final class AlchemistExpectation {
 
   /// Appended to failures while a `LocalFileComparator` subclass other than
   /// gleon's is installed ([comparator] names its type): alchemist installs
-  /// one for a `diffThreshold` above 0, whose threshold gleon never applies.
+  /// one for a `diffThreshold` above 0, a project may have its own; gleon
+  /// compares the golden itself, so neither its comparison nor a threshold
+  /// it applies is used.
   static String thresholdNote(Type comparator) =>
-      'gleon: the threshold of the golden file comparator ($comparator, '
-      "alchemist's `diffThreshold`) does not apply to gleon's comparison; "
-      'set a gleon tolerance instead (`.gleon/gleon.yaml` or '
-      '`gleonAlchemistExpectation(tolerance: ...)`).';
+      'gleon: gleon compared this golden itself, so the installed golden '
+      'file comparator ($comparator) and any threshold it applies '
+      "(alchemist's `diffThreshold`) did not; set a gleon tolerance instead "
+      '(`.gleon/gleon.yaml` or `gleonAlchemistExpectation(tolerance: ...)`).';
 
   /// [gleonAlchemistExpectation], comparing in [session] (null: the
   /// process's, see `FlutterSession.process`).

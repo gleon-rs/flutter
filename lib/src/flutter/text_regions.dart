@@ -21,10 +21,11 @@ abstract final class TextRegions {
   /// the boxes of the line's text (not of its `WidgetSpan`s), grown by
   /// [margin] of its height, clipped by the paragraph (when its text
   /// overflows) and by its ancestors, in whole pixels of the image (rounded
-  /// outwards). Text in
-  /// children that are not painted (`Offstage`, `Visibility`) is skipped, so
-  /// is a line a perspective transform sends to infinity; empty text has no
-  /// region.
+  /// outwards). Only text its parents paint counts ([_PaintRecorder]): not
+  /// the hidden children of an `IndexedStack`, `Offstage`, `Visibility` or a
+  /// sliver, nor a route or overlay entry under an opaque one. A line a
+  /// perspective transform sends to infinity is skipped too; empty text has
+  /// no region.
   static List<PixelRegion> captured(Element element) {
     RenderObject? boundary = element.renderObject;
     while (boundary != null && !boundary.isRepaintBoundary) {
@@ -32,6 +33,7 @@ abstract final class TextRegions {
     }
     if (boundary == null) return const [];
     final bounds = boundary.paintBounds;
+    final painted = _PaintRecorder.paintedBy(boundary);
     final regions = <PixelRegion>[];
     // Render objects with the transform from their coordinates to the image
     // and the clip of their ancestors in the image.
@@ -59,7 +61,7 @@ abstract final class TextRegions {
       final children = <RenderObject>[];
       object.visitChildren(children.add);
       for (final child in children) {
-        if (object.paintsChild(child) && _isSized(child)) {
+        if (painted.contains(child)) {
           pending.add(_child(object, child, toImage, clip));
         }
       }
@@ -87,10 +89,6 @@ abstract final class TextRegions {
       toImage: transform,
     );
   }
-
-  /// Whether [object] has a size, or needs none.
-  static bool _isSized(RenderObject object) =>
-      object is! RenderBox || object.hasSize;
 
   /// The lines of text of [object] in its own coordinates, grown by
   /// [margin] of their height and clipped to the object (grown the same)
@@ -166,3 +164,63 @@ abstract final class TextRegions {
 /// A render object to visit: the transform from its coordinates to the image,
 /// and the clip of its ancestors in the image.
 typedef _Painted = ({Rect clip, RenderObject object, Matrix4 toImage});
+
+/// A paint of the render tree under a repaint boundary that only records which
+/// render objects their parents paint (`paintChild`): the one sure sign that
+/// text is visible, since not every render object that hides a child
+/// overrides `paintsChild` (`IndexedStack`, `Visibility.maintain`, slivers,
+/// the offstage entries of an overlay).
+///
+/// It draws into a throwaway picture and never adopts a live layer: children
+/// are painted in place instead of being composited, pushed layers are not
+/// appended anywhere, and every render object gets the offset of a real paint,
+/// so the layers it updates keep their values and the frames after it render
+/// as before.
+final class _PaintRecorder extends PaintingContext {
+  _PaintRecorder(ContainerLayer root, this._painted) : super(root, .largest);
+
+  final Set<RenderObject> _painted;
+
+  /// The render objects [boundary] paints, itself included, as of its last
+  /// layout.
+  static Set<RenderObject> paintedBy(RenderObject boundary) {
+    final painted = <RenderObject>{boundary};
+    final layer = ContainerLayer();
+    final root = LayerHandle(layer);
+    final recorder = _PaintRecorder(layer, painted);
+    try {
+      boundary.paint(recorder, .zero);
+      recorder.stopRecordingIfNeeded();
+    } finally {
+      // Disposes the throwaway picture.
+      root.layer = null;
+    }
+
+    return painted;
+  }
+
+  @override
+  void paintChild(RenderObject child, Offset offset) {
+    // ignore: avoid-collection-mutating-methods, recording is its purpose.
+    _painted.add(child);
+    // In place, also a repaint boundary (compositing it would move its live
+    // layer here), and with the offset of a real paint: a repaint boundary
+    // paints at zero in its own layer. Render objects set their live layers
+    // from the offset (a leader layer, an opacity layer): the same values
+    // leave them as they are.
+    child.paint(this, child.isRepaintBoundary ? .zero : offset);
+  }
+
+  @override
+  void pushLayer(
+    ContainerLayer childLayer,
+    PaintingContextCallback painter,
+    Offset offset, {
+    Rect? childPaintBounds,
+  }) => painter(this, offset);
+
+  // A live layer is never adopted: a platform view or texture paints no text.
+  @override
+  // ignore: no-empty-block, nothing to record.
+  void addLayer(Layer layer) {}
+}

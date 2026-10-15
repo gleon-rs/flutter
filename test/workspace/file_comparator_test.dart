@@ -71,6 +71,7 @@ void main() {
 required_version: ">=0.1.0"
 screenshots:
   - include: "test/goldens/*.png"
+    mode: pixel
     diff: { threshold: 0.001 }
 ''',
       );
@@ -114,6 +115,7 @@ required_version: ">=0.1.0"
 fallback_platform: $foreignPlatform
 screenshots:
   - include: "test/goldens/*.png"
+    mode: pixel
     diff: { threshold: 0 }
 ''',
       );
@@ -153,6 +155,7 @@ screenshots:
 required_version: ">=0.1.0"
 screenshots:
   - include: "test/goldens/*.png"
+    mode: pixel
     diff: $diff
 ''';
       final sandbox = _installed(yaml: yaml('{ threshold: 0.01 }'));

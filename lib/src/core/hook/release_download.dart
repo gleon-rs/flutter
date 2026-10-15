@@ -4,9 +4,11 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
+import 'package:meta/meta.dart';
 
 import 'atomic_write.dart';
 import 'native_target.dart';
+import 'network_failure.dart';
 
 typedef _Checksums = ({Map<String, String> hashes, bool isCached});
 
@@ -22,6 +24,11 @@ abstract final class ReleaseDownload {
   /// Name of the checksum file attached to every release.
   static const checksumsFileName = 'SHA256SUMS.txt';
 
+  /// Name of the file of a release that names the gleon commit its libraries
+  /// were built from (`native/gleon_ref` of its tag), listed in its
+  /// [checksumsFileName]; releases before 0.5.0 have none.
+  static const pinFileName = 'gleon_ref.txt';
+
   /// Where the release assets of package [version] live.
   static Uri defaultUrl(String version) => .parse(
     'https://github.com/gleon-rs/flutter/releases/download/v$version/',
@@ -32,6 +39,22 @@ abstract final class ReleaseDownload {
     "^version:\\s*[\"']?([^\\s\"'#]+)",
     multiLine: true,
   ).firstMatch(content)?.group(1);
+
+  /// The proxy of [url] in [environment] (`HTTPS_PROXY`, `NO_PROXY`, ...):
+  /// none for this machine, where a local mirror lives, whatever the
+  /// environment says (`HttpClient.findProxyFromEnvironment` sends it to the
+  /// proxy unless `NO_PROXY` names it).
+  @visibleForTesting
+  static String proxyFor(Uri url, Map<String, String> environment) =>
+      isThisMachine(url)
+      ? 'DIRECT'
+      : HttpClient.findProxyFromEnvironment(url, environment: environment);
+
+  /// Whether [url] names this machine: `localhost` or a loopback address
+  /// (all of 127.0.0.0/8, where Debian names the host 127.0.1.1, and ::1).
+  static bool isThisMachine(Uri url) =>
+      url.host == 'localhost' ||
+      (InternetAddress.tryParse(url.host)?.isLoopback ?? false);
 
   /// Parses `sha256sum` output (`<hex>  <name>` per line) into name → hash.
   static Map<String, String> parseChecksums(String content) => {
@@ -51,21 +74,29 @@ abstract final class ReleaseDownload {
   /// upgrades is asked again; a cached list that disagrees with the mirror
   /// (an entry missing, or a library with another hash) is reloaded once.
   ///
+  /// A checkout of the package (a git dependency) passes its [pin]
+  /// (`native/gleon_ref`): a release whose libraries were built from another
+  /// commit fails, since its engine is not the one the checkout expects.
+  ///
   /// [redirectTimeout] bounds reading the body of a redirect response,
-  /// [bodyTimeout] reading a downloaded file.
+  /// [bodyTimeout] a pause in a downloaded file (a slow but steady download
+  /// goes on), [maxBytes] its size (no library comes near).
   static Future<File> fetchLibrary({
     required Uri releaseUrl,
     required String packageVersion,
     required NativeTarget target,
     required Directory cacheDir,
+    String? pin,
     Duration redirectTimeout = const Duration(seconds: 30),
-    Duration bodyTimeout = const Duration(minutes: 3),
+    Duration bodyTimeout = const Duration(minutes: 1),
+    int maxBytes = 64 << 20,
   }) async {
     if (!_Release.isAllowedUrl(releaseUrl)) {
-      throw _Release.failure(
-        'release_url must be an https URL (plain http only for localhost), '
-        'got "$releaseUrl". For a library file on disk, set the `ffi_path` '
-        'user-define instead.',
+      throw StateError(
+        'gleon: release_url must be an https URL (plain http only to this '
+        'machine), got '
+        '"${releaseUrl.replace(userInfo: _Release._none)}". For a '
+        'library file on disk, set the `ffi_path` user-define instead.',
       );
     }
     final fetch = _Release(
@@ -74,9 +105,10 @@ abstract final class ReleaseDownload {
       cacheDir: cacheDir,
       redirectTimeout: redirectTimeout,
       bodyTimeout: bodyTimeout,
+      maxBytes: maxBytes,
     );
     try {
-      return await fetch.library(target);
+      return await fetch.library(target, pin: pin);
     } finally {
       fetch.close();
     }
@@ -91,6 +123,7 @@ final class _Release {
     required this.cacheDir,
     required this.redirectTimeout,
     required this.bodyTimeout,
+    required this.maxBytes,
   });
 
   final Uri url;
@@ -98,6 +131,7 @@ final class _Release {
   final Directory cacheDir;
   final Duration redirectTimeout;
   final Duration bodyTimeout;
+  final int maxBytes;
 
   static const _overridesHint =
       'Alternatively set the `ffi_path` user-define to a local copy of the '
@@ -105,14 +139,28 @@ final class _Release {
       'build it from a gleon checkout (see the package README).';
 
   /// A download or verification failure with an actionable [message]; hook
-  /// errors are printed verbatim.
-  static StateError failure(String message) => .new('gleon: $message');
+  /// errors are printed verbatim, without the credentials a mirror URL may
+  /// hold ([_redacted]).
+  StateError failure(String message) => .new('gleon: ${_redacted(message)}');
+
+  /// [failure] for a download the network failed ([NetworkFailure]).
+  NetworkFailure networkFailure(String message) =>
+      .new('gleon: ${_redacted(message)}');
+
+  /// [message] without the user and password of any URL in it (a private
+  /// mirror, a redirect), which logs must never show.
+  static String _redacted(String message) =>
+      message.replaceAllMapped(_userInfo, (match) => match.group(1) ?? _none);
+
+  /// The user and password of a URL (`scheme://user:password@`), after its
+  /// scheme (group 1).
+  static final _userInfo = RegExp(r'([a-zA-Z][a-zA-Z0-9+.-]*://)[^/@\s]+@');
 
   static const _attempts = 3;
   static const _maxRedirects = 5;
 
   final _client = HttpClient()
-    ..findProxy = HttpClient.findProxyFromEnvironment
+    ..findProxy = ((url) => ReleaseDownload.proxyFor(url, Platform.environment))
     ..connectionTimeout = const Duration(seconds: 30)
     ..userAgent = 'gleon-flutter-build-hook';
 
@@ -121,8 +169,7 @@ final class _Release {
   /// would let an attacker replace both.
   static bool isAllowedUrl(Uri url) =>
       url.isScheme('https') ||
-      (url.isScheme('http') &&
-          const {'localhost', '127.0.0.1', '::1'}.contains(url.host));
+      (url.isScheme('http') && ReleaseDownload.isThisMachine(url));
 
   /// Whether [url] is a `release_url` mirror rather than this package's
   /// GitHub Release.
@@ -132,13 +179,61 @@ final class _Release {
   String get _mirrorHint => isMirror
       ? ' The `release_url` user-define ($url) must serve the release of '
             'gleon $packageVersion unchanged.'
-      : _noHint;
+      : _none;
 
-  static const _noHint = '';
+  /// Nothing: no hint, no user and password in a shown URL.
+  static const _none = '';
 
   void close() => _client.close(force: true);
 
-  Future<File> library(NativeTarget target) async {
+  /// The verified library of [target]; the release must have been built
+  /// from [pin] when one is given and the release names its own.
+  Future<File> library(NativeTarget target, {String? pin}) async {
+    final (:file, :checksums) = await _library(target);
+    if (pin != null) await _checkPin(pin, checksums);
+
+    return file;
+  }
+
+  /// Fails unless the release names no pin or [pin]: its libraries were
+  /// built from another gleon commit than the checkout's.
+  Future<void> _checkPin(String pin, _Checksums checksums) async {
+    final expected = checksums.hashes[ReleaseDownload.pinFileName];
+    if (expected == null) return;
+    final cached = File.fromUri(
+      cacheDir.uri.resolve('$expected/${ReleaseDownload.pinFileName}'),
+    );
+    final List<int> bytes;
+    if (cached.existsSync() && await AtomicWrite.sha256Of(cached) == expected) {
+      bytes = cached.readAsBytesSync();
+    } else {
+      final source = url.resolve(ReleaseDownload.pinFileName);
+      bytes = await _download(source);
+      if (sha256.convert(bytes).toString() != expected) {
+        throw failure(
+          'checksum mismatch for $source (expected $expected per '
+          '$_checksumsUrl). The file was not used.$_mirrorHint',
+        );
+      }
+      await AtomicWrite.bytes(cached, bytes, expectedSha256: expected);
+    }
+    final released = utf8.decode(bytes, allowMalformed: true).trim();
+    if (released != pin) {
+      throw failure(
+        'this checkout of the package pins gleon $pin (native/gleon_ref), but '
+        'the release v$packageVersion at $url was built from gleon '
+        '$released: its engine is not the one this checkout expects. Depend '
+        'on a released version (git `ref: v$packageVersion`, or the tag of a '
+        'later release), whose libraries match its pin. $_overridesHint',
+      );
+    }
+  }
+
+  /// The verified library of [target] and the checksum list that verified
+  /// it.
+  Future<({_Checksums checksums, File file})> _library(
+    NativeTarget target,
+  ) async {
     _Checksums checksums = await _checksums();
     if (checksums.hashes[target.assetName] == null && checksums.isCached) {
       // A cached list can only be stale for a mirror.
@@ -148,7 +243,7 @@ final class _Release {
     File library = _cachedLibrary(expected, target);
     if (library.existsSync() &&
         await AtomicWrite.sha256Of(library) == expected) {
-      return library;
+      return (checksums: checksums, file: library);
     }
     final assetUrl = url.resolve(target.assetName);
     final bytes = await _download(assetUrl);
@@ -168,7 +263,7 @@ final class _Release {
     }
     await AtomicWrite.bytes(library, bytes, expectedSha256: expected);
 
-    return library;
+    return (checksums: checksums, file: library);
   }
 
   /// The hash of [target]'s library in [checksums].
@@ -228,12 +323,7 @@ final class _Release {
     try {
       final response = await _get(source);
       final status = response.statusCode;
-      if (status == HttpStatus.ok) {
-        final builder = BytesBuilder(copy: false);
-        await _read(response, response.forEach(builder.add), bodyTimeout);
-
-        return builder.takeBytes();
-      }
+      if (status == HttpStatus.ok) return await _body(response, source);
       // An error page is never needed: drop it instead of reading it.
       await _drain(response);
       if (status == HttpStatus.notFound) {
@@ -247,16 +337,22 @@ final class _Release {
                     'commit. $_overridesHint',
         );
       }
-      if (status < HttpStatus.internalServerError || isLast) {
-        throw failure(
-          'downloading $source failed with HTTP $status. $_overridesHint',
-        );
+      // A failing or busy server, or one that timed out the request.
+      final isTransient =
+          status >= HttpStatus.internalServerError ||
+          status == HttpStatus.tooManyRequests ||
+          status == HttpStatus.requestTimeout;
+      if (!isTransient || isLast) {
+        final message =
+            'downloading $source failed with HTTP $status. $_overridesHint';
+
+        throw isTransient ? networkFailure(message) : failure(message);
       }
     } on Exception catch (error, stackTrace) {
       // SocketException, HttpException, TimeoutException, TLS errors, ...
       if (isLast) {
         Error.throwWithStackTrace(
-          failure(
+          networkFailure(
             'could not download $source ($error). Check the network or proxy '
             '(HTTPS_PROXY is honored), or download the file manually. '
             '$_overridesHint',
@@ -303,6 +399,41 @@ final class _Release {
     }
   }
 
+  /// The body of [response] from [source]: at most [maxBytes], with no pause
+  /// longer than [bodyTimeout] between its parts. A stalled body drops its
+  /// connection, so a retry never reuses it (the retry loop in [_download]
+  /// then reports the timeout).
+  Future<List<int>> _body(HttpClientResponse response, Uri source) async {
+    final tooLarge = failure(
+      '$source sends more than $maxBytes bytes, more than any library: '
+      'refused.$_mirrorHint',
+    );
+    if (response.contentLength > maxBytes) {
+      await _drop(response);
+
+      throw tooLarge;
+    }
+    final builder = BytesBuilder(copy: false);
+    try {
+      await for (final part in response.timeout(bodyTimeout)) {
+        builder.add(part);
+        if (builder.length > maxBytes) throw tooLarge;
+      }
+    } on TimeoutException {
+      await _drop(response);
+
+      rethrow;
+    }
+
+    return builder.takeBytes();
+  }
+
+  /// Closes the connection of [response] for good.
+  static Future<void> _drop(HttpClientResponse response) async {
+    final socket = await response.detachSocket();
+    socket.destroy();
+  }
+
   /// Discards a body that is never used (redirects, error pages).
   Future<void> _drain(HttpClientResponse response) =>
       _read(response, response.drain<void>(), redirectTimeout);
@@ -319,8 +450,7 @@ final class _Release {
       await reading.timeout(timeout);
     } on TimeoutException {
       // If the connection is already gone, that error is retried instead.
-      final socket = await response.detachSocket();
-      socket.destroy();
+      await _drop(response);
 
       rethrow;
     }
