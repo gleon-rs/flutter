@@ -222,11 +222,11 @@ with or without a `.gleon/gleon.yaml`. Then a golden compares in one of two ways
 
 A golden without that chunk (recorded by Flutter, or by gleon before 0.5.0) counts as recorded on
 the `fallback_platform` of its `.gleon/gleon.yaml`, else as recorded nowhere known: then no
-platform compares its text, and a pass whose text differed says so once per test file (each runs
-in its own process). Record
-such goldens again with `flutter test --update-goldens` on your main platform: the same image is
-written once more, with its stamp. Tools that strip text chunks from PNGs (optimizers such as
-`oxipng --strip`) drop the platform too.
+platform compares its text, and a pass whose text differed says so once per test process
+(`flutter test` runs each test file in its own). Record such goldens again with
+`flutter test --update-goldens` on your main platform: the same image is written once more, with
+its stamp. Tools that strip text chunks from PNGs (optimizers such as `oxipng --strip`) drop the
+platform too.
 
 **CI recipe:** run one job on the platform you record goldens on (a macOS runner for goldens
 recorded on a Mac). It is the only job that compares text; the others compare everything else.
@@ -478,7 +478,7 @@ A widget golden (a `Finder`), from the captured frame to the verdict: Flutter en
 as a PNG and compares it with its comparator (a pass short-cuts on equal bytes); gleon passes the
 frame's raw pixels and encodes a PNG only to keep it (a failure); a `ui.Image` goes the same way.
 Rendering the frame is the same for both and not measured. Exact, no `.gleon/` workspace; Apple
-M3 Max, macOS, Flutter 3.47.6, gleon 0.3.0 (the engine is unchanged since), mean latency with
+M3 Max, macOS, Flutter 3.47.6, measured with gleon 0.3.0, mean latency with
 [bench_press](https://pub.dev/packages/bench_press):
 
 | Scenario                                      | Golden    | Flutter SDK | gleon   | Speedup |

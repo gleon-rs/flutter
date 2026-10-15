@@ -26,12 +26,13 @@ final class RunResources {
   /// The stray `~/.gleon/gleon.yaml`, once written.
   StrayHomeConfig? stray;
 
-  bool _isCleaned = false;
+  Future<void>? _cleanUp;
 
-  /// Cleans up once, whoever asks first (the end of the run, an interrupt).
-  Future<void> cleanUp() async {
-    if (_isCleaned) return;
-    _isCleaned = true;
+  /// Cleans up once, whoever asks first (the end of the run, an interrupt);
+  /// every caller waits until it is done.
+  Future<void> cleanUp() => _cleanUp ??= _clean();
+
+  Future<void> _clean() async {
     stray?.remove();
     await server?.close();
     if (isKept) {

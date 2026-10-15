@@ -223,8 +223,17 @@ void main() {
     // outside the checkout (the standard library) are no inputs of it.
     test('depends on what cargo compiled inside the checkout', () async {
       final root = fakeCheckout();
-      for (final file in ['gleon-ffi/build.rs', 'gleon-ffi/data/a table.bin']) {
-        File('$root/$file')
+      // The standard library, and a sibling reached through `..`: outside.
+      final outside = [
+        '${tempPath()}/rustlib/src/core/lib.rs',
+        '$root/../gleon-sibling/src/lib.rs',
+      ];
+      for (final file in [
+        '$root/gleon-ffi/build.rs',
+        '$root/gleon-ffi/data/a table.bin',
+        ...outside,
+      ]) {
+        File(file)
           ..createSync(recursive: true)
           ..writeAsStringSync('x');
       }
@@ -232,8 +241,9 @@ void main() {
         compiled: [
           '$root/gleon-ffi/build.rs',
           '$root/gleon-ffi/src/lib.rs',
-          '$root/gleon-ffi/data/a table.bin',
-          '/rustlib/src/core/lib.rs',
+          // As rustc joins an `include_bytes!` path to its source file.
+          '$root/gleon-ffi/src/../data/a table.bin',
+          ...outside,
         ],
       );
 
@@ -262,10 +272,13 @@ void main() {
         isNot(contains(checkout.resolve('gleon-model/src/rules.rs'))),
         reason: 'not compiled: the dep-info replaces the glob of src/',
       );
-      expect(
-        built.dependencies.map((uri) => uri.path),
-        isNot(contains('/rustlib/src/core/lib.rs')),
-      );
+      for (final file in outside) {
+        expect(
+          built.dependencies,
+          isNot(contains(Uri.file(file))),
+          reason: file,
+        );
+      }
     });
 
     // `build.dep-info-basedir` makes cargo write paths relative to a

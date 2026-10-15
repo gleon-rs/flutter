@@ -8,10 +8,10 @@
   where text is compared: strictly (0.05 of a tile) on that platform, ignored elsewhere. A pass
   that ignored differing text because the golden names no platform (recorded by Flutter, or
   before this version, without a `fallback_platform`) says so once per test process.
-- **`--update-goldens` always wins without a `fallback_platform`.** A golden recorded on another
-  platform is kept while only its text differs only in a workspace with a `fallback_platform`
-  (which is the platform that records it again); kept goldens print one line naming it. Without
-  one, nothing could record the golden again, so it is written over.
+- **`--update-goldens` always wins without a `fallback_platform`.** In a workspace with a
+  `fallback_platform` (the platform that records it again), a golden recorded on another platform
+  is kept while just its text differs; kept goldens print one line naming it. Without one,
+  nothing could record the golden again, so it is written over.
 - **Breaking: `mode` is required in `.gleon/gleon.yaml` rules, and `mode: exact` exists.** A rule
   without a mode used to tolerate 1% of the pixels silently (`pixel`'s default); `exact` compares
   every pixel and refuses `diff` keys. A `diff` key of another mode is an error even at its

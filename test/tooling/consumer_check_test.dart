@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../bin/src/check_failure.dart';
 import '../../bin/src/consumer_app.dart';
 import '../../bin/src/consumer_check.dart';
+import '../../bin/src/release_server.dart';
 import '../../bin/src/run_resources.dart';
 import '../../bin/src/stray_home_config.dart';
 
@@ -52,6 +53,30 @@ void main() {
     );
   });
 
+  // The work directory must lie outside the package it copies: by its
+  // resolved path (`..`, symbolic links), not by the spelling of either.
+  test('a work directory inside the package is found however named', () {
+    final root = temp('gleon_consumer_root_');
+    final package = Directory('${root.path}/flutter')..createSync();
+    final inside = Directory('${package.path}/tmp')..createSync();
+    final sibling = Directory('${root.path}/flutter2')..createSync();
+
+    expect(isWithin(Directory('${root.path}/flutter'), package), isTrue);
+    expect(isWithin(inside, package), isTrue);
+    expect(isWithin(Directory('${inside.path}/..'), package), isTrue);
+    expect(isWithin(sibling, package), isFalse);
+    expect(
+      isWithin(Directory('${package.path}/../flutter2'), package),
+      isFalse,
+    );
+    expect(isWithin(root, package), isFalse);
+    // Creating symbolic links needs a privilege on Windows.
+    if (!Platform.isWindows) {
+      final link = Link('${root.path}/work')..createSync(inside.path);
+      expect(isWithin(Directory(link.path), package), isTrue);
+    }
+  });
+
   // Shared by the end of a run and an interrupt (Ctrl+C skips `finally`).
   test('a run cleans up once, the work directory unless kept', () async {
     final home = temp('gleon_consumer_home_');
@@ -70,6 +95,20 @@ void main() {
     final kept = temp('gleon_consumer_kept_');
     await RunResources(kept, isKept: true).cleanUp();
     expect(kept.existsSync(), isTrue);
+  });
+
+  // An interrupt during the cleanup at the end of a run (or the other way
+  // round) waits for it: the process exits only once everything is gone.
+  test('a second cleanup waits for the first', () async {
+    final work = Directory.systemTemp.createTempSync('gleon_consumer_work_');
+    addTearDown(() => _deleteIfLeft(work));
+    final resources = RunResources(work, isKept: false)
+      ..server = await ReleaseServer.start({});
+
+    final first = resources.cleanUp();
+    await resources.cleanUp();
+    expect(work.existsSync(), isFalse);
+    await first;
   });
 
   test('copies the package without what consumers never get', () {

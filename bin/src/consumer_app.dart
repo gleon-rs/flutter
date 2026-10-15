@@ -58,6 +58,19 @@ String pathWithoutRust(
     )
     .join(separator);
 
+/// Whether [dir] is [root] or lies inside it, both existing, compared by
+/// their resolved paths (symbolic links and `..`), whole segments, and
+/// without case on Windows: a copy of [root] there would copy itself.
+bool isWithin(Directory dir, Directory root) =>
+    _resolvedPath(dir).startsWith(_resolvedPath(root));
+
+/// The path of [dir] as [isWithin] compares it: resolved, ending in `/`.
+String _resolvedPath(Directory dir) {
+  final path = Directory(dir.resolveSymbolicLinksSync()).uri.path;
+
+  return Platform.isWindows ? path.toLowerCase() : path;
+}
+
 /// Copies this package [from] its root into [into] without the directories a
 /// consumer never gets: of `native/` only the pin, as in a git checkout of
 /// the package (no library, so the hook has to download it).

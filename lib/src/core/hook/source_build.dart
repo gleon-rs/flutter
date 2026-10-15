@@ -203,13 +203,23 @@ abstract final class SourceBuild {
             ?match.group(0)?.replaceAll(r'\ ', ' '),
     ];
     if (!paths.every((path) => File(path).isAbsolute)) return null;
-    final inside = root.toFilePath();
+    // Compared as URIs: separators and `..` normalized (rustc joins the path
+    // of `include_bytes!` to its source file as written), and on Windows
+    // without case.
+    final inside = _comparable(root);
 
     return [
       for (final path in paths)
-        if (path.startsWith(inside) && File(path).existsSync()) Uri.file(path),
+        if (Uri.file(path) case final uri
+            when _comparable(uri).startsWith(inside) &&
+                File.fromUri(uri).existsSync())
+          uri,
     ];
   }
+
+  /// The path of [uri] as compared on this host's file system.
+  static String _comparable(Uri uri) =>
+      Platform.isWindows ? uri.path.toLowerCase() : uri.path;
 
   /// The inputs of a dep-info rule, after its first `: ` (a Windows drive
   /// letter is followed by a backslash, not a space).

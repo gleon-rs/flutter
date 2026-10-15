@@ -12,8 +12,9 @@ on:
     inputs:
       gleon_ref:
         description: >-
-          gleon commit to test against instead of native/gleon_ref (e.g. the head of a gleon pull
-          request that changes the C contract), so both sides are checked before either merges.
+          gleon commit (its full SHA) to test against instead of native/gleon_ref (e.g. the head of
+          a gleon pull request that changes the C contract), so both sides are checked before
+          either merges.
         required: false
         default: ""
 

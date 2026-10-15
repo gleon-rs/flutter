@@ -57,7 +57,7 @@ Future<void> main(List<String> args) async {
     );
   }
   final parent = (workDir ?? .systemTemp).absolute;
-  if (parent.uri.toString().startsWith(packageRoot.toString())) {
+  if (isWithin(parent, Directory.fromUri(packageRoot))) {
     _cli.failUsage('--work-dir must lie outside the package (it is copied).');
   }
   // Always a fresh directory, also inside `--work-dir`: the only one deleted.

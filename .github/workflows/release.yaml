@@ -146,7 +146,7 @@ jobs:
         run: |
           set -euo pipefail
           for lib in libgleon_ffi-linux-*.so; do
-            floor=$(readelf -W --dyn-syms "$lib" | grep -o 'GLIBC_[0-9.]*' | sort -t. -k2,2n -k3,3n -u | tail -1)
+            floor=$(readelf -W --dyn-syms "$lib" | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1)
             if [ -z "$floor" ]; then echo "no glibc version found in $lib"; exit 1; fi
             echo "$lib: glibc ${floor#GLIBC_} or newer (built on Ubuntu 26.04); musl is not supported" >> "$RUNNER_TEMP/PLATFORMS.txt"
           done
@@ -155,6 +155,7 @@ jobs:
           cat "$RUNNER_TEMP/PLATFORMS.txt"
       # Assets go onto a draft first: an immutable release rejects uploads once published.
       - name: Create and publish the release
+        id: publish
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -162,6 +163,17 @@ jobs:
           gh release create "$GITHUB_REF_NAME" dist/* --draft --verify-tag \
             --title "$GITHUB_REF_NAME" --generate-notes --notes-file "$RUNNER_TEMP/PLATFORMS.txt"
           gh release edit "$GITHUB_REF_NAME" --draft=false
+      # A draft left by a failed upload or publish would make a rerun's `gh release create` fail:
+      # it goes, the tag stays. A published release is never touched.
+      - name: Remove the draft of a failed publish
+        if: ${{ failure() && steps.publish.outcome == 'failure' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if [ "$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft 2>/dev/null)" = true ]; then
+            gh release delete "$GITHUB_REF_NAME" --yes
+          fi
       # The hook trusts a library by the checksum list of the same release: only an immutable
       # release keeps both from being replaced later. The setting is not readable with this token,
       # the published release is: a mutable one fails (enable immutability, delete and re-create

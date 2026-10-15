@@ -26,19 +26,26 @@ inputs:
     default: ""
   gleon_ref:
     description: >-
-      Optional gleon commit that replaces the pin in native/gleon_ref for this job (the gleon_ref
-      input of a manual CI run), before anything reads the pin.
+      Optional gleon commit (its full SHA) that replaces the pin in native/gleon_ref for this job
+      (the gleon_ref input of a manual CI run), before anything reads the pin.
     default: ""
 
 runs:
   using: composite
   steps:
+    # A full commit, as the pin and the stamp of a build name it (the hook compares them exactly);
+    # anything else fails here, without echoing the value.
     - name: Pin the requested gleon commit
       if: ${{ inputs.gleon_ref != '' }}
       shell: bash
       env:
         GLEON_REF: ${{ inputs.gleon_ref }}
-      run: printf '%s\n' "$GLEON_REF" > flutter/native/gleon_ref
+      run: |
+        if [[ ! "$GLEON_REF" =~ ^[0-9a-f]{40}$ ]]; then
+          echo "::error::gleon_ref must be a full commit SHA (40 lowercase hex digits)"
+          exit 1
+        fi
+        printf '%s\n' "$GLEON_REF" > flutter/native/gleon_ref
 
     # Flutter publishes no Linux arm64 archives; a git checkout bootstraps the arm64 Dart SDK.
     - name: Set up Flutter
