@@ -52,11 +52,11 @@ Then run `flutter test --update-goldens` once on the platform you record goldens
 `flutter test` anywhere. The first `flutter test` downloads the native library of the host (see
 [Install](#install)). What you get:
 
-| You have                           | Comparison                                                                                   | Text of widgets (real fonts)                                                                               |
-| ---------------------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Nothing else                       | Exact, as Flutter.                                                                           | Compared on the platform the golden was recorded on (`--update-goldens` stamps it), ignored on other OSes. |
-| `tolerance:` on a call             | [`.pixel(maxDiffRatio: …)` or `.ssim()`](#tolerance) for that golden.                        | The same.                                                                                                  |
-| [`.gleon/gleon.yaml`](#configuration-with-gleongleonyaml) | Rules per path, masks, metrics, the canonical platform of the goldens.            | The same, plus a CI job that requires every golden to be recorded on the canonical platform.               |
+| You have                                                  | Comparison                                                             | Text of widgets (real fonts)                                                                               |
+| --------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Nothing else                                              | Exact, as Flutter.                                                     | Compared on the platform the golden was recorded on (`--update-goldens` stamps it), ignored on other OSes. |
+| `tolerance:` on a call                                    | [`.pixel(maxDiffRatio: …)` or `.ssim()`](#tolerance) for that golden.  | The same.                                                                                                  |
+| [`.gleon/gleon.yaml`](#configuration-with-gleongleonyaml) | Rules per path, masks, metrics, the canonical platform of the goldens. | The same, plus a CI job that requires every golden to be recorded on the canonical platform.               |
 
 The example app (`example/`, a counter with real fonts) records its goldens on macOS and passes
 them on Linux and Windows in CI, exact except for the text.
@@ -174,12 +174,21 @@ Suite-wide tolerances per path live in `.gleon/gleon.yaml`, see below.
 
 ### Pixel options
 
+<<<<<<< HEAD
 Three options of `.pixel(maxDiffRatio: …)`, all off by default, let some differing pixels count
 as equal (yellow in the diff image, cyan for edges; case reports count them as `tolerated_pixels`
 and `edge_pixels`). They are for rendering noise of shapes in a pixel comparison, not a substitute
 for `.ssim()`. They never apply to text: a changed glyph keeps its whole share of its tile (see
-[Real text](#real-text)). In `.gleon/gleon.yaml` they belong to `mode: pixel` rules (a config
-error elsewhere).
+=======
+
+Three options of `.pixel()`, all off by default, let some differing pixels count as equal (yellow
+in the diff image, cyan for edges; case reports count them as `tolerated_pixels` and
+`edge_pixels`). They are for rendering noise of shapes in a pixel comparison, not a substitute for
+`.ssim()`. They never apply to text: a changed glyph keeps its whole share of its tile (see
+
+> > > > > > > main
+> > > > > > > [Real text](#real-text)). In `.gleon/gleon.yaml` they belong to `mode: pixel` rules (a config
+> > > > > > > error elsewhere).
 
 | Option (yaml key)                        | A differing pixel counts as equal when                                      |
 | ---------------------------------------- | --------------------------------------------------------------------------- |
@@ -239,13 +248,13 @@ its own, so their glyphs fail until they are recorded there.
 `flutter test --update-goldens` works on every platform and writes the golden stamped with the
 platform it ran on:
 
-| The golden                                                        | `--update-goldens`                                                                                                                                    |
-| ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Missing, recorded on this platform, or without a stamp            | written, stamped with this platform (the same image too, once, for the stamp)                                                                         |
-| The same image, stamped                                           | left as it is                                                                                                                                         |
-| Recorded on another platform, no `fallback_platform`              | written: nothing else could record it again                                                                                                           |
-| Recorded on another platform, with a `fallback_platform`          | left as it is while only its text differs (one line says so and names the `fallback_platform`), so it never flips between platforms over their glyphs; written when anything else changes |
-| Recorded elsewhere, updated on the `fallback_platform`            | written: the `fallback_platform` records it again                                                                                                     |
+| The golden                                               | `--update-goldens`                                                                                                                                                                        |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Missing, recorded on this platform, or without a stamp   | written, stamped with this platform (the same image too, once, for the stamp)                                                                                                             |
+| The same image, stamped                                  | left as it is                                                                                                                                                                             |
+| Recorded on another platform, no `fallback_platform`     | written: nothing else could record it again                                                                                                                                               |
+| Recorded on another platform, with a `fallback_platform` | left as it is while only its text differs (one line says so and names the `fallback_platform`), so it never flips between platforms over their glyphs; written when anything else changes |
+| Recorded elsewhere, updated on the `fallback_platform`   | written: the `fallback_platform` records it again                                                                                                                                         |
 
 So a contributor on Linux adds or changes a screen with `--update-goldens`, and the golden then
 compares its text on Linux and ignores it on macOS. The `fallback_platform` is the canonical
@@ -356,11 +365,21 @@ artifacts: .gleon/runs/latest/artifacts
   `[/]`, `\`, a leading `/`, a `.`, `..` or empty segment and a trailing `/` are config errors
   naming the pattern: they would match differently than written, differently on Windows, or
   never.
+  <<<<<<< HEAD
 - **`mode`** is required in every rule (`exact`, `pixel` or `ssim`), and `pixel` requires
   `diff.threshold` (like `maxDiffRatio`): no share of the pixels is ever tolerated silently.
   **Diff keys** belong to their mode (`threshold` and the pixel options to `pixel`,
   `min_similarity` and `color_tolerance` to `ssim`, none to `exact`): a key of another mode is a
   config error, even at its default, never silently ignored.
+  \=======
+- **`mode`** is required in every rule (`exact`, `pixel` or `ssim`): a rule without one would
+  otherwise tolerate 1% of the pixels silently. **Diff keys** belong to their mode (`threshold`
+  and the pixel options to `pixel`, `min_similarity` and `color_tolerance` to `ssim`, none to
+  `exact`): a key of another mode is a config error, even at its default, never silently
+  ignored.
+
+> > > > > > > main
+
 - **Priority:** the `tolerance` argument of a call beats the golden's rule, which beats exact;
   `textTolerance` beats the rule's `text_tolerance`. Masks of the rule are added to the call's
   `ignoreRegions`.
@@ -430,9 +449,15 @@ cannot be read or written is recorded as an `io` error.
 Use them to set tolerances from measurements instead of guesses, e.g. by collecting the reports
 from CI runs on every OS. The case reports are the result format of the
 [gleon CLI](https://github.com/gleon-rs/gleon), which turns the reports of a run into one
+<<<<<<< HEAD
 (`gleon report html`, `gleon dashboard`) and approves candidates (`gleon approve`); its
 [releases](https://github.com/gleon-rs/gleon/releases) have binaries for Linux x64, macOS on
 Apple silicon and Windows x64.
+=======
+
+(`gleon report html`, `gleon dashboard`) and approves candidates (`gleon approve`).
+
+> > > > > > > main
 
 ## Golden harnesses
 
@@ -483,7 +508,7 @@ Rendering the frame is the same for both and not measured. Exact, no `.gleon/` w
 M3 Max, macOS, Flutter 3.47.6, measured with gleon 0.3.0, mean latency with
 [bench_press](https://pub.dev/packages/bench_press):
 
-| Scenario                                      | Golden    | Flutter SDK | gleon   | Speedup |
+| Scenario                                      | Golden    | Flutter SDK |   gleon | Speedup |
 | --------------------------------------------- | --------- | ----------: | ------: | ------: |
 | Passing                                       | 400x300   |     9.60 ms | 0.43 ms |     22x |
 |                                               | 390x844   |     15.5 ms | 1.19 ms |     13x |
