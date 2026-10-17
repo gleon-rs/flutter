@@ -174,21 +174,12 @@ Suite-wide tolerances per path live in `.gleon/gleon.yaml`, see below.
 
 ### Pixel options
 
-<<<<<<< HEAD
 Three options of `.pixel(maxDiffRatio: …)`, all off by default, let some differing pixels count
 as equal (yellow in the diff image, cyan for edges; case reports count them as `tolerated_pixels`
 and `edge_pixels`). They are for rendering noise of shapes in a pixel comparison, not a substitute
 for `.ssim()`. They never apply to text: a changed glyph keeps its whole share of its tile (see
-=======
-
-Three options of `.pixel()`, all off by default, let some differing pixels count as equal (yellow
-in the diff image, cyan for edges; case reports count them as `tolerated_pixels` and
-`edge_pixels`). They are for rendering noise of shapes in a pixel comparison, not a substitute for
-`.ssim()`. They never apply to text: a changed glyph keeps its whole share of its tile (see
-
-> > > > > > > main
-> > > > > > > [Real text](#real-text)). In `.gleon/gleon.yaml` they belong to `mode: pixel` rules (a config
-> > > > > > > error elsewhere).
+[Real text](#real-text)). In `.gleon/gleon.yaml` they belong to `mode: pixel` rules (a config
+error elsewhere).
 
 | Option (yaml key)                        | A differing pixel counts as equal when                                      |
 | ---------------------------------------- | --------------------------------------------------------------------------- |
@@ -365,21 +356,11 @@ artifacts: .gleon/runs/latest/artifacts
   `[/]`, `\`, a leading `/`, a `.`, `..` or empty segment and a trailing `/` are config errors
   naming the pattern: they would match differently than written, differently on Windows, or
   never.
-  <<<<<<< HEAD
 - **`mode`** is required in every rule (`exact`, `pixel` or `ssim`), and `pixel` requires
   `diff.threshold` (like `maxDiffRatio`): no share of the pixels is ever tolerated silently.
   **Diff keys** belong to their mode (`threshold` and the pixel options to `pixel`,
   `min_similarity` and `color_tolerance` to `ssim`, none to `exact`): a key of another mode is a
   config error, even at its default, never silently ignored.
-  \=======
-- **`mode`** is required in every rule (`exact`, `pixel` or `ssim`): a rule without one would
-  otherwise tolerate 1% of the pixels silently. **Diff keys** belong to their mode (`threshold`
-  and the pixel options to `pixel`, `min_similarity` and `color_tolerance` to `ssim`, none to
-  `exact`): a key of another mode is a config error, even at its default, never silently
-  ignored.
-
-> > > > > > > main
-
 - **Priority:** the `tolerance` argument of a call beats the golden's rule, which beats exact;
   `textTolerance` beats the rule's `text_tolerance`. Masks of the rule are added to the call's
   `ignoreRegions`.
@@ -449,15 +430,9 @@ cannot be read or written is recorded as an `io` error.
 Use them to set tolerances from measurements instead of guesses, e.g. by collecting the reports
 from CI runs on every OS. The case reports are the result format of the
 [gleon CLI](https://github.com/gleon-rs/gleon), which turns the reports of a run into one
-<<<<<<< HEAD
 (`gleon report html`, `gleon dashboard`) and approves candidates (`gleon approve`); its
 [releases](https://github.com/gleon-rs/gleon/releases) have binaries for Linux x64, macOS on
 Apple silicon and Windows x64.
-=======
-
-(`gleon report html`, `gleon dashboard`) and approves candidates (`gleon approve`).
-
-> > > > > > > main
 
 ## Golden harnesses
 
