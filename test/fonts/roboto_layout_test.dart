@@ -5,8 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:gleon/gleon.dart';
 import 'package:gleon/src/flutter/app_fonts.dart';
 
-// The text-regions plan loads real fonts in tests (Roboto from the Flutter
-// SDK) and only tolerates differences inside the boxes of text. That only
+// `loadAppFonts` loads real fonts in tests (Roboto from the Flutter SDK), and
+// text regions tolerate differences only inside the boxes of text. That only
 // works if every OS lays the text out alike, so the boxes and everything around
 // them stay in place: the line metrics are pinned to the values measured on
 // macOS and checked on every OS of CI. Windows takes line metrics from other

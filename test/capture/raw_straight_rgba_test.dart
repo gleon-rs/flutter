@@ -7,7 +7,7 @@ import 'package:gleon/gleon.dart';
 
 import '../helpers/png.dart';
 
-// The text-regions plan hands the engine the captured frame as raw straight
+// `matchesGoldenFile` hands the engine the captured frame as raw straight
 // RGBA instead of encoding a PNG on every run. That only works if both read
 // the same pixels: checked on every OS of CI, translucent pixels included
 // (where premultiplied and straight alpha differ).

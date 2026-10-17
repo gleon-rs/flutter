@@ -230,6 +230,20 @@ void main() {
                     offset: const Offset(0, 20),
                     child: const Text('follow', style: _style),
                   ),
+                  // Clips by a path, composited by the repaint boundary.
+                  const ClipOval(
+                    child: RepaintBoundary(child: Text('oval', style: _style)),
+                  ),
+                  const ClipPath(
+                    clipper: ShapeBorderClipper(shape: StadiumBorder()),
+                    child: RepaintBoundary(child: Text('path', style: _style)),
+                  ),
+                  const PhysicalShape(
+                    clipper: ShapeBorderClipper(shape: StadiumBorder()),
+                    clipBehavior: .antiAlias,
+                    color: Color(0xFFFFFFFF),
+                    child: RepaintBoundary(child: Text('shape', style: _style)),
+                  ),
                 ],
               ),
             ),
@@ -242,7 +256,7 @@ void main() {
         tester.runAsync<List<int>?>(() => _pixelsOf(element));
     final before = await pixels();
 
-    expect(_regions(tester), hasLength(7));
+    expect(_regions(tester), hasLength(10));
     expect(_changed(element.renderObject?.debugLayer), isEmpty);
     expect(await pixels(), before);
     await tester.pump();

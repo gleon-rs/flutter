@@ -232,6 +232,26 @@ final class _PaintRecorder extends PaintingContext {
     Rect? childPaintBounds,
   }) => painter(this, offset);
 
+  // A path has no value equality, so writing the shifted path of a real paint
+  // into the live layer of a path clip (an oval, a physical shape) over a
+  // composited child would mark that layer changed. The clip draws nothing to
+  // record; the painter gets the offset of a real paint, and the render
+  // object keeps the layer it had.
+  @override
+  ClipPathLayer? pushClipPath(
+    bool needsCompositing,
+    Offset offset,
+    Rect bounds,
+    Path clipPath,
+    PaintingContextCallback painter, {
+    Clip clipBehavior = .antiAlias,
+    ClipPathLayer? oldLayer,
+  }) {
+    painter(this, offset);
+
+    return needsCompositing && clipBehavior != .none ? oldLayer : null;
+  }
+
   // A live layer is never adopted: a platform view or texture paints no text.
   @override
   // ignore: no-empty-block, nothing to record.

@@ -9,10 +9,12 @@ import 'package:gleon/src/flutter/text_regions.dart';
 import '../helpers/caption.dart';
 import '../helpers/workspace_sandbox.dart';
 
-// A golden with real fonts, recorded on macOS, passes on every OS of CI: by
-// default text never fails (OSes rasterize glyphs differently), everything else
-// is exact. That is a trade-off: changes of text alone pass, unless a
-// `textTolerance` compares text (for goldens of one OS).
+// A golden with real fonts, recorded on macOS, passes on every OS of CI.
+// `caption.png` has no platform stamp (recorded by Flutter, or before 0.5.0)
+// and no workspace names its platform, so its text is ignored everywhere
+// (OSes rasterize glyphs differently) and everything else is exact: changes of
+// text alone pass, unless a `textTolerance` compares text. A stamped golden
+// compares its text on the platform it names (`platform_goldens_test.dart`).
 void main() {
   setUpAll(loadAppFonts);
   setUp(WorkspaceSandbox.withoutWorkspace);
@@ -56,15 +58,15 @@ void main() {
     });
   }
 
-  // Changes of text alone keep the layout: by default they pass (the
-  // trade-off), with a text tolerance they fail on the text alone.
+  // Changes of text alone keep the layout: against the unstamped golden they
+  // pass, with a text tolerance they fail on the text alone.
   for (final (name, mutation) in [
     ('a digit of the same width', const Caption(digits: '0123456780')),
     ('one word in a paragraph', const Caption(paragraph: _cancel)),
     ('a lighter text color', const Caption(color: .new(0xFF444444))),
     ('a frame tight around text', const Caption(hasFrame: true)),
   ]) {
-    testWidgets('passes by default, fails a text tolerance for $name', (
+    testWidgets('passes unstamped, fails a text tolerance for $name', (
       tester,
     ) async {
       await tester.pumpWidget(mutation);
@@ -81,7 +83,7 @@ void main() {
     });
 
     // SSIM judges text by the same tiles and leaves it out of both gates.
-    testWidgets('ssim: passes by default, fails a text tolerance for $name', (
+    testWidgets('ssim: passes unstamped, fails a text tolerance for $name', (
       tester,
     ) async {
       await tester.pumpWidget(mutation);

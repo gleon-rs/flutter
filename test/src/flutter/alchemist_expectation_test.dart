@@ -60,7 +60,7 @@ void main() {
         Caption.golden,
       ),
       isNull,
-      reason: 'text alone changed: ignored by default',
+      reason: 'text alone changed: ignored for a golden without a stamp',
     );
     final compared = await _failureOf(
       gleonAlchemistExpectation(textTolerance: 0.1),

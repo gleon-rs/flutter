@@ -187,7 +187,8 @@ abstract final class SourceBuild {
   }
 
   /// The files of the dep-info cargo wrote next to [library] that lie inside
-  /// [root] and exist; null without a dep-info, or with a relative path in
+  /// [root] and exist; null without a dep-info, with one that names no file
+  /// (none read: the sources would go untracked), or with a relative path in
   /// it (`build.dep-info-basedir` of a cargo config, whose directory is
   /// unknown here). Each line is `<output>: <input> <input> ...`, a space in
   /// a path escaped as `\ `.
@@ -202,7 +203,9 @@ abstract final class SourceBuild {
           for (final match in _depInfoPath.allMatches(inputs))
             ?match.group(0)?.replaceAll(r'\ ', ' '),
     ];
-    if (!paths.every((path) => File(path).isAbsolute)) return null;
+    if (paths.isEmpty || !paths.every((path) => File(path).isAbsolute)) {
+      return null;
+    }
     // Compared as URIs: separators and `..` normalized (rustc joins the path
     // of `include_bytes!` to its source file as written), and on Windows
     // without case.
