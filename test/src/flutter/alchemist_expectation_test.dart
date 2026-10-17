@@ -205,6 +205,7 @@ required_version: ">=0.1.0"
 screenshots:
   - include: "test/goldens/*.png"
     mode: pixel
+    diff: { threshold: 0.01 }
 metrics:
   enabled: true
 ''');

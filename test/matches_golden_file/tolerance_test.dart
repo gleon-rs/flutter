@@ -25,7 +25,7 @@ void main() {
       await tester.pumpWidget(const Swatch(accent: Color(0xFF4CAF50)));
       final message = await matchesGoldenFile(
         Swatch.golden,
-        tolerance: const .pixel(),
+        tolerance: const .pixel(maxDiffRatio: 0.01),
       ).matchAsync(Swatch.finder);
 
       expect(message, contains('50.00%'));
@@ -51,7 +51,7 @@ void main() {
         Blob.finder,
         matchesGoldenFile(
           Blob.golden,
-          tolerance: const .pixel(antiAlias: true),
+          tolerance: const .pixel(maxDiffRatio: 0.01, antiAlias: true),
         ),
       );
     });
@@ -139,7 +139,7 @@ void main() {
         tolerance: const .ssim(),
       ).matchAsync(Swatch.finder);
 
-      expect(message, contains('changed area at (10, 10) 1x1px'));
+      expect(message, contains('failing area at (10, 10) 1x1px'));
       expect(message, contains('gleon ssim ≥ 0.800, color ±8'));
     });
 
@@ -152,7 +152,7 @@ void main() {
         tolerance: const .ssim(),
       ).matchAsync(Swatch.finder);
 
-      expect(message, contains('changed area at (0, 0) 50x60px'));
+      expect(message, contains('failing area at (0, 0) 50x60px'));
     });
 
     testWidgets('reports the configured thresholds', (tester) async {

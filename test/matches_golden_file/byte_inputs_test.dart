@@ -46,7 +46,10 @@ void main() {
       ),
       expectLater(
         bytes,
-        matchesGoldenFile(Swatch.golden, tolerance: const .pixel()),
+        matchesGoldenFile(
+          Swatch.golden,
+          tolerance: const .pixel(maxDiffRatio: 0.01),
+        ),
       ),
     ]);
   });
@@ -62,7 +65,7 @@ void main() {
           .matchAsync(Uint8List.fromList(List.filled(64, 7))),
       matchesGoldenFile(
         Swatch.golden,
-        tolerance: const .pixel(),
+        tolerance: const .pixel(maxDiffRatio: 0.01),
       ).matchAsync(bytes),
     ]);
 

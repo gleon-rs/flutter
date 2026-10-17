@@ -6,18 +6,28 @@ import '../../../helpers/value_semantics.dart';
 
 void main() {
   test('defaults match the documented values', () {
-    expect(const GoldenTolerance.pixel(), const PixelTolerance());
-    expect(const PixelTolerance().maxDiffRatio, 0.01);
-    expect(const PixelTolerance().channelTolerance, 0);
-    expect(const PixelTolerance().antiAlias, isFalse);
-    expect(const PixelTolerance().edgeThreshold, 0);
-    expect(const SsimTolerance().minSimilarity, 0.8);
-    expect(const SsimTolerance().colorTolerance, 8);
+    expect(
+      const GoldenTolerance.pixel(maxDiffRatio: 0.01),
+      isA<PixelTolerance>()
+          .having((pixel) => pixel.maxDiffRatio, 'maxDiffRatio', 0.01)
+          .having((pixel) => pixel.channelTolerance, 'channelTolerance', 0)
+          .having((pixel) => pixel.antiAlias, 'antiAlias', isFalse)
+          .having((pixel) => pixel.edgeThreshold, 'edgeThreshold', 0),
+    );
+    expect(
+      const GoldenTolerance.ssim(),
+      isA<SsimTolerance>()
+          .having((ssim) => ssim.minSimilarity, 'minSimilarity', 0.8)
+          .having((ssim) => ssim.colorTolerance, 'colorTolerance', 8),
+    );
   });
 
   test('descriptions name the thresholds', () {
     expect('${const GoldenTolerance.exact()}', 'exact');
-    expect('${const GoldenTolerance.pixel()}', 'pixel ≤ 1.00%');
+    expect(
+      '${const GoldenTolerance.pixel(maxDiffRatio: 0.01)}',
+      'pixel ≤ 1.00%',
+    );
     expect('${const GoldenTolerance.ssim()}', 'ssim ≥ 0.800, color ±8');
     const precise = GoldenTolerance.ssim(
       minSimilarity: 0.9995,
@@ -60,6 +70,7 @@ void main() {
 
   test('pixel options are described like the engine does, when on', () {
     const options = GoldenTolerance.pixel(
+      maxDiffRatio: 0.01,
       channelTolerance: 4,
       antiAlias: true,
       edgeThreshold: 64,
@@ -103,20 +114,24 @@ void main() {
       () => Tolerances.validate(const .ssim(colorTolerance: .infinity)),
       rejects('colorTolerance'),
     );
-    for (final tolerance in const [
-      PixelTolerance(edgeThreshold: 254),
-      PixelTolerance(channelTolerance: 254),
+    for (final tolerance in const <GoldenTolerance>[
+      .pixel(maxDiffRatio: 0, edgeThreshold: 254),
+      .pixel(maxDiffRatio: 0, channelTolerance: 254),
     ]) {
       expect(() => Tolerances.validate(tolerance), returnsNormally);
     }
     // 255 would compare nothing or hide nothing: invalid, like in `.gleon/gleon.yaml`.
     for (final byte in [-1, 255, 256]) {
       expect(
-        () => Tolerances.validate(PixelTolerance(channelTolerance: byte)),
+        () => Tolerances.validate(
+          GoldenTolerance.pixel(maxDiffRatio: 0, channelTolerance: byte),
+        ),
         rejects('channelTolerance'),
       );
       expect(
-        () => Tolerances.validate(PixelTolerance(edgeThreshold: byte)),
+        () => Tolerances.validate(
+          GoldenTolerance.pixel(maxDiffRatio: 0, edgeThreshold: byte),
+        ),
         rejects('edgeThreshold'),
       );
     }
@@ -125,40 +140,44 @@ void main() {
   });
 
   test('values compare by content', () {
+    // Not `const`: equal values, not one canonical instance.
+    // ignore: prefer_const_constructors, see above.
+    final ssim = GoldenTolerance.ssim(minSimilarity: 0.9);
+    expect(ssim, const GoldenTolerance.ssim(minSimilarity: 0.9));
     expect(
-      const GoldenTolerance.ssim(minSimilarity: 0.9),
-      const SsimTolerance(minSimilarity: 0.9),
-    );
-    expect(
+      ssim.hashCode,
       const GoldenTolerance.ssim(minSimilarity: 0.9).hashCode,
-      const SsimTolerance(minSimilarity: 0.9).hashCode,
     );
     expect(
-      const GoldenTolerance.pixel(),
+      const GoldenTolerance.pixel(maxDiffRatio: 0.01),
       isNot(const GoldenTolerance.pixel(maxDiffRatio: 0.02)),
     );
-    expect(const GoldenTolerance.exact(), const ExactTolerance());
+    // ignore: prefer_const_constructors, see above.
+    expect(GoldenTolerance.exact(), const GoldenTolerance.exact());
   });
 
   test('every variant is a value', () {
     expectValueSemantics<GoldenTolerance>(
       const .exact(),
-      equal: const ExactTolerance(),
+      // ignore: prefer_const_constructors, an equal value, not the instance.
+      equal: GoldenTolerance.exact(),
       different: const .pixel(maxDiffRatio: 0),
     );
     expectValueSemantics<GoldenTolerance>(
       const .pixel(maxDiffRatio: 0.2),
-      equal: const PixelTolerance(maxDiffRatio: 0.2),
+      // ignore: prefer_const_constructors, an equal value, not the instance.
+      equal: GoldenTolerance.pixel(maxDiffRatio: 0.2),
       different: const .pixel(maxDiffRatio: 0.3),
     );
     for (final different in const <GoldenTolerance>[
-      .pixel(channelTolerance: 1),
-      .pixel(antiAlias: true),
-      .pixel(edgeThreshold: 1),
+      .pixel(maxDiffRatio: 0.01, channelTolerance: 1),
+      .pixel(maxDiffRatio: 0.01, antiAlias: true),
+      .pixel(maxDiffRatio: 0.01, edgeThreshold: 1),
     ]) {
       expectValueSemantics<GoldenTolerance>(
-        const .pixel(),
-        equal: const PixelTolerance(),
+        const .pixel(maxDiffRatio: 0.01),
+        // ignore: prefer_const_constructors, an equal value, not the instance.
+        equal: GoldenTolerance.pixel(maxDiffRatio: 0.01),
         different: different,
       );
     }

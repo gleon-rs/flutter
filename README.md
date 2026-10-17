@@ -55,7 +55,7 @@ Then run `flutter test --update-goldens` once on the platform you record goldens
 | You have                           | Comparison                                                                                   | Text of widgets (real fonts)                                                                               |
 | ---------------------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | Nothing else                       | Exact, as Flutter.                                                                           | Compared on the platform the golden was recorded on (`--update-goldens` stamps it), ignored on other OSes. |
-| `tolerance:` on a call             | [`.pixel()` or `.ssim()`](#tolerance) for that golden.                                       | The same.                                                                                                  |
+| `tolerance:` on a call             | [`.pixel(maxDiffRatio: …)` or `.ssim()`](#tolerance) for that golden.                        | The same.                                                                                                  |
 | [`.gleon/gleon.yaml`](#configuration-with-gleongleonyaml) | Rules per path, masks, metrics, the canonical platform of the goldens.            | The same, plus a CI job that requires every golden to be recorded on the canonical platform.               |
 
 The example app (`example/`, a counter with real fonts) records its goldens on macOS and passes
@@ -147,8 +147,8 @@ shorthands keep call sites short: `tolerance: const .ssim()`.
 
 | Tolerance                                          | Meaning                                                                                                                  |
 | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `.exact()` (default)                               | Every pixel must be identical, like Flutter (text: see `textTolerance`).                                                 |
-| `.pixel({maxDiffRatio = 0.01, …options})`          | At most this fraction (0.0–1.0) of pixels may differ; see [Pixel options](#pixel-options).                               |
+| `.exact()`                                         | Every pixel identical, like Flutter (text: see `textTolerance`); an omitted `tolerance` is the golden's rule, else this. |
+| `.pixel({required maxDiffRatio, …options})`        | At most this fraction (0.0–1.0, 0 for none) of pixels may differ; see [Pixel options](#pixel-options).                   |
 | `.ssim({minSimilarity = 0.8, colorTolerance = 8})` | Min local SSIM of every neighborhood (0.0–1.0) and tolerated deviation beyond the local 3x3 envelope (0–255); see below. |
 
 `ignoreRegions` (rectangles excluded from the comparison) works with every tolerance. Each
@@ -174,10 +174,10 @@ Suite-wide tolerances per path live in `.gleon/gleon.yaml`, see below.
 
 ### Pixel options
 
-Three options of `.pixel()`, all off by default, let some differing pixels count as equal (yellow
-in the diff image, cyan for edges; case reports count them as `tolerated_pixels` and
-`edge_pixels`). They are for rendering noise of shapes in a pixel comparison, not a substitute for
-`.ssim()`. They never apply to text: a changed glyph keeps its whole share of its tile (see
+Three options of `.pixel(maxDiffRatio: …)`, all off by default, let some differing pixels count
+as equal (yellow in the diff image, cyan for edges; case reports count them as `tolerated_pixels`
+and `edge_pixels`). They are for rendering noise of shapes in a pixel comparison, not a substitute
+for `.ssim()`. They never apply to text: a changed glyph keeps its whole share of its tile (see
 [Real text](#real-text)). In `.gleon/gleon.yaml` they belong to `mode: pixel` rules (a config
 error elsewhere).
 
@@ -356,11 +356,11 @@ artifacts: .gleon/runs/latest/artifacts
   `[/]`, `\`, a leading `/`, a `.`, `..` or empty segment and a trailing `/` are config errors
   naming the pattern: they would match differently than written, differently on Windows, or
   never.
-- **`mode`** is required in every rule (`exact`, `pixel` or `ssim`): a rule without one would
-  otherwise tolerate 1% of the pixels silently. **Diff keys** belong to their mode (`threshold`
-  and the pixel options to `pixel`, `min_similarity` and `color_tolerance` to `ssim`, none to
-  `exact`): a key of another mode is a config error, even at its default, never silently
-  ignored.
+- **`mode`** is required in every rule (`exact`, `pixel` or `ssim`), and `pixel` requires
+  `diff.threshold` (like `maxDiffRatio`): no share of the pixels is ever tolerated silently.
+  **Diff keys** belong to their mode (`threshold` and the pixel options to `pixel`,
+  `min_similarity` and `color_tolerance` to `ssim`, none to `exact`): a key of another mode is a
+  config error, even at its default, never silently ignored.
 - **Priority:** the `tolerance` argument of a call beats the golden's rule, which beats exact;
   `textTolerance` beats the rule's `text_tolerance`. Masks of the rule are added to the call's
   `ignoreRegions`.
@@ -430,7 +430,9 @@ cannot be read or written is recorded as an `io` error.
 Use them to set tolerances from measurements instead of guesses, e.g. by collecting the reports
 from CI runs on every OS. The case reports are the result format of the
 [gleon CLI](https://github.com/gleon-rs/gleon), which turns the reports of a run into one
-(`gleon report html`, `gleon dashboard`) and approves candidates (`gleon approve`).
+(`gleon report html`, `gleon dashboard`) and approves candidates (`gleon approve`); its
+[releases](https://github.com/gleon-rs/gleon/releases) have binaries for Linux x64, macOS on
+Apple silicon and Windows x64.
 
 ## Golden harnesses
 

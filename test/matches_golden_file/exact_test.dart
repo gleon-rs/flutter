@@ -24,9 +24,7 @@ void main() {
       );
     });
 
-    testWidgets('fails on a single changed pixel and writes failure files', (
-      tester,
-    ) async {
+    testWidgets('an omitted tolerance fails one changed pixel', (tester) async {
       await tester.pumpWidget(const Swatch(dot: Swatch.dotOffset));
       final message = await matchesGoldenFile(Swatch.golden)
           .matchAsync(Swatch.finder);
@@ -34,6 +32,7 @@ void main() {
       expect(message, contains('1 of 6000px'));
       expect(message, contains('gleon exact'));
       expect(message, contains('Failure feedback can be found at'));
+      expect(message, contains('(the differences: `swatch_gleonDiff.png`)'));
       for (final suffix in ['masterImage', 'testImage', 'gleonDiff']) {
         expect(
           File('${WorkspaceSandbox.current().failures.path}/swatch_$suffix.png')
@@ -42,16 +41,6 @@ void main() {
           reason: suffix,
         );
       }
-    });
-
-    testWidgets('an omitted tolerance is exact', (tester) async {
-      await tester.pumpWidget(const Swatch(dot: Swatch.dotOffset));
-      final message = await matchesGoldenFile(
-        Swatch.golden,
-        tolerance: const .exact(),
-      ).matchAsync(Swatch.finder);
-
-      expect(message, contains('gleon exact'));
     });
 
     testWidgets('reports a dimension mismatch', (tester) async {

@@ -60,7 +60,7 @@ void main() {
     for (final tolerance in const <GoldenTolerance?>[
       null,
       .exact(),
-      .pixel(),
+      .pixel(maxDiffRatio: 0.01),
       .ssim(),
     ]) {
       expect(
