@@ -5,8 +5,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'gleon_golden_comparator.dart';
 
 /// A `goldenFileComparator` backed by the gleon engine, for golden harnesses
-/// (alchemist, golden_toolkit, …) and tests that call `flutter_test`'s own
-/// `matchesGoldenFile`. Install it once, in `test/flutter_test_config.dart`:
+/// (golden_toolkit, …) and tests that call `flutter_test`'s own
+/// `matchesGoldenFile`; for alchemist prefer `gleonAlchemistExpectation`
+/// (`package:gleon/alchemist.dart`). Install it once, in
+/// `test/flutter_test_config.dart`:
 ///
 /// ```dart
 /// import "dart:async";

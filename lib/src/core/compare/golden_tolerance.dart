@@ -7,9 +7,9 @@ import 'tolerances.dart';
 
 /// How much a test image may deviate from its golden.
 ///
-/// Without a tolerance, `matchesGoldenFile` compares exactly, like Flutter.
-/// Values are validated when a matcher is created: out-of-range values throw
-/// an [ArgumentError].
+/// Omitted, `matchesGoldenFile` compares under the rule of the golden in
+/// `.gleon/gleon.yaml`, else exactly, like Flutter. Values are validated when
+/// a matcher is created: out-of-range values throw an [ArgumentError].
 ///
 /// ```dart
 /// import "package:gleon/gleon.dart";
@@ -33,14 +33,14 @@ import 'tolerances.dart';
 @immutable
 @pragma('vm:deeply-immutable')
 sealed class GoldenTolerance {
-  /// Base constructor of the variants.
-  const GoldenTolerance();
+  const GoldenTolerance._();
 
-  /// Every pixel must be identical. Same behavior as Flutter's default
-  /// `matchesGoldenFile`, and the default of this package.
-  const factory exact() = ExactTolerance;
+  /// Every pixel must be identical, like Flutter's `matchesGoldenFile`; the
+  /// text of a widget follows `textTolerance`.
+  const factory exact() = ExactTolerance._;
 
-  /// Passes when at most [maxDiffRatio] (0.0–1.0) of the pixels differ.
+  /// Passes when at most [maxDiffRatio] (0.0–1.0; 0 for none) of the pixels
+  /// differ. Required: no share of the pixels is tolerated implicitly.
   ///
   /// The options, all off by default and never applied to text, let some
   /// differing pixels count as equal: rendering noise of shapes (GPU drift,
@@ -55,11 +55,11 @@ sealed class GoldenTolerance {
   ///   small icon, a 1px move); the lower the value, the more pixels are
   ///   edges.
   const factory pixel({
-    double maxDiffRatio,
+    required double maxDiffRatio,
     int channelTolerance,
     bool antiAlias,
     int edgeThreshold,
-  }) = PixelTolerance;
+  }) = PixelTolerance._;
 
   /// Tolerates rendering noise (anti-aliasing, sub-pixel geometry, glyph
   /// weight, imperceptible color drift) while catching changed, added or
@@ -75,7 +75,7 @@ sealed class GoldenTolerance {
   /// (compared under the text tolerance); low-contrast color changes of
   /// one-pixel lines can pass.
   const factory ssim({double minSimilarity, double colorTolerance}) =
-      SsimTolerance;
+      SsimTolerance._;
 
   /// The thresholds as shown in matcher descriptions and failure messages
   /// (`ssim ≥ 0.800, color ±8`). One exhaustive switch, so a new variant
@@ -94,8 +94,7 @@ sealed class GoldenTolerance {
 @immutable
 @pragma('vm:deeply-immutable')
 final class ExactTolerance extends GoldenTolerance {
-  /// Creates the exact tolerance.
-  const ExactTolerance();
+  const ExactTolerance._() : super._();
 
   @override
   int get hashCode => 'exact'.hashCode;
@@ -108,13 +107,12 @@ final class ExactTolerance extends GoldenTolerance {
 @immutable
 @pragma('vm:deeply-immutable')
 final class PixelTolerance extends GoldenTolerance {
-  /// Creates a pixel tolerance.
-  const PixelTolerance({
-    this.maxDiffRatio = 0.01,
+  const PixelTolerance._({
+    required this.maxDiffRatio,
     this.channelTolerance = 0,
     this.antiAlias = false,
     this.edgeThreshold = 0,
-  });
+  }) : super._();
 
   /// Maximum fraction (0.0–1.0) of differing pixels.
   final double maxDiffRatio;
@@ -155,8 +153,8 @@ final class PixelTolerance extends GoldenTolerance {
 @immutable
 @pragma('vm:deeply-immutable')
 final class SsimTolerance extends GoldenTolerance {
-  /// Creates an SSIM tolerance.
-  const SsimTolerance({this.minSimilarity = 0.8, this.colorTolerance = 8});
+  const SsimTolerance._({this.minSimilarity = 0.8, this.colorTolerance = 8})
+    : super._();
 
   /// Minimum local SSIM (0.0–1.0).
   final double minSimilarity;

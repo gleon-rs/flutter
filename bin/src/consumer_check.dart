@@ -72,7 +72,8 @@ final class ConsumerCheck {
   }
 
   /// 2. The golden passes quietly; a changed digit fails on this platform,
-  /// on its text alone, with the tip about `.gleon/gleon.yaml`.
+  /// on its text alone, with the tip about `.gleon/gleon.yaml` and the name
+  /// of its diff image.
   Future<void> compare() async {
     stdout.writeln('--- 2. the golden passes, a changed digit fails here');
     final passed = await _flutter(['test']);
@@ -89,6 +90,12 @@ final class ConsumerCheck {
     check(
       'the failure points at .gleon/gleon.yaml:\n$failed',
       isMet: hasPhrase(failed, 'Tip: tolerances per golden'),
+    );
+    check(
+      'the failure names its diff image:\n$failed',
+      isMet:
+          hasPhrase(failed, '(the differences: `') &&
+          hasPhrase(failed, '_gleonDiff.png`)'),
     );
     writeNumber(app, '42');
   }

@@ -300,6 +300,23 @@ void main() {
       );
     });
 
+    // A dep-info that names no file (another format) tracks every input
+    // instead of the manifests alone.
+    test('a dep-info naming no file falls back to every input', () async {
+      final root = fakeCheckout();
+      final built = await SourceBuild.run(
+        repoRoot: .file(root),
+        targetDir: .directory('${tempPath()}/cargo'),
+        target: .linuxX64,
+        environment: cargoEnvironment(),
+        runProcess: FakeCargo(compiled: []).run,
+      );
+      expect(
+        built.dependencies,
+        unorderedEquals(SourceBuild.inputs(.directory(root))),
+      );
+    });
+
     test('a failing cargo is an error with its output', () async {
       await expectLater(
         build(FakeCargo(exitCode: 101)),

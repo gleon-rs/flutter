@@ -19,6 +19,16 @@
   only). `required_version` and `screenshots` are optional: a
   workspace may name only its `fallback_platform`. `fallback_platform` applies to every golden of
   the workspace, matched by a rule or not.
+- **Breaking: a `pixel` tolerance names its threshold.** `GoldenTolerance.pixel` requires
+  `maxDiffRatio`, and a `mode: pixel` rule requires `diff.threshold` (0 for none): neither
+  tolerates 1% of the pixels silently any more (write `maxDiffRatio: 0.01` /
+  `threshold: 0.01` for the old behavior). The constructors of `ExactTolerance`,
+  `PixelTolerance` and `SsimTolerance` are private: the factories of `GoldenTolerance` are the one
+  way to create a tolerance, while the variants stay public for their fields and `switch`.
+- **Failures say what to open and what to run.** A failure names its diff image
+  (`<name>_gleonDiff.png`) next to the failures directory, a missing golden adds
+  `flutter test --update-goldens`, and the box of an `ssim` failure is its "failing area" (the
+  neighborhoods below the thresholds, as in the HTML report), no longer "changed area".
 - **Platform names:** `macos-arm64`, `linux-x64`, `amd64` and `darwin` (the names of the release
   assets and of Dart's `Abi`) are read as `macos-aarch64`, `linux-x86_64` and `macos` wherever a
   platform is parsed (the config, the CLI's `--platform`, `--os`/`--arch` and variables); a

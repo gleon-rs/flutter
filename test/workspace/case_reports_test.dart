@@ -28,6 +28,7 @@ required_version: ">=0.1.0"
 screenshots:
   - include: "test/goldens/*.png"
     mode: pixel
+    diff: { threshold: 0.01 }
 metrics: { enabled: false, console: false }
 ''';
 
@@ -176,11 +177,11 @@ void main() {
         .matchAsync(Swatch.finder);
     final report = sandbox.readCase('test/goldens/swatch');
 
-    expect(failure, contains('changed area'));
+    expect(failure, contains('failing area'));
     expect(report, containsPair('outcome', 'mismatch'));
     expect(
       report,
-      containsPair('message', contains('changed area at (0, 0) 50x60px')),
+      containsPair('message', contains('failing area at (0, 0) 50x60px')),
     );
     expect(
       report['metrics'],
@@ -229,11 +230,13 @@ void main() {
     final lines = await capturePrints(match);
     final report = sandbox.readCase('test/goldens/new/swatch');
 
-    // Word for word the failure of Flutter's own comparator.
+    // The failure of Flutter's own comparator, word for word, and how to
+    // record the golden.
     expect(
       results.singleOrNull,
       'Could not be compared against non-existent file: '
-      '"goldens/new/swatch.png"',
+      '"goldens/new/swatch.png". Record it with '
+      '`flutter test --update-goldens`.',
     );
     expect(report, containsPair('outcome', 'missing'));
     expect(report['golden'], {'path': 'test/goldens/new/swatch.png'});

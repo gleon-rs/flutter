@@ -59,7 +59,7 @@ jobs:
     strategy:
       matrix:
         include:
-          - { os: macos-15, target: macos-arm64 }
+          - { os: macos-26, target: macos-arm64 }
           - { os: ubuntu-26.04, target: linux-x64 }
           - { os: ubuntu-26.04-arm, target: linux-arm64 }
           - { os: windows-2025, target: windows-x64 }
@@ -204,7 +204,7 @@ jobs:
     strategy:
       matrix:
         include:
-          - { os: macos-15, target: macos-arm64 }
+          - { os: macos-26, target: macos-arm64 }
           - { os: ubuntu-26.04, target: linux-x64 }
           - { os: ubuntu-26.04-arm, target: linux-arm64 }
           - { os: windows-2025, target: windows-x64 }

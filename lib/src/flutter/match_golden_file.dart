@@ -17,8 +17,8 @@ import 'ignore_regions.dart';
 /// see the README's "Real text".
 ///
 /// Additional parameters:
-/// * [tolerance]: how much the image may deviate, see [GoldenTolerance]
-///   (exact when omitted).
+/// * [tolerance]: how much the image may deviate, see [GoldenTolerance].
+///   Omitted: the golden's `.gleon/gleon.yaml` rule, else exact.
 /// * [ignoreRegions]: regions excluded from the comparison, in pixels of the
 ///   golden PNG (measure them on the golden file).
 /// * [textTolerance]: how much the text of a widget (a `Finder`) may differ,
