@@ -208,16 +208,28 @@ abstract final class SourceBuild {
     }
     // Compared as URIs: separators and `..` normalized (rustc joins the path
     // of `include_bytes!` to its source file as written), and on Windows
-    // without case.
-    final inside = _comparable(root);
+    // without case. Cargo runs in the checkout's physical directory, so a
+    // checkout named through a symbolic link (`/var` on macOS) counts under
+    // its resolved path too.
+    final insides = {_comparable(root), _comparable(_resolved(root))};
 
     return [
       for (final path in paths)
         if (Uri.file(path) case final uri
-            when _comparable(uri).startsWith(inside) &&
+            when insides.any(_comparable(uri).startsWith) &&
                 File.fromUri(uri).existsSync())
           uri,
     ];
+  }
+
+  /// The directory [root] with its symbolic links resolved, as it is when it
+  /// cannot be (missing).
+  static Uri _resolved(Uri root) {
+    try {
+      return Directory(Directory.fromUri(root).resolveSymbolicLinksSync()).uri;
+    } on FileSystemException {
+      return root;
+    }
   }
 
   /// The path of [uri] as compared on this host's file system.

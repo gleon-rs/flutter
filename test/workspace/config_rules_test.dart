@@ -30,6 +30,20 @@ void main() {
     await expectLater(Blob.finder, sandbox.matcher(Blob.golden));
   });
 
+  // What `gleon init` writes next to a pubspec.yaml: the key only tells the
+  // CLI that the goldens are the baselines; the package applies the rules all
+  // the same.
+  testWidgets('a goldens workspace applies its rules', (tester) async {
+    final sandbox = WorkspaceSandbox.create('baselines: goldens\n$_yaml');
+    await tester.pumpWidget(const Blob(offset: 0.3));
+
+    await expectLater(Blob.finder, sandbox.matcher(Blob.golden));
+    final message = await sandbox
+        .matcher(Blob.golden, tolerance: const .exact())
+        .matchAsync(Blob.finder);
+    expect(message, contains('(gleon exact)'));
+  });
+
   testWidgets('a call argument overrides the yaml rule', (tester) async {
     final sandbox = WorkspaceSandbox.create(_yaml);
     await tester.pumpWidget(const Blob(offset: 0.3));

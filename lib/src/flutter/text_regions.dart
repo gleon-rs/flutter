@@ -50,8 +50,9 @@ abstract final class TextRegions {
         final transformed = MatrixUtils.transformRect(toImage, line);
         final rect = transformed.intersect(clip);
         // A perspective can send a line to infinity (or NaN), which is not
-        // painted; clipped, it would cover the whole clip.
-        if (transformed.isFinite && !rect.isEmpty) {
+        // painted; clipped, it would cover the whole clip. A NaN edge is never
+        // empty, so the clipped rectangle is checked too.
+        if (transformed.isFinite && rect.isFinite && !rect.isEmpty) {
           final Rect(:bottom, :left, :right, :top) = rect;
           regions.add(
             .outwards(left: left, top: top, right: right, bottom: bottom),
@@ -80,11 +81,16 @@ abstract final class TextRegions {
     final transform = toImage.clone();
     parent.applyPaintTransform(child, transform);
     final childClip = parent.describeApproximatePaintClip(child);
+    final transformedClip = childClip == null
+        ? null
+        : MatrixUtils.transformRect(toImage, childClip);
 
     return (
-      clip: childClip == null
+      // A clip a perspective sends to infinity (or NaN) cannot be placed in
+      // the image: the ancestors' clip still holds.
+      clip: transformedClip == null || !transformedClip.isFinite
           ? clip
-          : MatrixUtils.transformRect(toImage, childClip).intersect(clip),
+          : transformedClip.intersect(clip),
       object: child,
       toImage: transform,
     );
@@ -96,22 +102,29 @@ abstract final class TextRegions {
   static List<Rect> _lines(RenderObject object) => switch (object) {
     RenderParagraph(:final overflow, :final size, :final text) => _linesOf(
       text.toPlainText(includeSemanticsLabels: false),
-      object.getBoxesForSelection,
+      (selection) => _byLineOf(
+        object.getBoxesForSelection(selection),
+        // Every run of a line has the same top and bottom here, and lines do
+        // not overlap: which line a box is on, even where tight boxes of
+        // dense lines (a `height` below 1, mixed sizes) overlap.
+        object.getBoxesForSelection(selection, boxHeightStyle: .max),
+      ),
       overflow == .visible ? null : Offset.zero & size,
     ),
+    // Its boxes have the style of its selection: lines by their geometry.
     RenderEditable(:final plainText, :final size) => _linesOf(
       plainText,
-      object.getBoxesForSelection,
+      (selection) => _byLine(object.getBoxesForSelection(selection)),
       Offset.zero & size,
     ),
     _ => const [],
   };
 
-  /// The lines of [plain] text whose selections [boxesOf] gives, clipped to
-  /// [own] (null: the overflow is painted).
+  /// The lines of [plain] text, one rectangle per line of each selection
+  /// ([rectsOf]), clipped to [own] (null: the overflow is painted).
   static List<Rect> _linesOf(
     String plain,
-    List<TextBox> Function(TextSelection selection) boxesOf,
+    List<Rect> Function(TextSelection selection) rectsOf,
     Rect? own,
   ) {
     final lines = <Rect>[];
@@ -121,7 +134,7 @@ abstract final class TextRegions {
       final end = start + segment.length;
       if (end > start) {
         lines.addAll(
-          _byLine(boxesOf(TextSelection(baseOffset: start, extentOffset: end))),
+          rectsOf(TextSelection(baseOffset: start, extentOffset: end)),
         );
       }
       start = end + _placeholder.length;
@@ -140,6 +153,34 @@ abstract final class TextRegions {
 
     return own == null ? grown : grown.intersect(own.inflate(delta));
   }
+
+  /// The tight [boxes] merged into one rectangle per line, the line of each
+  /// box given by the box of the same run in [lineBoxes] (the boxes of the
+  /// selection whose height is their line's, in the same order); by
+  /// [_byLine] when the two do not pair up.
+  static List<Rect> _byLineOf(List<TextBox> boxes, List<TextBox> lineBoxes) {
+    if (boxes.length != lineBoxes.length) return _byLine(boxes);
+    final lineTops = lineBoxes.map((box) => box.top).iterator;
+    final runs = [
+      for (final box in boxes)
+        if (lineTops.moveNext()) (rect: box.toRect(), top: lineTops.current),
+    ]..sort((a, b) => a.top.compareTo(b.top));
+    final merged = <Rect>[];
+    ({Rect rect, double top})? line;
+    for (final run in runs) {
+      if (line != null && (run.top - line.top).abs() < _sameLine) {
+        line = (rect: line.rect.expandToInclude(run.rect), top: line.top);
+      } else {
+        if (line != null) merged.add(line.rect);
+        line = run;
+      }
+    }
+
+    return [...merged, ?line?.rect];
+  }
+
+  /// How far apart the tops of two runs of one line may lie (rounding).
+  static const _sameLine = 0.01;
 
   /// [boxes] merged into one rectangle per line: a box whose middle is within
   /// the line so far (tight boxes of adjacent lines may overlap a little).

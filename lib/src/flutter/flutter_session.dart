@@ -9,7 +9,7 @@ abstract final class FlutterSession {
   /// Version of this package, recorded in case reports
   /// (`source.tool_version`). Keep in sync with `pubspec.yaml`; a test checks
   /// it.
-  static const packageVersion = '0.5.0';
+  static const packageVersion = '0.6.0';
 
   /// How this package names itself and, like Flutter's `LocalFileComparator`,
   /// its failure artifacts.

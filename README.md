@@ -7,7 +7,7 @@ goldens with the app's real fonts that compare their text on the platform they w
 It is a comparison engine, not a golden harness: themes, locales and devices stay with your tests
 or [any harness](#golden-harnesses).
 
-> **Status: 0.5.0.** The API may still change before 1.0. Host `flutter test` on macOS arm64,
+> **Status: 0.6.0.** The API may still change before 1.0. Host `flutter test` on macOS arm64,
 > Linux x64/arm64 (the glibc of Ubuntu 26.04 or newer; every release names the exact floor) and
 > Windows x64; no Rust toolchain is needed. A real app suite of 1 800 goldens runs on it in `ssim`
 > mode, and the package's own CI runs every change on all four hosts.
@@ -21,7 +21,7 @@ dev_dependencies:
   gleon:
     git:
       url: https://github.com/gleon-rs/flutter.git
-      ref: v0.5.0
+      ref: v0.6.0
 ```
 
 **2. Replace one import.** Everything else from `flutter_test` stays available, and goldens
@@ -78,7 +78,7 @@ hooks:
   user_defines:
     gleon:
       ffi_path: path/to/libgleon_ffi.dylib # use this library file as is
-      # release_url: https://mirror.example/gleon/v0.5.0/ # SHA256SUMS.txt + assets
+      # release_url: https://mirror.example/gleon/v0.6.0/ # SHA256SUMS.txt + assets
       # gleon_repo: ../gleon               # contributors: build from a gleon checkout
 ```
 
@@ -253,7 +253,8 @@ platform of a workspace: it warns about each golden recorded elsewhere (its text
 there), `--update-goldens` there records them again, and `GLEON_REQUIRE_CANONICAL=1` makes it
 compare them as its own (see the CI recipe above). To record goldens on the canonical platform
 from CI, let a job you start by hand there run `flutter test --update-goldens` and upload the
-goldens for you to commit.
+goldens for you to commit, or let the [gleon CLI](#the-gleon-cli-optional) commit the
+candidates of a failing CI run with `/gleon approve`.
 
 `textTolerance` (0.0–1.0, or `text_tolerance` of the golden's rule) is the largest share of
 differing pixels allowed in any 16x16 square of text. Unset, it depends on the golden: 0.05 on
@@ -323,6 +324,9 @@ to the workspace root, with the CLI's own code; the file is read again when it c
 
 ```yaml
 # .gleon/gleon.yaml (the gleon CLI writes one with `gleon init`)
+# For the gleon CLI: the goldens are the baselines (the package ignores this line).
+baselines: goldens
+
 # The canonical platform: goldens without a platform stamp were recorded there, see Real text.
 fallback_platform: macos-aarch64
 
@@ -428,11 +432,32 @@ letters, digits, `.`, `_` and `-`) to stamp every report of a run with the same 
 cannot be read or written is recorded as an `io` error.
 
 Use them to set tolerances from measurements instead of guesses, e.g. by collecting the reports
-from CI runs on every OS. The case reports are the result format of the
-[gleon CLI](https://github.com/gleon-rs/gleon), which turns the reports of a run into one
-(`gleon report html`, `gleon dashboard`) and approves candidates (`gleon approve`); its
-[releases](https://github.com/gleon-rs/gleon/releases) have binaries for Linux x64, macOS on
-Apple silicon and Windows x64.
+from CI runs on every OS.
+
+### The gleon CLI (optional)
+
+Each test file runs in its own process, so `flutter test` alone cannot sum up a run. The case
+reports are also the input of the [gleon CLI](https://github.com/gleon-rs/gleon), which reads
+the workspace you already have. You don't need it to use this package. It adds:
+
+- the totals of a run and one line per failure, at the end of the test output;
+- an HTML report with each failing golden, its candidate and diff side by side;
+- in CI, a PR comment listing the failures and a `/gleon approve` comment that commits the new
+  goldens (stamped with the platform that recorded them) to the PR branch.
+
+```bash
+gleon init                       # next to pubspec.yaml; keeps an existing .gleon/gleon.yaml
+gleon test -- flutter test       # the tests as one run, summed up at the end
+gleon report html --out .gleon/runs/latest/report.html
+gleon approve                    # writes the failed candidates over their goldens
+```
+
+`gleon init` writes `baselines: goldens` (the goldens next to the tests are the baselines; add
+the line yourself to a config you wrote by hand). In GitHub Actions, the gleon Action runs the
+tests with `command: verify` and `test-command: flutter test`; its README has the workflow, and
+the one for `/gleon approve`. The CLI is free for local use and for public repositories; private
+repositories need a license in CI. Binaries for Linux x64, macOS on Apple silicon and Windows x64
+are on its [releases](https://github.com/gleon-rs/gleon/releases) page.
 
 ## Golden harnesses
 
@@ -465,6 +490,13 @@ compares best:
    text is compared like every other pixel; a comparator also gets a PNG that Flutter encoded
    first. Text a harness has already replaced in its image (alchemist's `obscureText` draws
    glyphs as rectangles) cannot be compared at all.
+
+With real fonts (`loadAppFonts`) this matters across operating systems: a golden compared
+through `GleonFileComparator` sees no text, so on another OS than its own its glyphs differ as
+pixels and fail, and `--update-goldens` there writes it over even with a `fallback_platform`
+(only text it can see is ignored). Compare such goldens on the platform they are recorded on,
+or match the widgets with gleon's `matchesGoldenFile` (for alchemist:
+[doc/alchemist.md](doc/alchemist.md)).
 
 Whichever `goldenFileComparator` is assigned last wins: a harness that installs a tolerant
 comparator of its own (alchemist with `diffThreshold` above 0, golden_screenshot's default

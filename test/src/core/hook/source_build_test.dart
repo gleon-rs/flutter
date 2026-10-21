@@ -281,6 +281,35 @@ void main() {
       }
     });
 
+    // Cargo runs in the physical directory of a checkout named through a
+    // symbolic link, so its dep-info names the files under the resolved path.
+    test('a checkout named through a symbolic link keeps its inputs', () async {
+      final root = fakeCheckout();
+      final link = Link('${tempPath()}/linked-checkout')..createSync(root);
+      final physical = Directory(root).resolveSymbolicLinksSync();
+      File('$root/gleon-ffi/build.rs')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('x');
+      final cargo = FakeCargo(
+        compiled: [
+          '$physical/gleon-ffi/build.rs',
+          '$physical/gleon-ffi/src/lib.rs',
+        ],
+      );
+
+      final built = await SourceBuild.run(
+        repoRoot: .directory(link.path),
+        targetDir: .directory('${tempPath()}/cargo'),
+        target: .linuxX64,
+        environment: cargoEnvironment(),
+        runProcess: cargo.run,
+      );
+      expect(
+        built.dependencies,
+        contains(Uri.file('$physical/gleon-ffi/build.rs')),
+      );
+    });
+
     // `build.dep-info-basedir` makes cargo write paths relative to a
     // directory of its config: without knowing it, every input is tracked.
     test('relative dep-info paths fall back to every input', () async {
