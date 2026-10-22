@@ -285,7 +285,15 @@ void main() {
     // symbolic link, so its dep-info names the files under the resolved path.
     test('a checkout named through a symbolic link keeps its inputs', () async {
       final root = fakeCheckout();
-      final link = Link('${tempPath()}/linked-checkout')..createSync(root);
+      final link = Link('${tempPath()}/linked-checkout');
+      try {
+        link.createSync(root);
+      } on FileSystemException catch (error) {
+        // Windows without the privilege to create symbolic links.
+        markTestSkipped('symbolic links cannot be created here: $error');
+
+        return;
+      }
       final physical = Directory(root).resolveSymbolicLinksSync();
       File('$root/gleon-ffi/build.rs')
         ..createSync(recursive: true)

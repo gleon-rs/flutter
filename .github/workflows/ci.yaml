@@ -293,8 +293,10 @@ jobs:
           fi
           grep -q 'gleon test --' build/gleon/status.log
           # The approve loop: a golden that no longer matches fails the run, `gleon approve`
-          # writes the candidate over it (stamped with this platform), the next run passes.
-          cp test/goldens/counter_three_taps.png test/goldens/counter_initial.png
+          # writes the candidate over it (stamped with this platform), the next run passes. The
+          # replacement has another size, so it fails on every OS (a golden differing in its text
+          # alone passes here: the goldens are recorded on macOS, where only text is compared).
+          cp test/goldens/counter_page.png test/goldens/counter_initial.png
           if gleon test -- flutter test > build/gleon/broken.log 2>&1; then
             echo "::error::a golden replaced by another image should fail"; exit 1
           fi

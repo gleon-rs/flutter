@@ -43,8 +43,10 @@ void main() {
     expect(AppFonts.checksum(data, 0, font.length), 0xB1B0AFBA);
   });
 
+  // A real table directory behind the tag: only the `ttcf` check keeps it.
   test('a font collection is returned as it is, not copied', () {
-    final collection = Uint8List(16)..setAll(0, 'ttcf'.codeUnits);
+    final collection = File(_path('Roboto-Regular.ttf')).readAsBytesSync()
+      ..setAll(0, 'ttcf'.codeUnits);
 
     expect(
       identical(AppFonts.withPortableLineMetrics(collection), collection),
