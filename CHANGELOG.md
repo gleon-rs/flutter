@@ -1,3 +1,25 @@
+## 0.6.0
+
+- **The gleon CLI reads your workspace as it is.** `gleon init` of the CLI writes
+  `baselines: goldens` into `.gleon/gleon.yaml`: the goldens next to the tests are the baselines,
+  so the CLI sums up and reports the runs of `gleon test -- flutter test` and commits approved
+  candidates over the goldens, but never scans them as screenshots. This version accepts the key
+  (older ones reject it as unknown); it changes nothing in how goldens compare.
+- README: an optional section on what the CLI adds (run summary, HTML report, PR comment,
+  `/gleon approve` from CI) and how to start. Without the CLI the package works as before.
+- The native library is built from the gleon commit that adds the key; `NATIVE_LICENSES.md`
+  follows its dependency updates.
+- **Text regions:** lines of a paragraph are told apart by their full height, so dense lines
+  (a `height` below 1 with mixed sizes) keep a region each instead of merging; a clip that a
+  perspective sends to infinity no longer breaks finding the text.
+- **`loadAppFonts` is cheaper per test file:** a font file listed under several weights is
+  loaded once, and the font checksum is updated from the changed bytes instead of reading the
+  whole font.
+- README: goldens compared through `GleonFileComparator` see no text, so with real fonts they
+  fail on other operating systems and `--update-goldens` there writes them over.
+- Contributors: a `gleon_repo` checkout reached through a symbolic link keeps tracking its
+  sources.
+
 ## 0.5.0
 
 - **Real text works without a config.** `--update-goldens` stamps every golden it writes with

@@ -90,10 +90,17 @@ abstract final class AppFonts {
           'family': final String name,
           'fonts': final List<Object?> fonts,
         }) {
-          await _loadFamily(name, [
+          // One file per face: a variable font listed under several weights
+          // is loaded (and aligned) once.
+          final files = {
             for (final font in fonts)
-              if (font case {'asset': final String asset})
-                await rootBundle.load(asset),
+              if (font case {'asset': final String asset}) asset,
+          };
+          // One after another: loaded all at once, the text of the example's
+          // goldens rendered differently (measured on 2026-10-21; the order
+          // in which faces are registered matters).
+          await _loadFamily(name, [
+            for (final file in files) await rootBundle.load(file),
           ]);
           hasRoboto |= name == 'Roboto';
         }
@@ -134,8 +141,9 @@ abstract final class AppFonts {
     return faces;
   }
 
-  /// A copy of the TrueType/OpenType [font] whose Windows and typographic
-  /// line metrics are its `hhea` ones, so text lays out alike on every OS.
+  /// The TrueType/OpenType [font] with its Windows and typographic line
+  /// metrics set to its `hhea` ones (in a copy), so text lays out alike on
+  /// every OS.
   ///
   /// macOS (CoreText) and Linux (FreeType) take a font's ascent and descent
   /// from `hhea`, Windows (DirectWrite) from `OS/2`
@@ -143,38 +151,25 @@ abstract final class AppFonts {
   /// here (of 2048 units), so on Windows every line is taller and every
   /// baseline lower. Fonts whose `fsSelection` has USE_TYPO_METRICS (many
   /// newer ones) are measured by `OS/2` `sTypo*` instead on some systems, so
-  /// those are aligned too. The `OS/2` table checksum and the font's
-  /// `checkSumAdjustment` are recomputed. A font collection, or a font
-  /// without these tables, is returned unchanged.
+  /// those are aligned too. The `OS/2` table checksum is recomputed and the
+  /// font's `checkSumAdjustment` updated by the change, without reading the
+  /// rest of the font (a font whose checksum held keeps it; renderers do not
+  /// check it). A font collection, or a font without these tables, is
+  /// returned as it is (not copied).
   static Uint8List withPortableLineMetrics(Uint8List font) {
+    final tables = _metricTables(font);
+    if (tables == null) return font;
+    final (:head, :hhea, :os2) = tables;
     final copy = Uint8List.fromList(font);
     final data = ByteData.sublistView(copy);
-    if (copy.length < 12 || String.fromCharCodes(copy, 0, 4) == 'ttcf') {
-      return copy;
-    }
-    final tables = <String, ({int length, int offset, int record})>{};
-    for (int index = 0; index < data.getUint16(4); index += 1) {
-      final record = index * 16 + 12;
-      if (record + 16 > copy.length) return copy;
-      tables[String.fromCharCodes(copy, record, record + 4)] = (
-        length: data.getUint32(record + 12),
-        offset: data.getUint32(record + 8),
-        record: record,
-      );
-    }
-    final (hhea, os2, head) = (tables['hhea'], tables['OS/2'], tables['head']);
-    if (hhea == null ||
-        os2 == null ||
-        head == null ||
-        head.length < 12 ||
-        hhea.length < 10 ||
-        hhea.offset + hhea.length > copy.length ||
-        head.offset + 12 > copy.length ||
-        os2.length < 78 ||
-        os2.offset + os2.length > copy.length) {
-      return copy;
-    }
-
+    // The words this changes: the five line metrics of `OS/2`, its table
+    // checksum and `checkSumAdjustment` (whole-font checksums add words).
+    final changed = [
+      (start: os2.offset + 68, end: os2.offset + 78),
+      (start: os2.record + 4, end: os2.record + 8),
+      (start: head.offset + 8, end: head.offset + 12),
+    ];
+    final wordsBefore = _sumOfWords(data, changed);
     final above = data.getInt16(hhea.offset + 4);
     final below = data.getInt16(hhea.offset + 6);
     data
@@ -186,14 +181,62 @@ abstract final class AppFonts {
       ..setUint16(os2.offset + 74, above.clamp(0, 0xFFFF))
       ..setUint16(os2.offset + 76, (-below).clamp(0, 0xFFFF))
       ..setUint32(os2.record + 4, checksum(data, os2.offset, os2.length))
-      // The whole-font checksum is taken with the adjustment itself zeroed.
       ..setUint32(head.offset + 8, 0)
+      // The whole-font checksum (the adjustment counted as zero) was
+      // 0xB1B0AFBA minus the adjustment and changed by the changed words: the
+      // new adjustment makes it 0xB1B0AFBA again.
       ..setUint32(
         head.offset + 8,
-        (0xB1B0AFBA - checksum(data, 0, copy.length)) & 0xFFFFFFFF,
+        (wordsBefore - _sumOfWords(data, changed)) & 0xFFFFFFFF,
       );
 
     return copy;
+  }
+
+  /// The `head`, `hhea` and `OS/2` table records of [font], or null for a
+  /// font collection, a font without them, or one too short for them.
+  static _MetricTables? _metricTables(Uint8List font) {
+    if (font.length < 12 || String.fromCharCodes(font, 0, 4) == 'ttcf') {
+      return null;
+    }
+    final data = ByteData.sublistView(font);
+    final tables = <String, _Table>{};
+    for (int index = 0; index < data.getUint16(4); index += 1) {
+      final record = index * 16 + 12;
+      if (record + 16 > font.length) return null;
+      tables[String.fromCharCodes(font, record, record + 4)] = (
+        length: data.getUint32(record + 12),
+        offset: data.getUint32(record + 8),
+        record: record,
+      );
+    }
+    final (hhea, os2, head) = (tables['hhea'], tables['OS/2'], tables['head']);
+
+    return hhea == null ||
+            os2 == null ||
+            head == null ||
+            head.length < 12 ||
+            hhea.length < 10 ||
+            hhea.offset + hhea.length > font.length ||
+            head.offset + 12 > font.length ||
+            os2.length < 78 ||
+            os2.offset + os2.length > font.length
+        ? null
+        : (head: head, hhea: hhea, os2: os2);
+  }
+
+  /// The checksum of the whole words of the font (aligned to its start)
+  /// that hold the bytes of [ranges].
+  static int _sumOfWords(ByteData data, List<_Range> ranges) {
+    int sum = 0;
+    for (final (:end, :start) in ranges) {
+      final first = start - start % 4;
+      final last = (end + 3) ~/ 4 * 4;
+      final until = last < data.lengthInBytes ? last : data.lengthInBytes;
+      sum = (sum + checksum(data, first, until - first)) & 0xFFFFFFFF;
+    }
+
+    return sum;
   }
 
   /// The OpenType checksum of [length] bytes at [offset]: the sum of
@@ -216,3 +259,12 @@ abstract final class AppFonts {
     return sum;
   }
 }
+
+/// A table record of a font: where its table lies, and where the record is.
+typedef _Table = ({int length, int offset, int record});
+
+/// The tables [AppFonts.withPortableLineMetrics] reads or changes.
+typedef _MetricTables = ({_Table head, _Table hhea, _Table os2});
+
+/// The bytes from `start` to `end` of a font.
+typedef _Range = ({int end, int start});

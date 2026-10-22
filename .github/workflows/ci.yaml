@@ -276,12 +276,36 @@ jobs:
           GLEON_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           flutter pub get
-          gleon test -- flutter test
+          mkdir -p build/gleon
+          gleon test -- flutter test 2>&1 | tee build/gleon/test.log
+          # The run is summed up at its end: every case passed.
+          grep -Eq 'case\(s\): [1-9][0-9]* passed, 0 failed' build/gleon/test.log
           gleon report markdown
           gleon report junit --out build/gleon/junit.xml
+          gleon report html --out build/gleon/report.html
+          test -s build/gleon/report.html
           gleon dashboard --out build/gleon/dashboard.html
           # Every golden of the example was read, and none failed.
           grep -Eq 'tests="[1-9][0-9]*" failures="0" errors="0"' build/gleon/junit.xml
+          # `baselines: goldens`: the commands that scan screenshots refuse and point to `gleon test`.
+          if gleon status 2> build/gleon/status.log; then
+            echo "::error::gleon status should refuse a goldens workspace"; exit 1
+          fi
+          grep -q 'gleon test --' build/gleon/status.log
+          # The approve loop: a golden that no longer matches fails the run, `gleon approve`
+          # writes the candidate over it (stamped with this platform), the next run passes. The
+          # replacement has another size, so it fails on every OS (a golden differing in its text
+          # alone passes here: the goldens are recorded on macOS, where only text is compared).
+          cp test/goldens/counter_page.png test/goldens/counter_initial.png
+          if gleon test -- flutter test > build/gleon/broken.log 2>&1; then
+            echo "::error::a golden replaced by another image should fail"; exit 1
+          fi
+          grep -Eq 'case\(s\): [0-9]+ passed, 1 failed \(1 mismatch\)' build/gleon/broken.log
+          gleon approve 2>&1 | tee build/gleon/approve.log
+          grep -q 'Approved 1 ' build/gleon/approve.log
+          grep -q 'gleon:platform' test/goldens/counter_initial.png
+          gleon test -- flutter test 2>&1 | tee build/gleon/fixed.log
+          grep -Eq 'case\(s\): [1-9][0-9]* passed, 0 failed' build/gleon/fixed.log
 
   quality:
     name: Quality gates

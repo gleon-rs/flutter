@@ -209,8 +209,13 @@ enum NativeTarget {
   static String get keys => values.map((target) => target.key).join(', ');
 
   /// Looks up a target by [key] (`<os>-<arch>`), or returns null.
-  static NativeTarget? byKey(String key) =>
-      values.where((target) => target.key == key).firstOrNull;
+  static NativeTarget? byKey(String key) {
+    for (final target in values) {
+      if (target.key == key) return target;
+    }
+
+    return null;
+  }
 
   /// The target of the running process, or null: [Abi] names are
   /// `<os>_<arch>`, like [key] with an underscore.

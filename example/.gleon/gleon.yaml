@@ -3,6 +3,11 @@
 # that pass no `tolerance`.
 required_version: ">=0.1.0"
 
+# The goldens next to the tests are the baselines (what `gleon init` writes for
+# Flutter): the CLI reads the case reports of `gleon test -- flutter test`
+# instead of scanning the goldens as screenshots.
+baselines: goldens
+
 # The goldens in test/goldens/ are recorded on an Apple silicon Mac (see
 # "Real text" in the package README).
 fallback_platform: macos-aarch64

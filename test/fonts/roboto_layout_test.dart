@@ -43,6 +43,17 @@ void main() {
     expect(AppFonts.checksum(data, 0, font.length), 0xB1B0AFBA);
   });
 
+  // A real table directory behind the tag: only the `ttcf` check keeps it.
+  test('a font collection is returned as it is, not copied', () {
+    final collection = File(_path('Roboto-Regular.ttf')).readAsBytesSync()
+      ..setAll(0, 'ttcf'.codeUnits);
+
+    expect(
+      identical(AppFonts.withPortableLineMetrics(collection), collection),
+      isTrue,
+    );
+  });
+
   test('checksums pad the last word with zeros', () {
     final data = ByteData.sublistView(Uint8List.fromList([1, 2, 3, 4, 5]));
 
