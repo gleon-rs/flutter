@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../bin/src/case_check.dart';
+
 void main() {
   Directory? temp;
   setUp(() => temp = Directory.systemTemp.createTempSync('gleon_cases_'));
@@ -19,13 +21,13 @@ void main() {
 
   /// A report of macOS that compared the golden [name]`.png` with text.
   String report(String name) => json.encode({
-    'comparison': {'text_tolerance': 0.05},
+    'comparison': {'text_tolerance': CaseCheck.ownText},
     'golden': {'path': '$name.png'},
     'name': name,
     'outcome': 'match',
     'platform': {'arch': 'aarch64', 'os': 'macos'},
     'run_id': 'run-1',
-    'schema_version': 5,
+    'schema_version': CaseCheck.schemaVersion,
   });
 
   Future<ProcessResult> checkCases(List<String> args) {

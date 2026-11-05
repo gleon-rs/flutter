@@ -21,7 +21,8 @@ final class CaseCheck {
     this.runId,
   });
 
-  /// The platform key of the canonical platform (e.g. `macos-aarch64`).
+  /// The platform key of the canonical platform (e.g. `macos-aarch64`), the
+  /// name of the directory gleon files its case reports under.
   final String fallbackPlatform;
 
   /// The fewest reports.
@@ -36,23 +37,17 @@ final class CaseCheck {
   /// The outcomes allowed unless others are given: passes.
   static const defaultOutcomes = {'identical', 'match'};
 
-  /// The default text tolerance on the platform a golden was recorded on.
-  static const _ownText = 0.05;
+  /// The default text tolerance on the platform a golden was recorded on
+  /// (`TextTolerance::OWN_PLATFORM` in gleon-model's `src/tolerance.rs`).
+  static const ownText = 0.05;
 
-  /// The default text tolerance on any other platform.
-  static const _otherText = 1.0;
+  /// The default text tolerance on any other platform
+  /// (`TextTolerance::DEFAULT` in gleon-model's `src/tolerance.rs`).
+  static const otherText = 1.0;
 
-  /// The key gleon gives a platform, which names the directory of its case
-  /// reports: `<os>-<arch>`, or `os=<os>+arch=<arch>` when either contains
-  /// `-`, so no two platforms share one (`PlatformInfo::to_key` in
-  /// gleon-model's `src/platform.rs`).
-  static String platformKey({required String os, required String arch}) =>
-      os.contains('-') || arch.contains('-')
-      ? 'os=$os+arch=$arch'
-      : '$os-$arch';
-
-  /// The case report schema version gleon writes.
-  static const _schemaVersion = 5;
+  /// The case report schema version gleon writes (`CASE_SCHEMA_VERSION` in
+  /// gleon-model's `src/case.rs`).
+  static const schemaVersion = 5;
 
   /// What the report [content] (JSON text of one case report file at
   /// [location], `/`-separated and relative to `cases/`) shows that it
@@ -77,12 +72,12 @@ final class CaseCheck {
       :version,
     ) = report;
     final belongs = '$platform/$name.json';
-    final expectedText = platform == fallbackPlatform ? _ownText : _otherText;
+    final expectedText = platform == fallbackPlatform ? ownText : otherText;
 
     return [
       if (location != belongs) 'lies at $location, expected $belongs',
-      if (version != _schemaVersion)
-        'schema_version $version, expected $_schemaVersion',
+      if (version != schemaVersion)
+        'schema_version $version, expected $schemaVersion',
       if (!outcomes.contains(outcome))
         'outcome $outcome, expected one of ${outcomes.join(', ')}',
       if (runId case final expected? when reportRunId != expected)
@@ -126,7 +121,7 @@ final class _Case {
         recorded: golden['platform']?.toString(),
         name: name,
         outcome: outcome,
-        platform: CaseCheck.platformKey(os: os, arch: arch),
+        platform: '$os-$arch',
         runId: report['run_id']?.toString(),
         text: _share(comparison['text_tolerance']),
         version: version,
@@ -143,7 +138,10 @@ final class _Case {
   /// How the comparison ended.
   final String outcome;
 
-  /// The key of the recording platform ([CaseCheck.platformKey]).
+  /// The key of the recording platform: `<os>-<arch>`, the one form of
+  /// `PlatformInfo::key` (gleon-model's `src/platform.rs`) a gleon-ffi report
+  /// has, since gleon-ffi records the host (`PlatformConfig::host()`), whose
+  /// OS and architecture contain no `-`.
   final String platform;
 
   /// The run that recorded it.

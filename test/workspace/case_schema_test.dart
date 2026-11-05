@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../bin/src/case_check.dart';
 import '../helpers/workspace_sandbox.dart';
 
 void main() {
@@ -27,7 +28,7 @@ void _expectSchemaRejectsOffContractCases() {
     'platform': {'arch': 'aarch64', 'os': 'macos'},
     'recorded_at': '2026-09-27T12:00:00.000Z',
     'regions': <Object>[],
-    'schema_version': 5,
+    'schema_version': CaseCheck.schemaVersion,
     'source': {'tool': 'gleon_flutter', 'tool_version': '0.1.0'},
     'timings_ms': {'total': 1.5},
   };
@@ -53,6 +54,7 @@ void _expectSchemaRejectsOffContractCases() {
   expect(schema?.validate(recorded).isValid, isTrue);
   for (final broken in [
     {...valid, 'schema_version': 2},
+    {...valid, 'schema_version': CaseCheck.schemaVersion + 1},
     {
       ...valid,
       'golden': {'path': 'a.png', 'platform': 'Linux x86', 'sha256': '0' * 64},
