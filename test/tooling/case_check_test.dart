@@ -12,11 +12,11 @@ void main() {
     String? recorded,
     String os = 'macos',
     String arch = 'aarch64',
-    double text = 0.05,
+    double text = CaseCheck.ownText,
     bool hasText = true,
     String outcome = 'match',
     String? runId,
-    int version = 5,
+    int version = CaseCheck.schemaVersion,
   }) => json.encode({
     'comparison': {'text_tolerance': ?(hasText ? text : null)},
     'golden': {'path': golden, 'platform': ?recorded},
@@ -28,14 +28,14 @@ void main() {
   });
 
   /// The problems of [content] filed at [location] (relative to `cases/`),
-  /// by default where it belongs: `<platform key>/<name>.json`.
+  /// by default where it belongs: `<os>-<arch>/<name>.json`.
   List<String> problemsOf(CaseCheck check, String content, {String? location}) {
     final belongs = switch (json.decode(content)) {
       {
         'name': final String name,
         'platform': {'arch': final String arch, 'os': final String os},
       } =>
-        '${CaseCheck.platformKey(os: os, arch: arch)}/$name.json',
+        '$os-$arch/$name.json',
       _ => 'a.json',
     };
 
@@ -78,30 +78,6 @@ void main() {
         'golden recorded on linux-x86_64, expected macos-aarch64',
       ]);
     });
-
-    test('a dashed OS has a key=value directory, like gleon', () {
-      expect(
-        CaseCheck.platformKey(os: 'macos', arch: 'aarch64'),
-        'macos-aarch64',
-      );
-      expect(
-        CaseCheck.platformKey(os: 'ios-sim', arch: 'arm64'),
-        'os=ios-sim+arch=arm64',
-      );
-      final dashed = report(os: 'ios-sim', arch: 'arm64', text: 1);
-      const misplaced =
-          'lies at ios-sim-arm64/test/goldens/a.json, expected '
-          'os=ios-sim+arch=arm64/test/goldens/a.json';
-      expect(problemsOf(check, dashed), isEmpty);
-      expect(
-        problemsOf(
-          check,
-          dashed,
-          location: 'ios-sim-arm64/test/goldens/a.json',
-        ),
-        [misplaced],
-      );
-    });
   });
 
   test('a file that is no case report is a problem, not a crash', () {
@@ -129,7 +105,7 @@ void main() {
       isEmpty,
     );
     expect(problemsOf(check, report(runId: 'run-2', version: 2)), [
-      'schema_version 2, expected 5',
+      'schema_version 2, expected ${CaseCheck.schemaVersion}',
       'outcome match, expected one of identical',
       'run_id run-2, expected run-1',
     ]);

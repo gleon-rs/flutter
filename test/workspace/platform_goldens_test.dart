@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:gleon/gleon.dart';
 import 'package:gleon/src/core/config/gleon_session.dart';
 
+import '../../bin/src/case_check.dart';
 import '../helpers/caption.dart';
 import '../helpers/golden_updates.dart';
 import '../helpers/png_origin.dart';
@@ -33,6 +34,11 @@ void main() {
     expect(message, contains('text ≤ 5.00% per tile).'));
     expect(report['golden'], containsPair('path', 'test/${Caption.golden}'));
     expect(report['golden'], containsPair('platform', hostPlatform));
+    expect(
+      report['comparison'],
+      containsPair('text_tolerance', CaseCheck.ownText),
+      reason: 'the default bin/check_cases.dart expects where it was recorded',
+    );
     expect(PngOrigin.read(sandbox.goldenBytes(Caption.golden)), hostPlatform);
 
     final textOff = await _compare(sandbox, textTolerance: 1);
@@ -202,10 +208,15 @@ void main() {
 
     await tester.pumpWidget(const Caption(digits: '0123456780'));
     final digit = await _compare(sandbox);
-    final golden = sandbox.readCase(_name)['golden'];
+    final report = sandbox.readCase(_name);
 
     expect(digit, isNull, reason: 'text of another OS is ignored');
-    expect(golden, containsPair('platform', foreignPlatform));
+    expect(report['golden'], containsPair('platform', foreignPlatform));
+    expect(
+      report['comparison'],
+      containsPair('text_tolerance', CaseCheck.otherText),
+      reason: 'the default bin/check_cases.dart expects on another platform',
+    );
     expect(
       sandbox.artifactsOf(_name).existsSync(),
       isFalse,
