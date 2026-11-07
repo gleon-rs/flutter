@@ -7,8 +7,10 @@
   (older ones reject it as unknown); it changes nothing in how goldens compare.
 - README: an optional section on what the CLI adds (run summary, HTML report, PR comment,
   `/gleon approve` from CI) and how to start. Without the CLI the package works as before.
-- The native library is built from gleon `5c6788b`, with the key and the `ssim` size check below;
-  `NATIVE_LICENSES.md` follows its dependency updates.
+- The native library is built from gleon `efe75bc`, with the key and the `ssim` size check below;
+  `NATIVE_LICENSES.md` follows its dependency updates. A `diff` key of another mode in
+  `.gleon/gleon.yaml` is named in backticks in the error (`` `diff.threshold` applies to
+  `mode: pixel` only ``).
 - **`ssim` goldens larger than 4096x4096 pixels:** `--update-goldens` does not record them (the
   failure says so, and the old golden stays), and a match against one is reported as not
   comparable, also when the images are identical. Before, such a golden was written and then
