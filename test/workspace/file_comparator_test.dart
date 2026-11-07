@@ -19,6 +19,14 @@ WorkspaceSandbox _installed({
   Map<String, String> extraGoldens = const {},
 }) => .create(yaml, extraGoldens: extraGoldens, installsGleonComparator: true);
 
+/// Every golden of the sandbox under `ssim`.
+const _ssimRule = '''
+required_version: ">=0.1.0"
+screenshots:
+  - include: "test/goldens/**/*.png"
+    mode: ssim
+''';
+
 void main() {
   group("flutter_test's matchesGoldenFile with GleonFileComparator", () {
     testWidgets('passes an identical render', (tester) async {
@@ -43,6 +51,32 @@ void main() {
         File('${sandbox.failures.path}/swatch_gleonDiff.png').existsSync(),
         isTrue,
       );
+    });
+
+    // The engine's budget holds behind flutter_test's matcher too: an ssim
+    // golden over it is never recorded, and it is not comparable even when
+    // the bytes are identical.
+    test('refuses an ssim golden over the SSIM budget', () async {
+      final sandbox = _installed(yaml: _ssimRule);
+      final bytes = File('test/fixtures/ssim_budget_4097x4096.png')
+          .readAsBytesSync();
+      const key = 'goldens/over_budget.png';
+      final golden = File('${sandbox.dir.path}/$key');
+      final overBudget = contains('4097x4096 exceeds the SSIM analysis budget');
+
+      await expectLater(
+        // flutter_test's matcher lets the comparator's failure through.
+        withGoldenUpdates<void>(() async {
+          await ft.matchesGoldenFile(key).matchAsync(bytes);
+        }),
+        throwsA(
+          isA<ft.TestFailure>().having((e) => e.message, 'message', overBudget),
+        ),
+      );
+      expect(golden.existsSync(), isFalse);
+
+      golden.writeAsBytesSync(bytes);
+      expect(await ft.matchesGoldenFile(key).matchAsync(bytes), overBudget);
     });
 
     testWidgets('compares byte inputs', (tester) async {

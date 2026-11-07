@@ -98,17 +98,20 @@ abstract final class SourceBuild {
     return (dependencies: dependencies(root, library), library: library);
   }
 
+  /// Whether the directory [root], with a trailing slash or without, is a
+  /// gleon checkout: it has the [crate].
+  static bool isCheckout(Uri root) =>
+      File.fromUri(_asDirectory(root).resolve('$crate/Cargo.toml'))
+          .existsSync();
+
   /// The gleon checkout at [repoRoot] as a directory URI (with a trailing
   /// slash, so `resolve` stays inside it).
   ///
   /// Throws a [StateError] naming the `gleon_repo` user-define when
   /// [repoRoot] is not a gleon checkout.
   static Uri checkoutRoot(Uri repoRoot) {
-    // User-define paths resolve without a trailing slash.
-    final root = repoRoot.path.endsWith('/')
-        ? repoRoot
-        : repoRoot.replace(path: '${repoRoot.path}/');
-    if (!File.fromUri(root.resolve('$crate/Cargo.toml')).existsSync()) {
+    final root = _asDirectory(repoRoot);
+    if (!isCheckout(root)) {
       throw StateError(
         'gleon: user-define `gleon_repo` must point to a gleon checkout; '
         '$crate not found in ${root.toFilePath()}.',
@@ -117,6 +120,11 @@ abstract final class SourceBuild {
 
     return root;
   }
+
+  /// [dir] with a trailing slash, so `resolve` stays inside it: user-define
+  /// paths, like `Uri.file`, resolve without one.
+  static Uri _asDirectory(Uri dir) =>
+      dir.path.endsWith('/') ? dir : dir.replace(path: '${dir.path}/');
 
   /// Resolves `cargo` from `PATH` in [environment], falling back to the
   /// default rustup location (IDE-launched processes often lack
@@ -150,11 +158,14 @@ abstract final class SourceBuild {
     );
   }
 
-  /// Every Rust input of the build inside the checkout [root]: the workspace
-  /// files plus the manifest and sources of [crate] and of every crate it
-  /// reaches through `path` dependencies, so a new crate is tracked without
-  /// changing this list.
-  static List<Uri> inputs(Uri root) => [
+  /// Every Rust input of the build inside the checkout [root] (with a trailing
+  /// slash or without, like every root here): the workspace files plus the
+  /// manifest and sources of [crate] and of every crate it reaches through
+  /// `path` dependencies, so a new crate is tracked without changing this
+  /// list.
+  static List<Uri> inputs(Uri root) => _inputs(_asDirectory(root));
+
+  static List<Uri> _inputs(Uri root) => [
     for (final file in _workspaceFiles)
       if (File.fromUri(root.resolve(file)) case final workspaceFile
           when workspaceFile.existsSync())
@@ -167,16 +178,17 @@ abstract final class SourceBuild {
       ],
   ];
 
-  /// What the build of [library] read inside the checkout [root]: the
+  /// What the build of [library] read inside the [checkout]: the
   /// workspace files (`Cargo.lock` among them: the sources of registry
   /// crates lie outside) and crate manifests of [inputs], and every file
   /// cargo's dep-info next to the library names there (`<name>.d`: the
   /// sources, a crate-root `build.rs`, `include_bytes!` data, which no glob
   /// of `src/` sees); the sources of [inputs] without a usable dep-info.
-  static List<Uri> dependencies(Uri root, Uri library) {
+  static List<Uri> dependencies(Uri checkout, Uri library) {
+    final root = _asDirectory(checkout);
     final compiled = _compiled(root, library);
-    if (compiled == null) return inputs(root);
-    final manifests = inputs(root).where(
+    if (compiled == null) return _inputs(root);
+    final manifests = _inputs(root).where(
       (input) => switch (input.pathSegments.lastOrNull) {
         final name? => name.endsWith('.toml') || name == 'Cargo.lock',
         null => false,
@@ -248,7 +260,7 @@ abstract final class SourceBuild {
   /// does not change the library.
   static List<String> inputPaths(Uri root) => [
     ..._workspaceFiles,
-    for (final member in _localCrates(root)) ...[
+    for (final member in _localCrates(_asDirectory(root))) ...[
       '$member/Cargo.toml',
       '$member/src',
     ],

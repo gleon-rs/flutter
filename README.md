@@ -583,6 +583,9 @@ machines even on one OS: compare it under `ssim`.
   canvas. The text of a widget is judged by its tiles instead (see Real text).
 - `ssim` can pass a low-contrast color change of a one-pixel line. Use `exact`/`pixel` where every
   pixel matters.
+- `ssim` compares images up to 4096x4096 pixels (16,777,216). `--update-goldens` does not record a
+  larger golden under `ssim`, and gleon reports such a golden as not comparable, also when the
+  images are identical. Use `exact` or `pixel` for larger images.
 - gleon's matcher takes the directory of the goldens from `goldenFileComparator`, which must be
   a `LocalFileComparator`: Flutter's default, a subclass of it (alchemist's, the
   `_TolerantGoldenFileComparator` example of Flutter's documentation) or `GleonFileComparator`.

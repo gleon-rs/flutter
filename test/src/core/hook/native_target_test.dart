@@ -3,6 +3,8 @@ import 'dart:ffi' show Abi;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gleon/src/core/hook/native_target.dart';
 
+import '../../../helpers/gleon_platform.dart';
+
 void main() {
   test('the built library lies in the target directory, slash or not', () {
     const linux = NativeTarget.linuxX64;
@@ -11,6 +13,20 @@ void main() {
     );
     expect(linux.builtLibrary(.file('/w/target/')), expected);
     expect(linux.builtLibrary(.file('/w/target')), expected);
+  });
+
+  test('the bundled library lies in native/<key>/ of the package', () {
+    const linux = NativeTarget.linuxX64;
+    final package = Uri.file('/p/gleon/');
+    expect(linux.nativeDir(package), Uri.file('/p/gleon/native/linux-x64/'));
+    expect(
+      linux.bundledLibrary(package),
+      Uri.file('/p/gleon/native/linux-x64/libgleon_ffi.so'),
+    );
+    expect(
+      NativeTarget.pinFile(package),
+      Uri.file('/p/gleon/native/gleon_ref'),
+    );
   });
 
   test('gleon names every target like Rust std::env::consts', () {

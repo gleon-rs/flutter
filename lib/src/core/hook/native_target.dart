@@ -64,10 +64,16 @@ enum NativeTarget {
   static bool isBuildOfPin(String? builtFrom, String pinned) =>
       builtFrom == pinned || builtFrom == '$pinned$dirtySuffix';
 
-  /// The gleon commit `native/<pinFileName>` of the package at [packageRoot]
-  /// pins, or null without that file (the pub.dev archive ships none).
+  /// The pin of the package at [packageRoot], `native/<pinFileName>`: the
+  /// gleon commit a git checkout of the package is built from (the pub.dev
+  /// archive ships none).
+  static Uri pinFile(Uri packageRoot) =>
+      packageRoot.resolve('native/$pinFileName');
+
+  /// The gleon commit the [pinFile] of the package at [packageRoot] pins, or
+  /// null without that file.
   static String? readPin(Uri packageRoot) {
-    final pin = File.fromUri(packageRoot.resolve('native/$pinFileName'));
+    final pin = File.fromUri(pinFile(packageRoot));
 
     return pin.existsSync() ? pin.readAsStringSync().trim() : null;
   }
@@ -89,12 +95,14 @@ enum NativeTarget {
   /// Stable identifier, e.g. `macos-arm64` (directory in `native/`).
   String get key => '$os-$arch';
 
-  /// The name gleon gives this platform (Rust's `std::env::consts` names),
-  /// e.g. `macos-aarch64`: the `fallback_platform` that names it.
-  String get gleonPlatform => switch (rustTriple.split('-')) {
-    [final rustArch, ...] => '$os-$rustArch',
-    _ => key,
-  };
+  /// The directory of this target in `native/` of the package at
+  /// [packageRoot] (`native/macos-arm64/`): its library and build stamp.
+  Uri nativeDir(Uri packageRoot) => packageRoot.resolve('native/$key/');
+
+  /// The library of this target in `native/` of the package at [packageRoot]:
+  /// a local build, or the one the pub.dev archive ships.
+  Uri bundledLibrary(Uri packageRoot) =>
+      nativeDir(packageRoot).resolve(libFileName);
 
   /// The library cargo builds for this target into the directory [targetDir]
   /// (its `--target-dir`, see `SourceBuild.cargoArguments`; with or without a
@@ -160,7 +168,7 @@ enum NativeTarget {
 
   /// Whether a host running [hostOs] whose target is [host] can build this
   /// target (see [cargoSubcommand]).
-  bool isBuildableOn({required String hostOs, required NativeTarget? host}) =>
+  bool _isBuildableOn({required String hostOs, required NativeTarget? host}) =>
       cargoSubcommand(hostOs: hostOs, host: host) != null;
 
   /// The targets named by [requested] keys (`host`, `all` or a target key),
@@ -178,7 +186,7 @@ enum NativeTarget {
       for (final key in requested)
         ...switch (key) {
           'all' => values.where(
-            (target) => target.isBuildableOn(hostOs: hostOs, host: host),
+            (target) => target._isBuildableOn(hostOs: hostOs, host: host),
           ),
           'host' => [
             host ??
@@ -195,7 +203,7 @@ enum NativeTarget {
         },
     };
     for (final target in targets) {
-      if (!target.isBuildableOn(hostOs: hostOs, host: host)) {
+      if (!target._isBuildableOn(hostOs: hostOs, host: host)) {
         throw FormatException(
           '${target.key} can only be built on ${target.os}.',
         );

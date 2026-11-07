@@ -72,6 +72,18 @@ void main() {
     });
   });
 
+  test('isCheckout looks inside the directory, slash or not', () {
+    final root = fakeCheckout();
+    expect(SourceBuild.isCheckout(.file(root)), isTrue);
+    expect(SourceBuild.isCheckout(.directory(root)), isTrue);
+    // Without the slash, `resolve` would look next to `elsewhere`: in
+    // `${tempPath()}/gleon-ffi`, which is no crate of `elsewhere`.
+    File('${tempPath()}/${SourceBuild.crate}/Cargo.toml')
+      ..createSync(recursive: true)
+      ..writeAsStringSync('[package]');
+    expect(SourceBuild.isCheckout(.file('${tempPath()}/elsewhere')), isFalse);
+  });
+
   group('findCargo', () {
     test('explains where it looked when cargo is missing', () {
       final empty = tempPath();
@@ -126,7 +138,8 @@ void main() {
   });
 
   test('tracks the library crate and every crate it reaches by path', () {
-    final root = Uri.directory(fakeCheckout());
+    final checkout = fakeCheckout();
+    final root = Uri.directory(checkout);
     final inputs = SourceBuild.inputs(root);
 
     expect(
@@ -143,6 +156,13 @@ void main() {
     expect(inputs, isNot(contains(root.resolve('gleon-core/src/lib.rs'))));
     expect(inputs, isNot(contains(root.resolve('rust-toolchain.toml'))));
     expect(inputs.toSet(), hasLength(inputs.length), reason: 'no duplicates');
+    // A root without its trailing slash (`Uri.file`) is the same checkout.
+    final unslashed = Uri.file(checkout);
+    expect(SourceBuild.inputs(unslashed), unorderedEquals(inputs));
+    expect(
+      SourceBuild.inputPaths(unslashed),
+      unorderedEquals(SourceBuild.inputPaths(root)),
+    );
   });
 
   test('a cycle or a missing crate does not stop the traversal', () {
@@ -279,6 +299,11 @@ void main() {
           reason: file,
         );
       }
+      // Without its trailing slash the root would hold its sibling too.
+      expect(
+        SourceBuild.dependencies(.file(root), built.library),
+        unorderedEquals(built.dependencies),
+      );
     });
 
     // Cargo runs in the physical directory of a checkout named through a

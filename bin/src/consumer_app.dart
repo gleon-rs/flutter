@@ -5,15 +5,13 @@ library;
 
 import 'dart:io';
 
+import 'package:gleon/src/core/hook/native_target.dart';
+
 /// The golden the consumer app records and compares.
 const consumerGolden = 'goldens/number.png';
 
 /// A proxy nothing listens on: every download fails at once.
 const deadProxy = 'http://127.0.0.1:9';
-
-/// The pin of the gleon commit a git checkout of the package carries in
-/// `native/` (the pub.dev archive ships none), relative to the package root.
-const nativePin = 'native/gleon_ref';
 
 /// The entries of the package root a consumer never gets (top level only:
 /// `lib/src/core/native/` is code): everything `.pubignore` leaves out there
@@ -75,9 +73,9 @@ String _resolvedPath(Directory dir) {
 /// consumer never gets: of `native/` only the pin, as in a git checkout of
 /// the package (no library, so the hook has to download it).
 void copyPackage(Directory from, Directory into) {
-  final pin = File('${from.path}/$nativePin');
+  final pin = File.fromUri(NativeTarget.pinFile(from.uri));
   if (pin.existsSync()) {
-    File('${into.path}/$nativePin')
+    File.fromUri(NativeTarget.pinFile(into.uri))
       ..parent.createSync(recursive: true)
       ..writeAsBytesSync(pin.readAsBytesSync());
   }

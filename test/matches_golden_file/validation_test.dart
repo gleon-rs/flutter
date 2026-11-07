@@ -46,6 +46,30 @@ void main() {
     }
   });
 
+  // The same words as an out-of-range `diff` key of `gleon.yaml`.
+  test('rejects out-of-range pixel options', () {
+    for (final (name, tolerance) in const [
+      (
+        'channelTolerance',
+        GoldenTolerance.pixel(maxDiffRatio: 0, channelTolerance: 255),
+      ),
+      (
+        'channelTolerance',
+        GoldenTolerance.pixel(maxDiffRatio: 0, channelTolerance: -1),
+      ),
+      (
+        'edgeThreshold',
+        GoldenTolerance.pixel(maxDiffRatio: 0, edgeThreshold: 255),
+      ),
+    ]) {
+      expect(
+        () => matchesGoldenFile(Swatch.golden, tolerance: tolerance),
+        _throwsInvalid(name, 'must be between 0 and 254'),
+        reason: '$tolerance',
+      );
+    }
+  });
+
   test('rejects out-of-range text tolerances', () {
     for (final share in [-0.1, 1.5, double.nan]) {
       expect(

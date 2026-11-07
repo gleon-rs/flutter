@@ -2,7 +2,7 @@
 /// expects one: the assets under their release names and the
 /// `SHA256SUMS.txt` the hook verifies them against (`sha256sum -- *`), like a
 /// GitHub Release or a mirror named by the `release_url` user-define serves
-/// them. Only `dart:*` and `crypto` are imported here.
+/// them. Only `dart:*`, `crypto` and this package are imported here.
 library;
 
 import 'dart:async';
@@ -10,19 +10,19 @@ import 'dart:collection';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
+import 'package:gleon/src/core/hook/release_download.dart';
 
 /// A local release: a directory of assets served at [url].
 final class ReleaseServer {
-  ReleaseServer._(this._server, this._assets, this.checksums);
-
-  /// The checksum list of a release.
-  static const checksumsFileName = 'SHA256SUMS.txt';
+  ReleaseServer._(this._server, this._assets, this._checksums);
 
   /// The `SHA256SUMS.txt` of the assets.
-  final String checksums;
+  final String _checksums;
 
   /// The paths requested so far, in order.
-  List<String> requests = const [];
+  List<String> get requests => UnmodifiableListView(_requests);
+
+  final _requests = <String>[];
 
   final HttpServer _server;
 
@@ -72,11 +72,11 @@ final class ReleaseServer {
   void _serve(HttpRequest request) {
     final HttpRequest(:response, :uri) = request;
     final name = uri.pathSegments.join('/');
-    requests = [...requests, name];
-    if (name == checksumsFileName) {
+    _requests.add(name);
+    if (name == ReleaseDownload.checksumsFileName) {
       response
         ..headers.contentType = .text
-        ..write(checksums);
+        ..write(_checksums);
     } else if (_assets[name] case final bytes?) {
       response
         ..headers.contentType = .binary

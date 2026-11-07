@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:gleon/src/core/hook/atomic_write.dart';
 import 'package:gleon/src/core/hook/native_target.dart';
 import 'package:gleon/src/core/hook/source_build.dart';
@@ -20,12 +21,12 @@ abstract final class NativeBuild {
   /// Copies the built [library] of [target] into `native/<target>/` of
   /// [packageRoot], stamps it with the commit it was [builtFrom], then
   /// copies it into [dist] (if given) under its release asset name, which
-  /// no hook reads. Returns the copies.
+  /// no hook reads. Returns the copies and the SHA-256 of the library.
   ///
   /// Every file is replaced atomically. An old stamp is removed first and
   /// the new one written only after the library, so a library replaced by an
   /// interrupted build is never accepted under a stamp.
-  static Future<List<File>> install(
+  static Future<({List<File> copies, Digest sha256})> install(
     File library,
     NativeTarget target, {
     required Uri packageRoot,
@@ -33,19 +34,20 @@ abstract final class NativeBuild {
     String? dist,
   }) async {
     final bytes = await library.readAsBytes();
-    final targetDir = packageRoot.resolve('native/${target.key}/');
+    final targetDir = target.nativeDir(packageRoot);
     final stamp = File.fromUri(targetDir.resolve(NativeTarget.pinFileName));
     if (stamp.existsSync()) await stamp.delete();
-    final installed = File.fromUri(targetDir.resolve(target.libFileName));
+    final installed = File.fromUri(target.bundledLibrary(packageRoot));
     await AtomicWrite.bytes(installed, bytes);
     await AtomicWrite.bytes(stamp, utf8.encode('$builtFrom\n'));
-    if (dist == null) return [installed];
+    final hash = sha256.convert(bytes);
+    if (dist == null) return (copies: [installed], sha256: hash);
     final asset = File.fromUri(
       Directory(dist).absolute.uri.resolve(target.assetName),
     );
     await AtomicWrite.bytes(asset, bytes);
 
-    return [installed, asset];
+    return (copies: [installed, asset], sha256: hash);
   }
 
   /// The commit of the gleon checkout at [repo] and whether the inputs of

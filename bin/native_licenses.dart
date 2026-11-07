@@ -52,7 +52,7 @@ const _outputName = 'NATIVE_LICENSES.md';
 Future<void> main(List<String> args) async {
   final (:commit, :isCheck, :repo) = _parse(args);
   final packageRoot = await _cli.packageRoot();
-  final gleon = Cli.gleonCheckout(repo, packageRoot);
+  final gleon = _cli.gleonCheckout(repo, packageRoot);
   final pin =
       NativeTarget.readPin(packageRoot) ??
       _cli.fail('native/${NativeTarget.pinFileName} is missing.');

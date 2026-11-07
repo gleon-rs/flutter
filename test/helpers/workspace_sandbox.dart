@@ -13,6 +13,7 @@ import 'package:gleon/src/flutter/gleon_matches_golden_file.dart';
 import 'package:gleon/src/flutter/ignore_regions.dart';
 import 'package:json_schema/json_schema.dart';
 
+import 'gleon_platform.dart';
 import 'session_file_comparator.dart';
 
 /// The package goldens, relative to the package root (`flutter test`'s

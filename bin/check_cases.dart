@@ -67,7 +67,7 @@ void main(List<String> args) {
   final positional = <String>[];
   String? fallbackPlatform;
   String? runId;
-  int minCases = 1;
+  int? minCases;
   final outcomes = <String>{};
   final rest = args.iterator;
   while (rest.moveNext()) {
@@ -105,7 +105,7 @@ void main(List<String> args) {
     check: CaseCheck(
       fallbackPlatform: fallbackPlatform,
       minCases: minCases,
-      outcomes: outcomes.isEmpty ? CaseCheck.defaultOutcomes : outcomes,
+      outcomes: outcomes.isEmpty ? null : outcomes,
       runId: runId,
     ),
     runs: runs,

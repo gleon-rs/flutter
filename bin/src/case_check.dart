@@ -13,13 +13,15 @@ import 'dart:convert';
 ///
 /// Plain Dart (no Flutter imports): maintainer tooling, tested directly.
 final class CaseCheck {
-  /// Checks reports against [fallbackPlatform].
+  /// Checks reports against [fallbackPlatform]; [minCases] is 1 and
+  /// [outcomes] are [defaultOutcomes] unless given.
   const CaseCheck({
     required this.fallbackPlatform,
-    this.minCases = 1,
-    this.outcomes = defaultOutcomes,
+    int? minCases,
+    Set<String>? outcomes,
     this.runId,
-  });
+  }) : minCases = minCases ?? 1,
+       outcomes = outcomes ?? defaultOutcomes;
 
   /// The platform key of the canonical platform (e.g. `macos-aarch64`), the
   /// name of the directory gleon files its case reports under.

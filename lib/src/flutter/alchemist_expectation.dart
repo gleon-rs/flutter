@@ -56,7 +56,7 @@ AlchemistGoldenExpectation gleonAlchemistExpectation({
 /// The implementation of [gleonAlchemistExpectation].
 abstract final class AlchemistExpectation {
   /// Appended to failures of goldens with obscured text.
-  static const obscuredTextHint =
+  static const _obscuredTextHint =
       'gleon: alchemist obscured the text of this golden (blocks instead of '
       'glyphs), so gleon cannot compare it as text. To compare real text '
       "under its text tolerance, set `obscureText: false` in alchemist's "
@@ -68,7 +68,7 @@ abstract final class AlchemistExpectation {
   /// one for a `diffThreshold` above 0, a project may have its own; gleon
   /// compares the golden itself, so neither its comparison nor a threshold
   /// it applies is used.
-  static String thresholdNote(Type comparator) =>
+  static String _thresholdNote(Type comparator) =>
       'gleon: gleon compared this golden itself, so the installed golden '
       'file comparator ($comparator) and any threshold it applies '
       "(alchemist's `diffThreshold`) did not; set a gleon tolerance instead "
@@ -108,11 +108,11 @@ abstract final class AlchemistExpectation {
         final notes = [
           // Only a widget comes with the boxes of its text.
           if (shouldHintObscuredText && actual is! flutter_test.Finder)
-            obscuredTextHint,
+            _obscuredTextHint,
           if (comparator is flutter_test.LocalFileComparator &&
               comparator.runtimeType != flutter_test.LocalFileComparator &&
               comparator is! GleonFileComparator)
-            thresholdNote(comparator.runtimeType),
+            _thresholdNote(comparator.runtimeType),
         ];
         if (notes.isEmpty) rethrow;
         Error.throwWithStackTrace(

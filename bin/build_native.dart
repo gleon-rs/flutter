@@ -29,7 +29,6 @@ library;
 
 import 'dart:io';
 
-import 'package:crypto/crypto.dart';
 import 'package:gleon/src/core/hook/native_target.dart';
 import 'package:gleon/src/core/hook/source_build.dart';
 
@@ -72,7 +71,7 @@ Future<void> main(List<String> args) async {
     _cli.fail(error.message);
   }
   final packageRoot = await _cli.packageRoot();
-  final repo = _checkout(options.repo, packageRoot);
+  final repo = _cli.gleonCheckout(options.repo, packageRoot);
   final builtFrom = await _stamp(repo, isDirtyAllowed: options.isDirtyAllowed);
   _warnUnlessPinned(packageRoot, repo, builtFrom);
   for (final target in targets) {
@@ -80,29 +79,17 @@ Future<void> main(List<String> args) async {
         target.cargoSubcommand(hostOs: hostOs, host: host) ??
         _cli.fail('${target.key} cannot be built here.');
     final library = await _build(repo, target, subcommand);
-    final installed = await NativeBuild.install(
+    final (:copies, sha256: hash) = await NativeBuild.install(
       library,
       target,
       packageRoot: packageRoot,
       builtFrom: builtFrom,
       dist: options.dist,
     );
-    final hash = sha256.convert(await library.readAsBytes());
     stdout.writeln(
-      '${target.key}: $hash  ${installed.map((file) => file.path).join(', ')}',
+      '${target.key}: $hash  ${copies.map((file) => file.path).join(', ')}',
     );
   }
-}
-
-/// The gleon checkout of [Cli.gleonCheckout]; fails unless it is one.
-Directory _checkout(String? repo, Uri packageRoot) {
-  final checkout = Cli.gleonCheckout(repo, packageRoot);
-  final manifest = checkout.uri.resolve('${SourceBuild.crate}/Cargo.toml');
-  if (!File.fromUri(manifest).existsSync()) {
-    _cli.fail('${checkout.path} is not a gleon checkout; pass --gleon-repo.');
-  }
-
-  return checkout;
 }
 
 /// Warns when a build of [repo] stamped [builtFrom] is not one of the

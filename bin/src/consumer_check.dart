@@ -49,7 +49,7 @@ final class ConsumerCheck {
       'gleon commit of the release with its pin (requests: '
       '${server.requests})',
       isMet: [
-        ReleaseServer.checksumsFileName,
+        ReleaseDownload.checksumsFileName,
         target.assetName,
         ReleaseDownload.pinFileName,
       ].every(server.requests.contains),
@@ -146,11 +146,10 @@ final class ConsumerCheck {
   /// without its caches.
   Future<void> bundled() async {
     stdout.writeln('--- 4. bundled: the pub.dev archive ships the library');
-    final pin = File('${package.path}/$nativePin');
+    final pin = File.fromUri(NativeTarget.pinFile(package.uri));
     if (pin.existsSync()) pin.deleteSync();
-    final bundled = File(
-      '${package.path}/native/${target.key}/${target.libFileName}',
-    )..parent.createSync(recursive: true);
+    final bundled = File.fromUri(target.bundledLibrary(package.uri))
+      ..parent.createSync(recursive: true);
     library.copySync(bundled.path);
     final hooksRunner = Directory('${app.path}/.dart_tool/hooks_runner');
     if (hooksRunner.existsSync()) hooksRunner.deleteSync(recursive: true);

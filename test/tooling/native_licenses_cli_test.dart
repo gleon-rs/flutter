@@ -57,6 +57,33 @@ void main() {
     runInShell: Platform.isWindows,
   );
 
+  test('a directory that is no gleon checkout is refused', () async {
+    final result = await nativeLicenses();
+    expect(result.exitCode, 64);
+    expect(
+      result.stderr,
+      contains(
+        'native_licenses: ${tempPath()} (--gleon-repo) is not a gleon '
+        'checkout; pass one with --gleon-repo.',
+      ),
+    );
+  });
+
+  // A stale variable is fixed where it is set, so the failure names it.
+  test(r'a $GLEON_REPO that is no gleon checkout is named', () async {
+    final result = await Process.run(
+      'dart',
+      ['bin/native_licenses.dart', '--check'],
+      environment: {'GLEON_REPO': tempPath()},
+      runInShell: Platform.isWindows,
+    );
+    expect(result.exitCode, 64);
+    expect(
+      result.stderr,
+      contains('native_licenses: ${tempPath()} (\$GLEON_REPO) is not'),
+    );
+  });
+
   test('a checkout with uncommitted library inputs is refused', () async {
     await checkout();
     File('${tempPath()}/Cargo.lock').writeAsStringSync('# changed');

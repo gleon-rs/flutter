@@ -7,8 +7,16 @@
   (older ones reject it as unknown); it changes nothing in how goldens compare.
 - README: an optional section on what the CLI adds (run summary, HTML report, PR comment,
   `/gleon approve` from CI) and how to start. Without the CLI the package works as before.
-- The native library is built from the gleon commit that adds the key; `NATIVE_LICENSES.md`
-  follows its dependency updates.
+- The native library is built from gleon `efe75bc`, with the key and the `ssim` size check below;
+  `NATIVE_LICENSES.md` follows its dependency updates. A `diff` key of another mode in
+  `.gleon/gleon.yaml` is named in backticks in the error (`` `diff.threshold` applies to
+  `mode: pixel` only ``).
+- **`ssim` goldens larger than 4096x4096 pixels:** `--update-goldens` does not record them (the
+  failure says so, and the old golden stays), and a match against one is reported as not
+  comparable, also when the images are identical. Before, such a golden was written and then
+  failed on every run where the bytes differed. Use `exact` or `pixel` for larger images.
+- A `channelTolerance` or `edgeThreshold` out of range fails with the range wording of
+  `gleon.yaml`: `must be between 0 and 254`.
 - **Text regions:** lines of a paragraph are told apart by their full height, so dense lines
   (a `height` below 1 with mixed sizes) keep a region each instead of merging; a clip that a
   perspective sends to infinity no longer breaks finding the text.
