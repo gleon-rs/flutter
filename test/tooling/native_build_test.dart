@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart' as crypto;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gleon/src/core/hook/native_target.dart';
 import 'package:gleon/src/core/hook/source_build.dart';
@@ -29,7 +31,9 @@ void main() {
 
     File native(String name) => .new('${tempPath()}/package/native/$key/$name');
 
-    Future<List<File>> install({String? dist}) => NativeBuild.install(
+    Future<({List<File> copies, crypto.Digest sha256})> install({
+      String? dist,
+    }) => NativeBuild.install(
       built(),
       target,
       packageRoot: Directory('${tempPath()}/package').uri,
@@ -38,7 +42,7 @@ void main() {
     );
 
     test('writes the library, its stamp and the release asset', () async {
-      final written = await install(dist: '${tempPath()}/dist');
+      final (:copies, :sha256) = await install(dist: '${tempPath()}/dist');
 
       expect(native(libFileName).readAsStringSync(), 'library');
       expect(native('gleon_ref').readAsStringSync(), '$commit\n');
@@ -47,9 +51,10 @@ void main() {
         'library',
       );
       expect(
-        [for (final file in written) file.uri.pathSegments.lastOrNull],
+        [for (final file in copies) file.uri.pathSegments.lastOrNull],
         [libFileName, assetName],
       );
+      expect(sha256, crypto.sha256.convert(utf8.encode('library')));
     });
 
     test('stamps the library only once it is in place', () async {

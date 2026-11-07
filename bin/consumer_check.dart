@@ -48,9 +48,7 @@ Usage: dart bin/consumer_check.dart [--target <key>] [--work-dir <dir>]
 Future<void> main(List<String> args) async {
   final (:hasStrayHomeConfig, :isKept, :target, :workDir) = _parse(args);
   final packageRoot = await _cli.packageRoot();
-  final library = File.fromUri(
-    packageRoot.resolve('native/${target.key}/${target.libFileName}'),
-  );
+  final library = File.fromUri(target.bundledLibrary(packageRoot));
   if (!library.existsSync()) {
     _cli.fail(
       '${library.path} is missing: build it with `dart bin/build_native.dart`.',
@@ -104,7 +102,7 @@ Future<ReleaseServer> _release(
   NativeTarget target,
   File library,
 ) {
-  final pin = File.fromUri(packageRoot.resolve(nativePin));
+  final pin = File.fromUri(NativeTarget.pinFile(packageRoot));
 
   return ReleaseServer.start({
     target.assetName: library,

@@ -9,7 +9,7 @@ abstract final class TextRegions {
   /// reaches beyond the boxes of its line (diacritics, negative letter
   /// spacing, outlined text) by an amount that grows with the font, and
   /// anti-aliasing beyond that.
-  static const margin = 0.125;
+  static const _margin = 0.125;
 
   /// The character a `WidgetSpan` takes in the text.
   static final _placeholder = String.fromCharCode(0xFFFC);
@@ -19,7 +19,7 @@ abstract final class TextRegions {
   ///
   /// One region per line of each paragraph and editable text painted there:
   /// the boxes of the line's text (not of its `WidgetSpan`s), grown by
-  /// [margin] of its height, clipped by the paragraph (when its text
+  /// [_margin] of its height, clipped by the paragraph (when its text
   /// overflows) and by its ancestors, in whole pixels of the image (rounded
   /// outwards). Only text its parents paint counts ([_PaintRecorder]): not
   /// the hidden children of an `IndexedStack`, `Offstage`, `Visibility` or a
@@ -47,16 +47,18 @@ abstract final class TextRegions {
     while (pending.isNotEmpty) {
       final (:clip, :object, :toImage) = pending.removeLast();
       for (final line in _lines(object)) {
-        final transformed = MatrixUtils.transformRect(toImage, line);
-        final rect = transformed.intersect(clip);
-        // A perspective can send a line to infinity (or NaN), which is not
-        // painted; clipped, it would cover the whole clip. A NaN edge is never
-        // empty, so the clipped rectangle is checked too.
-        if (transformed.isFinite && rect.isFinite && !rect.isEmpty) {
-          final Rect(:bottom, :left, :right, :top) = rect;
-          regions.add(
-            .outwards(left: left, top: top, right: right, bottom: bottom),
-          );
+        for (final piece in _pieces(line, toImage)) {
+          final transformed = MatrixUtils.transformRect(toImage, piece);
+          final rect = transformed.intersect(clip);
+          // A perspective can send a line to infinity (or NaN), which is not
+          // painted; clipped, it would cover the whole clip. A NaN edge is
+          // never empty, so the clipped rectangle is checked too.
+          if (transformed.isFinite && rect.isFinite && !rect.isEmpty) {
+            final Rect(:bottom, :left, :right, :top) = rect;
+            regions.add(
+              .outwards(left: left, top: top, right: right, bottom: bottom),
+            );
+          }
         }
       }
       final children = <RenderObject>[];
@@ -70,6 +72,25 @@ abstract final class TextRegions {
 
     return regions;
   }
+
+  /// [line] as pieces about as long as it is high (at most [_maxPieces]) when
+  /// [toImage] turns it (a rotation, a skew), else [line] itself: the image
+  /// bounds of a turned line are a box around it, mostly no text for a long
+  /// line, while those of short pieces follow it.
+  static List<Rect> _pieces(Rect line, Matrix4 toImage) {
+    final isTurned = toImage.entry(0, 1) != 0 || toImage.entry(1, 0) != 0;
+    if (!isTurned || line.height <= 0) return [line];
+    final count = (line.width / line.height).ceil().clamp(1, _maxPieces);
+    final step = line.width / count;
+
+    return [
+      for (int i = 0; i < count; i += 1)
+        Rect.fromLTWH(line.left + step * i, line.top, step, line.height),
+    ];
+  }
+
+  /// The most pieces a turned line is cut into ([_pieces]).
+  static const _maxPieces = 64;
 
   /// [child] as [parent] paints it, given the transform and clip of [parent].
   static _Painted _child(
@@ -97,7 +118,7 @@ abstract final class TextRegions {
   }
 
   /// The lines of text of [object] in its own coordinates, grown by
-  /// [margin] of their height and clipped to the object (grown the same)
+  /// [_margin] of their height and clipped to the object (grown the same)
   /// unless it paints its overflow; none for other render objects.
   static List<Rect> _lines(RenderObject object) => switch (object) {
     RenderParagraph(:final overflow, :final size, :final text) => _linesOf(
@@ -146,9 +167,9 @@ abstract final class TextRegions {
     return [for (final line in lines) _grown(line, own)];
   }
 
-  /// [line] grown by [margin] of its height, clipped to [own] grown the same.
+  /// [line] grown by [_margin] of its height, clipped to [own] grown the same.
   static Rect _grown(Rect line, Rect? own) {
-    final delta = line.height * margin;
+    final delta = line.height * _margin;
     final grown = line.inflate(delta);
 
     return own == null ? grown : grown.intersect(own.inflate(delta));

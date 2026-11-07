@@ -113,7 +113,7 @@ DEALINGS IN THE SOFTWARE.''';
     final byText = <String, List<String>>{};
     for (final crate in _crates) {
       for (final text in crate.texts) {
-        byText[text] = [...?byText[text], crate.label];
+        (byText[text] ??= []).add(crate.label);
       }
     }
 

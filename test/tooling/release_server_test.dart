@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gleon/src/core/hook/release_download.dart';
 
 import '../../bin/src/release_server.dart';
 
@@ -27,7 +28,7 @@ void main() {
 
     final (status, checksums) = await _get(
       server,
-      ReleaseServer.checksumsFileName,
+      ReleaseDownload.checksumsFileName,
     );
     expect(status, HttpStatus.ok);
     expect(
@@ -43,7 +44,7 @@ void main() {
     final (missing, _) = await _get(server, 'libgleon_ffi-linux-x64.so');
     expect(missing, HttpStatus.notFound);
     expect(server.requests, [
-      ReleaseServer.checksumsFileName,
+      ReleaseDownload.checksumsFileName,
       asset,
       'libgleon_ffi-linux-x64.so',
     ]);

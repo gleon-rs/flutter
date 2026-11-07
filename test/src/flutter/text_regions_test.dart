@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/rendering.dart';
@@ -282,6 +283,61 @@ void main() {
     );
 
     expect(_regions(tester), hasLength(1));
+  });
+
+  // The image bounds of a whole turned line would be a box around it, mostly
+  // no text: short pieces follow the line instead, and still cover it.
+  testWidgets('a rotated line is masked piece by piece', (tester) async {
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: .ltr,
+        child: Align(
+          alignment: .topLeft,
+          child: RepaintBoundary(
+            key: _boundaryKey,
+            child: SizedBox.square(
+              dimension: 200,
+              child: Center(
+                child: Transform.rotate(
+                  angle: math.pi / 4,
+                  child: const Text('abcdefghijklmnop', style: _style),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final regions = _regions(tester);
+    // 160x10 grown by the margin to 162.5x12.5: 13 pieces of 12.5x12.5.
+    expect(regions, hasLength(13));
+    int area(PixelRegion region) => region.width * region.height;
+    final bounds = regions
+        .map(
+          (region) => Rect.fromLTWH(
+            region.x.toDouble(),
+            region.y.toDouble(),
+            region.width.toDouble(),
+            region.height.toDouble(),
+          ),
+        )
+        .reduce((a, b) => a.expandToInclude(b));
+    expect(
+      regions.map(area).reduce((a, b) => a + b),
+      lessThan(bounds.width * bounds.height / 2),
+    );
+    // The middle of the line, at the middle of the boundary, is masked.
+    expect(
+      regions.any(
+        (region) =>
+            region.x <= 100 &&
+            region.x + region.width >= 100 &&
+            region.y <= 100 &&
+            region.y + region.height >= 100,
+      ),
+      isTrue,
+    );
   });
 
   testWidgets('editable text has a region', (tester) async {

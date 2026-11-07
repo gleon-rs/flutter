@@ -116,11 +116,10 @@ final class NativeLibrary {
   }
 
   Future<LibraryFiles> _prebuilt() async {
-    const pinFile = NativeTarget.pinFileName;
-    final nativeDir = packageRoot.resolve('native/');
-    final targetDir = nativeDir.resolve('${target.key}/');
-    final bundled = File.fromUri(targetDir.resolve(target.libFileName));
-    final stamp = File.fromUri(targetDir.resolve(pinFile));
+    final nativeRoot = packageRoot.resolve('native/');
+    final targetDir = target.nativeDir(packageRoot);
+    final bundled = File.fromUri(target.bundledLibrary(packageRoot));
+    final stamp = File.fromUri(targetDir.resolve(NativeTarget.pinFileName));
     // Only what exists is a dependency: the hooks runner takes a missing file
     // for one modified during the build (it re-runs the hook on every build
     // and logs an error) and fails on a missing directory. The directories
@@ -128,9 +127,13 @@ final class NativeLibrary {
     // that appears later (a local build, a moved pin) re-runs the hook; the
     // files by their content.
     final inputs = [
-      for (final dir in [nativeDir, targetDir])
+      for (final dir in [nativeRoot, targetDir])
         if (Directory.fromUri(dir).existsSync()) dir,
-      for (final file in [bundled.uri, nativeDir.resolve(pinFile), stamp.uri])
+      for (final file in [
+        bundled.uri,
+        NativeTarget.pinFile(packageRoot),
+        stamp.uri,
+      ])
         if (File.fromUri(file).existsSync()) file,
     ];
     if (bundled.existsSync()) {

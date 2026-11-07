@@ -1,11 +1,14 @@
 /// The command line of the maintainer scripts in `bin/`: flag values,
 /// failures, help and the package they run in.
 ///
-/// Only `dart:*` may be imported here (see `build_native.dart`).
+/// Only `dart:*` and this package may be imported here (see
+/// `build_native.dart`).
 library;
 
 import 'dart:io';
 import 'dart:isolate';
+
+import 'package:gleon/src/core/hook/source_build.dart';
 
 /// The command line of one maintainer script.
 final class Cli {
@@ -51,12 +54,29 @@ final class Cli {
   }
 
   /// The gleon checkout: [flag] (`--gleon-repo`), else `$GLEON_REPO`, else
-  /// the sibling `../gleon` of [packageRoot]; absolute.
-  static Directory gleonCheckout(String? flag, Uri packageRoot) => Directory(
-    flag ??
-        Platform.environment['GLEON_REPO'] ??
+  /// the sibling `../gleon` of [packageRoot]; absolute. Fails unless it is
+  /// one ([SourceBuild.isCheckout]).
+  Directory gleonCheckout(String? flag, Uri packageRoot) {
+    // The failure names where the path came from: a stale `$GLEON_REPO` is
+    // fixed there, not by passing the flag on every run.
+    final (path, source) = switch ((flag, Platform.environment['GLEON_REPO'])) {
+      (final String flag, _) => (flag, '--gleon-repo'),
+      (null, final String env) => (env, r'$GLEON_REPO'),
+      (null, null) => (
         packageRoot.resolve('../gleon').toFilePath(),
-  ).absolute;
+        'the sibling of this package',
+      ),
+    };
+    final checkout = Directory(path).absolute;
+    if (!SourceBuild.isCheckout(checkout.uri)) {
+      fail(
+        '${checkout.path} ($source) is not a gleon checkout; pass one with '
+        '--gleon-repo.',
+      );
+    }
+
+    return checkout;
+  }
 
   /// The root of this package (the directory of its `pubspec.yaml`).
   Future<Uri> packageRoot() async {

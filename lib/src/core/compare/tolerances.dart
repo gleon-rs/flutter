@@ -50,7 +50,7 @@ abstract final class Tolerances {
     ) = tolerance;
 
     return [
-      'pixel ${atMost(maxDiffRatio)}',
+      'pixel ${_atMost(maxDiffRatio)}',
       if (channelTolerance > 0) '±$channelTolerance per channel',
       if (antiAlias) 'aa ignored',
       if (edgeThreshold > 0) 'edges >$edgeThreshold ignored',
@@ -64,12 +64,12 @@ abstract final class Tolerances {
   /// A `textTolerance` as in failure messages: `text ignored` at 1 (text
   /// never fails), else e.g. `text ≤ 10.00% per tile`.
   static String describeText(double share) =>
-      share >= 1 ? 'text ignored' : 'text ${atMost(share)} per tile';
+      share >= 1 ? 'text ignored' : 'text ${_atMost(share)} per tile';
 
   /// [ratio] as an upper bound in percent: `≤ 6.25%`, or `<0.0001%` for a
   /// positive ratio too small to show (never `≤ <0.0001%`).
-  static String atMost(double ratio) {
-    final shown = percent(ratio);
+  static String _atMost(double ratio) {
+    final shown = _percent(ratio);
 
     return shown.startsWith('<') ? '$shown%' : '≤ $shown%';
   }
@@ -91,7 +91,7 @@ abstract final class Tolerances {
 
   /// [ratio] as a percentage with 2 to 4 decimals (`1.00`, `0.0167`); a
   /// positive ratio too small to show is `<0.0001`, never a misleading `0.00`.
-  static String percent(double ratio) {
+  static String _percent(double ratio) {
     final text = decimal(ratio * 100, 2);
 
     return ratio > 0 && double.parse(text) == 0 ? '<0.0001' : text;
@@ -105,11 +105,7 @@ abstract final class Tolerances {
 
   static void _checkOption(int value, String name) {
     if (value < 0 || value > _maxOption) {
-      throw ArgumentError.value(
-        value,
-        name,
-        'must be between 0 and 254 (0 turns it off)',
-      );
+      throw ArgumentError.value(value, name, 'must be between 0 and 254');
     }
   }
 

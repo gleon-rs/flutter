@@ -133,17 +133,7 @@ abstract final class NativeEngine {
       ..candidateWidth = rawSize?.width ?? 0
       ..candidateHeight = rawSize?.height ?? 0
       ..textTolerance = textTolerance ?? .nan;
-    final (:kind, :ratio, :similarity, :color, :options) = _toleranceFields(
-      tolerance,
-    );
-    call
-      ..toleranceKind = kind
-      ..maxDiffRatio = ratio
-      ..minSimilarity = similarity
-      ..colorTolerance = color
-      ..channelTolerance = options.channel
-      ..antiAlias = options.antiAlias
-      ..edgeThreshold = options.edge;
+    _writeTolerance(call, tolerance);
     final summary = Struct.create<GleonSummary>();
     GleonFfi.golden(
       session.handle,
@@ -300,59 +290,45 @@ abstract final class NativeEngine {
     }
   }
 
-  /// The `GleonCall` fields of [tolerance], all of them in one switch: kind 0
-  /// uses the `.gleon/gleon.yaml` rule, fields of other kinds are 0.
-  static _ToleranceFields _toleranceFields(GoldenTolerance? tolerance) =>
-      switch (tolerance) {
-        null => const (
-          kind: 0,
-          ratio: 0,
-          similarity: 0,
-          color: 0,
-          options: _off,
-        ),
-        ExactTolerance() => const (
-          kind: 1,
-          ratio: 0,
-          similarity: 0,
-          color: 0,
-          options: _off,
-        ),
-        PixelTolerance(
-          :final antiAlias,
-          :final channelTolerance,
-          :final edgeThreshold,
-          :final maxDiffRatio,
-        ) =>
-          (
-            kind: 2,
-            ratio: maxDiffRatio,
-            similarity: 0,
-            color: 0,
-            options: (
-              channel: channelTolerance,
-              antiAlias: antiAlias ? 1 : 0,
-              edge: edgeThreshold,
-            ),
-          ),
-        SsimTolerance(:final colorTolerance, :final minSimilarity) => (
-          kind: 3,
-          ratio: 0,
-          similarity: minSimilarity,
-          color: colorTolerance,
-          options: _off,
-        ),
-      };
-
-  /// Pixel options that are all off.
-  static const _PixelOptions _off = (channel: 0, antiAlias: 0, edge: 0);
+  /// Writes the `GleonCall` fields of [tolerance] into [call], whose fields
+  /// start at 0 (`Struct.create`): kind 0 uses the `.gleon/gleon.yaml` rule,
+  /// and the fields of other kinds stay 0.
+  static void _writeTolerance(GleonCall call, GoldenTolerance? tolerance) {
+    switch (tolerance) {
+      case null:
+        call.toleranceKind = 0;
+      case ExactTolerance():
+        call.toleranceKind = 1;
+      case PixelTolerance(
+        :final antiAlias,
+        :final channelTolerance,
+        :final edgeThreshold,
+        :final maxDiffRatio,
+      ):
+        call
+          ..toleranceKind = 2
+          ..maxDiffRatio = maxDiffRatio
+          ..channelTolerance = channelTolerance
+          ..antiAlias = antiAlias ? 1 : 0
+          ..edgeThreshold = edgeThreshold;
+      case SsimTolerance(:final colorTolerance, :final minSimilarity):
+        call
+          ..toleranceKind = 3
+          ..minSimilarity = minSimilarity
+          ..colorTolerance = colorTolerance;
+    }
+  }
 
   /// [regions] as `[x, y, width, height]` quadruples.
   static Uint32List _flat(List<PixelRegion> regions) {
     final flat = Uint32List(regions.length * 4);
     for (final (index, PixelRegion(:height, :width, :x, :y))
         in regions.indexed) {
-      flat.setAll(index * 4, [x, y, width, height]);
+      final at = index * 4;
+      flat[at] = x;
+      flat[at + 1] = y;
+      flat[at + 2] = width;
+      flat[at + 3] = height;
     }
 
     return flat;
@@ -380,15 +356,3 @@ abstract final class NativeEngine {
 
   static const _noText = '';
 }
-
-/// The `GleonCall` scalars of a tolerance.
-typedef _ToleranceFields = ({
-  double color,
-  int kind,
-  _PixelOptions options,
-  double ratio,
-  double similarity,
-});
-
-/// The pixel options of a `GleonCall`, as its bytes.
-typedef _PixelOptions = ({int antiAlias, int channel, int edge});
