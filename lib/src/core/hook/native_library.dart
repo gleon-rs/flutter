@@ -39,7 +39,7 @@ import 'user_defines.dart';
 /// directly.
 final class NativeLibrary {
   /// Resolves the library of [target] for the package at [packageRoot].
-  const NativeLibrary({
+  const new({
     required this.packageRoot,
     required this.userDefines,
     required this.sharedOutputDir,

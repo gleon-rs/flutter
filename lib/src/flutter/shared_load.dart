@@ -9,7 +9,7 @@ import 'package:flutter/foundation.dart';
 /// later never touches the next one.
 final class SharedLoad {
   /// Shares the loads of [_onLoad].
-  SharedLoad(this._onLoad);
+  new(this._onLoad);
 
   final AsyncCallback _onLoad;
 

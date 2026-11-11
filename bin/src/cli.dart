@@ -13,7 +13,7 @@ import 'package:gleon/src/core/hook/source_build.dart';
 /// The command line of one maintainer script.
 final class Cli {
   /// The script [name] (the prefix of its failures) and its [usage].
-  const Cli(this.name, this.usage);
+  const new(this.name, this.usage);
 
   /// The script name, e.g. `build_native`.
   final String name;
@@ -60,7 +60,7 @@ final class Cli {
     // The failure names where the path came from: a stale `$GLEON_REPO` is
     // fixed there, not by passing the flag on every run.
     final (path, source) = switch ((flag, Platform.environment['GLEON_REPO'])) {
-      (final String flag, _) => (flag, '--gleon-repo'),
+      (final String given, _) => (given, '--gleon-repo'),
       (null, final String env) => (env, r'$GLEON_REPO'),
       (null, null) => (
         packageRoot.resolve('../gleon').toFilePath(),

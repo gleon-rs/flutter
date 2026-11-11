@@ -63,12 +63,13 @@ void main() {
       const key = 'goldens/over_budget.png';
       final golden = File('${sandbox.dir.path}/$key');
       final overBudget = contains('4097x4096 exceeds the SSIM analysis budget');
+      Future<void> update() async {
+        await ft.matchesGoldenFile(key).matchAsync(bytes);
+      }
 
       await expectLater(
-        // flutter_test's matcher lets the comparator's failure through.
-        withGoldenUpdates<void>(() async {
-          await ft.matchesGoldenFile(key).matchAsync(bytes);
-        }),
+        // The matcher of flutter_test lets the comparator's failure through.
+        withGoldenUpdates(update),
         throwsA(
           isA<ft.TestFailure>().having((e) => e.message, 'message', overBudget),
         ),
@@ -288,7 +289,7 @@ screenshots:
 
 /// Names its goldens under `ci/`, like a harness's own subclass.
 class _CiComparator extends LocalFileComparator {
-  _CiComparator(super.testFile);
+  new(super.testFile);
 
   @override
   Uri getTestUri(Uri key, int? version) =>

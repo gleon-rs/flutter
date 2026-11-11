@@ -1,9 +1,9 @@
-import 'package:flutter/material.dart';
 // The only change from a stock Flutter test is this import (instead of
 // flutter_test): gleon re-exports flutter_test and replaces matchesGoldenFile.
 // The tolerance comes from the rule in `.gleon/gleon.yaml`.
 import 'package:gleon/gleon.dart';
 import 'package:gleon_example/main.dart';
+import 'package:material_ui/material_ui.dart';
 
 void main() {
   testWidgets('increments the counter', (tester) async {

@@ -27,8 +27,27 @@ void main() {
         ?topLevel.firstMatch(line.trim())?.group(1),
     ];
 
-    expect(ignored, containsAll(['bin', 'benchmark', 'pubspec.lock']));
-    expect(notShipped, containsAll(ignored));
+    expect(ignored, containsAll(['bin', 'benchmark', '.dart_tool']));
+    // Hidden entries are never copied (pub drops them too).
+    expect(notShipped, containsAll(ignored.where((name) => !isHidden(name))));
+  });
+
+  // `.pubignore` replaces `.gitignore` for pub: what git ignores, pub ignores
+  // too, but the native libraries (they ship in the archive).
+  test('.pubignore ignores whatever .gitignore does', () {
+    List<String> patterns(String file) => [
+      for (final line in File(file).readAsLinesSync())
+        if (line.trim() case final pattern
+            when pattern.isNotEmpty && !pattern.startsWith('#'))
+          pattern,
+    ];
+
+    expect(
+      patterns('.pubignore'),
+      containsAll(
+        patterns('.gitignore').where((pattern) => !pattern.contains('native/')),
+      ),
+    );
   });
 
   // By what a directory holds, not by its name: Homebrew puts cargo into
@@ -124,10 +143,19 @@ void main() {
       'example/pubspec.yaml',
       '.git/HEAD',
       '.dart_tool/package_config.json',
+      '.fvmrc',
+      'lib/.DS_Store',
     ]) {
       File('${from.path}/$file')
         ..parent.createSync(recursive: true)
         ..writeAsStringSync(file);
+    }
+    // FVM links its SDK into the package: a link is never followed.
+    final sdk = temp('gleon_consumer_sdk_');
+    File('${sdk.path}/bin/flutter').createSync(recursive: true);
+    // Creating symbolic links needs a privilege on Windows.
+    if (!Platform.isWindows) {
+      Link('${from.path}/lib/flutter_sdk').createSync(sdk.path);
     }
     final into = temp('gleon_consumer_into_');
 
@@ -174,6 +202,7 @@ void main() {
     expect(pubspec, contains('sdk: ^3.0.0'));
     expect(pubspec, contains('    path: ${package.path}\n'));
     expect(pubspec, contains('release_url: http://127.0.0.1:4321/'));
+    expect(pubspec, contains('  material_ui: ^1.1.0\n'));
     expect(pubspec, contains('uses-material-design: true'));
     expect(
       File('${app.path}/test/flutter_test_config.dart').readAsStringSync(),
@@ -181,6 +210,7 @@ void main() {
     );
     final test = File('${app.path}/test/number_test.dart').readAsStringSync();
     expect(test, contains("matchesGoldenFile('$consumerGolden')"));
+    expect(test, contains("import 'package:material_ui/material_ui.dart';"));
     expect(test, isNot(contains('const .')), reason: 'language version 3.0');
     expect(
       File('${app.path}/test/number.dart').readAsStringSync(),

@@ -17,7 +17,7 @@ const _golden = 'goldens/over_budget.png';
 void main() {
   setUp(WorkspaceSandbox.withoutWorkspace);
 
-  File golden() => File('${WorkspaceSandbox.current().dir.path}/$_golden');
+  File golden() => .new('${WorkspaceSandbox.current().dir.path}/$_golden');
 
   test('--update-goldens records no ssim golden over the budget', () async {
     final message = await withGoldenUpdates(

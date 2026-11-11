@@ -1,9 +1,9 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// A page that counts button presses.
 class CounterPage extends StatefulWidget {
   /// Creates the page.
-  const CounterPage({super.key});
+  const new({super.key});
 
   @override
   State<CounterPage> createState() => _CounterPageState();

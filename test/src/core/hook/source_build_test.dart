@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gleon/src/core/hook/native_target.dart';
 import 'package:gleon/src/core/hook/source_build.dart';
 
 import '../../../helpers/fake_cargo.dart';
@@ -126,13 +127,7 @@ void main() {
         target: .linuxX64,
         environment: {'HOME': empty, 'PATH': empty},
       ),
-      // Names the variables the hook never sees.
-      throwsState(
-        allOf(
-          contains('`cargo` was not found'),
-          contains(SourceBuild.hookEnvironmentHint),
-        ),
-      ),
+      throwsState(contains('`cargo` was not found')),
     );
     expect(Directory.fromUri(targetDir).existsSync(), isFalse);
   });
@@ -155,6 +150,9 @@ void main() {
     );
     expect(inputs, isNot(contains(root.resolve('gleon-core/src/lib.rs'))));
     expect(inputs, isNot(contains(root.resolve('rust-toolchain.toml'))));
+    expect(inputs, isNot(contains(root.resolve('.cargo/config.toml'))));
+    // A dirty cargo config of the checkout makes a local build stale.
+    expect(SourceBuild.inputPaths(root), contains('.cargo/config.toml'));
     expect(inputs.toSet(), hasLength(inputs.length), reason: 'no duplicates');
     // A root without its trailing slash (`Uri.file`) is the same checkout.
     final unslashed = Uri.file(checkout);
@@ -210,10 +208,13 @@ void main() {
   });
 
   group('run', () {
-    Future<LibraryFiles> build(FakeCargo cargo) => SourceBuild.run(
+    Future<LibraryFiles> build(
+      FakeCargo cargo, {
+      NativeTarget target = .linuxX64,
+    }) => SourceBuild.run(
       repoRoot: .file(fakeCheckout()),
       targetDir: .directory('${tempPath()}/cargo'),
-      target: .linuxX64,
+      target: target,
       environment: cargoEnvironment(),
       runProcess: cargo.run,
     );
@@ -251,6 +252,9 @@ void main() {
       for (final file in [
         '$root/gleon-ffi/build.rs',
         '$root/gleon-ffi/data/a table.bin',
+        // The checkout's cargo config (rustflags, a wrapper): no dep-info
+        // names it.
+        '$root/.cargo/config.toml',
         ...outside,
       ]) {
         File(file)
@@ -281,6 +285,7 @@ void main() {
           checkout.resolve('Cargo.toml'),
           // The versions of the registry crates, whose sources lie outside.
           checkout.resolve('Cargo.lock'),
+          checkout.resolve('.cargo/config.toml'),
           checkout.resolve('gleon-ffi/Cargo.toml'),
           checkout.resolve('gleon-ffi/build.rs'),
           checkout.resolve('gleon-ffi/src/lib.rs'),
@@ -379,20 +384,35 @@ void main() {
       );
     });
 
-    test('a failing cargo is an error with its output', () async {
-      await expectLater(
-        build(FakeCargo(exitCode: 101)),
-        throwsA(
-          isA<ProcessException>()
-              .having((error) => error.errorCode, 'exit code', 101)
-              .having(
-                (error) => error.message,
-                'message',
-                contains('out\nerr'),
-              ),
-        ),
+    // Names the variables the hook never sees; on Windows also that only
+    // the variables carry rustflags (the build sets the target's own).
+    for (final (target, hasWindowsHint) in [
+      (NativeTarget.linuxX64, false),
+      (NativeTarget.windowsX64, true),
+    ]) {
+      test(
+        'a failing cargo is an error with its output (${target.key})',
+        () async {
+          final windowsHint = contains(SourceBuild.windowsRustflagsHint);
+          await expectLater(
+            build(FakeCargo(exitCode: 101), target: target),
+            throwsA(
+              isA<ProcessException>()
+                  .having((error) => error.errorCode, 'exit code', 101)
+                  .having(
+                    (error) => error.message,
+                    'message',
+                    allOf(
+                      contains('out\nerr'),
+                      contains(SourceBuild.hookEnvironmentHint),
+                      hasWindowsHint ? windowsHint : isNot(windowsHint),
+                    ),
+                  ),
+            ),
+          );
+        },
       );
-    });
+    }
 
     test('a successful cargo without the library is an error', () async {
       await expectLater(

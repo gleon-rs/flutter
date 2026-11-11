@@ -118,7 +118,7 @@ abstract final class AppFonts {
     final loader = FontLoader(family);
     for (final font in fonts) {
       final portable = withPortableLineMetrics(Uint8List.sublistView(font));
-      loader.addFont(.value(ByteData.sublistView(portable)));
+      loader.addFont(.syncValue(ByteData.sublistView(portable)));
     }
     await loader.load();
   }

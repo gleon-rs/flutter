@@ -6,7 +6,7 @@ import 'user_defines.dart';
 /// (`hook/build.dart`, the only user of this adapter).
 final class HookUserDefines implements UserDefines {
   /// Reads [_defines].
-  const HookUserDefines(this._defines);
+  const new(this._defines);
 
   final HookInputUserDefines _defines;
 

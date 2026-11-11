@@ -10,6 +10,7 @@ void main() {
     (OS.android, Architecture.arm64),
     (OS.iOS, Architecture.arm64),
     (OS.linux, Architecture.riscv64),
+    (OS.macOS, Architecture.arm64e),
   ]) {
     test('$os-$arch gets no library and no error', () async {
       final built = <({int assets, int dependencies})>[];

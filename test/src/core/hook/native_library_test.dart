@@ -403,7 +403,7 @@ void main() {
 
 /// User-defines from a map; paths are file paths.
 final class _MapUserDefines implements UserDefines {
-  const _MapUserDefines(this._defines);
+  const new(this._defines);
 
   final Map<String, Object> _defines;
 

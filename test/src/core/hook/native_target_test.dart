@@ -96,11 +96,13 @@ void main() {
     expect(NativeTarget.byKey('linux-arm64'), NativeTarget.linuxArm64);
     expect(NativeTarget.byKey('macos-arm64'), NativeTarget.macosArm64);
     // Flutter runs the hooks of dev_dependencies for app builds too: those
-    // get no library instead of a failing build.
+    // get no library instead of a failing build. arm64e (pointer
+    // authentication) cannot load an arm64 library.
     for (final (os, arch) in [
       ('android', 'arm64'),
       ('ios', 'arm64'),
       ('linux', 'riscv64'),
+      ('macos', 'arm64e'),
       ('macos', 'x64'),
     ]) {
       expect(NativeTarget.byKey('$os-$arch'), isNull, reason: '$os-$arch');

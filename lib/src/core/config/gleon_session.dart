@@ -19,7 +19,7 @@ final class GleonSession implements Finalizable {
   /// workspace (tests of the behavior without one). The native engine reads
   /// its variables from the process environment unless [environment] gives
   /// them, as tests do.
-  GleonSession({
+  new({
     required GleonIntegration integration,
     bool hasWorkspaces = true,
     GleonEnvironment? environment,
@@ -65,7 +65,7 @@ final class GleonSession implements Finalizable {
 @immutable
 final class GleonEnvironment {
   /// Creates the values; all unset by default.
-  const GleonEnvironment({
+  const new({
     this.metrics = '',
     this.artifactsDir = '',
     this.runId = '',
@@ -92,7 +92,7 @@ final class GleonEnvironment {
 final class GleonIntegration {
   /// Creates the description. Each artifact pattern contains `{name}`, the
   /// golden's file name without its extension.
-  const GleonIntegration({
+  const new({
     required this.tool,
     required this.toolVersion,
     required this.goldenArtifact,

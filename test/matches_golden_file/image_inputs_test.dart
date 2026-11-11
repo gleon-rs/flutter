@@ -84,7 +84,7 @@ void main() {
     goldenFileComparator = custom;
     final matcher = matchesGoldenFile(Swatch.golden);
 
-    for (final input in <Object>[image, Future.value(image)]) {
+    for (final input in <Object>[image, Future.syncValue(image)]) {
       expect(
         await matcher.matchAsync(input),
         contains('needs a LocalFileComparator'),

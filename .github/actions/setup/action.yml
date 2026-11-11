@@ -9,7 +9,7 @@ inputs:
     description: >-
       Exact Flutter release. Pinned so formatter/analyzer updates never change CI results on their
       own and every OS of a release uses the same SDK; bump it deliberately.
-    default: "3.47.5"
+    default: "3.50.0"
   target:
     description: Native target key of this runner (macos-arm64, linux-x64, linux-arm64, windows-x64).
     required: true
@@ -76,10 +76,10 @@ runs:
         path: flutter/native/${{ inputs.target }}
         # Only the files that decide the built and installed bytes (build_native and what it imports).
         key: gleon-ffi-${{ inputs.target }}-${{ steps.pin.outputs.gleon_ref }}-${{ hashFiles('flutter/bin/build_native.dart', 'flutter/bin/src/cli.dart', 'flutter/bin/src/native_build.dart', 'flutter/lib/src/core/hook/native_target.dart', 'flutter/lib/src/core/hook/source_build.dart', 'flutter/lib/src/core/hook/atomic_write.dart') }}
-    # Also on a cache hit: the layout test of the bindings (test/src/core/native/gleon_ffi_test.dart)
-    # reads the C contract from ../gleon at the pin and would skip without it.
+    # Only to build: a job that reads the C contract or the schemas at the pin checks them out
+    # itself (sparse, also on a cache hit; see the test job of ci.yaml).
     - name: Check out gleon
-      if: ${{ inputs.build == 'true' }}
+      if: ${{ inputs.build == 'true' && steps.cache.outputs.cache-hit != 'true' }}
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         repository: gleon-rs/gleon

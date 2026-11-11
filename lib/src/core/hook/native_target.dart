@@ -41,7 +41,7 @@ enum NativeTarget {
     libFileName: 'gleon_ffi.dll',
   );
 
-  NativeTarget({
+  new({
     required this.os,
     required this.arch,
     required this.rustTriple,

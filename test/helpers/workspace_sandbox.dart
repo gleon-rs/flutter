@@ -52,7 +52,7 @@ final class WorkspaceSandbox {
   /// [installsGleonComparator] the comparator is a [GleonFileComparator]
   /// with the sandbox's session, like `test/flutter_test_config.dart` would
   /// install it (the environment of the test run never leaks in).
-  factory WorkspaceSandbox.create(
+  factory create(
     String? yaml, {
     Map<String, String> extraGoldens = const {},
     bool installsGleonComparator = false,
@@ -89,15 +89,15 @@ final class WorkspaceSandbox {
   }
 
   /// A sandbox whose goldens (all three) have no workspace.
-  factory WorkspaceSandbox.withoutWorkspace() =>
+  factory withoutWorkspace() =>
       .create(null, extraGoldens: const {'goldens/caption.png': 'caption.png'});
 
-  const WorkspaceSandbox._(this.root);
+  const new _(this.root);
 
   /// The sandbox whose comparator `goldenFileComparator` is: the last one the
   /// running test created (for `setUp` users). Read from Flutter's global,
   /// not kept apart, so it can never point at another test's sandbox.
-  factory WorkspaceSandbox.current() => switch (goldenFileComparator) {
+  factory current() => switch (goldenFileComparator) {
     // `<temp>/gleon_ws_…/test/` (a directory: its last segment is empty): the
     // sandbox's own directory, not any path that happens to contain the
     // prefix.

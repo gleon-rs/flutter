@@ -113,11 +113,11 @@ abstract final class GleonFfi {
 
 /// Opaque texts of a `GleonSummary` owned by the native library: created by
 /// `gleon_golden`, released only by `gleon_texts_free`.
-final class GleonTexts extends Opaque {}
+final class GleonTexts extends Opaque;
 
 /// Opaque `GleonSession` owned by the native library: created by
 /// `gleon_session_new`, released only by `gleon_session_free`.
-final class GleonSessionHandle extends Opaque {}
+final class GleonSessionHandle extends Opaque;
 
 /// The safer-ffi `c_slice::Ref<u8>` fields of a `GleonSummary`: a borrowed
 /// view into its texts, valid until they are freed (empty for "none").

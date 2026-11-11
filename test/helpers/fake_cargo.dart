@@ -10,7 +10,7 @@ import 'package:gleon/src/core/hook/source_build.dart';
 /// [isAllowed].
 final class FakeCargo {
   /// A cargo that builds.
-  FakeCargo({
+  new({
     this.exitCode = 0,
     this.isWritingLibrary = true,
     this.isAllowed = true,
@@ -18,7 +18,7 @@ final class FakeCargo {
   });
 
   /// A cargo that fails the test when called.
-  FakeCargo.never() : this(isAllowed: false);
+  new never() : this(isAllowed: false);
 
   /// Exit code of every build.
   final int exitCode;
@@ -71,6 +71,6 @@ final class FakeCargo {
       }
     }
 
-    return .value(ProcessResult(1, exitCode, 'out', 'err'));
+    return .syncValue(ProcessResult(1, exitCode, 'out', 'err'));
   }
 }

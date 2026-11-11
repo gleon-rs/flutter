@@ -6,7 +6,7 @@ import 'dart:io';
 /// Plain Dart (no Flutter imports): maintainer tooling, tested directly.
 final class LicenseCrate {
   /// A crate [name] of [version] under [license] with its license [texts].
-  const LicenseCrate({
+  const new({
     required this.license,
     required this.name,
     required this.repository,

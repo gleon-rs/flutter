@@ -17,11 +17,13 @@ doc/api/
 *.js.map
 .flutter-plugins
 .flutter-plugins-dependencies
-test/failures/
+test/**/failures/
 example/test/failures/
 coverage/
 .antigravity/
 CLAUDE.local.md
+.DS_Store
+.fvm/
 
 # Maintainer-only
 /benchmark/

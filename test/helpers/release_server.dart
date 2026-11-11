@@ -8,7 +8,7 @@ import 'dart:io';
 /// [statuses] (name → bare status code) and counts requests per name in
 /// [hits].
 class ReleaseServer {
-  ReleaseServer._(
+  new _(
     this._server, {
     required this.files,
     required this.redirects,
@@ -107,7 +107,7 @@ class ReleaseServer {
       final part = (body.length / 4).ceil();
       for (int start = 0; start < body.length; start += part) {
         // A slow server: the client waits for each part.
-        await Future<void>.delayed(pause);
+        await Future.pause(pause);
         response.add(body.sublist(start, (start + part).clamp(0, body.length)));
         await response.flush();
       }

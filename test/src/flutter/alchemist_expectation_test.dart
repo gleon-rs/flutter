@@ -41,7 +41,7 @@ Future<ui.Image> _swatchImage(WidgetTester tester, {Offset? dot}) async {
 /// A comparator with a threshold of its own, like alchemist's for a
 /// `diffThreshold` above 0, which alchemist installs around those tests.
 class _ThresholdComparator extends LocalFileComparator {
-  _ThresholdComparator(super.testFile);
+  new(super.testFile);
 }
 
 void main() {
@@ -106,7 +106,7 @@ void main() {
       final image = await _swatchImage(tester, dot: Swatch.dotOffset);
       final message = await _failureOf(
         gleonAlchemistExpectation(),
-        Future.value(image),
+        Future.syncValue(image),
         Swatch.golden,
       );
 
@@ -121,7 +121,7 @@ void main() {
       final image = await _swatchImage(tester);
       final message = await _failureOf(
         gleonAlchemistExpectation(),
-        Future.value(image),
+        Future.syncValue(image),
         'goldens/missing.png',
       );
 
@@ -133,7 +133,7 @@ void main() {
       final image = await _swatchImage(tester, dot: Swatch.dotOffset);
       final message = await _failureOf(
         gleonAlchemistExpectation(shouldHintObscuredText: false),
-        Future.value(image),
+        Future.syncValue(image),
         Swatch.golden,
       );
 
@@ -159,7 +159,7 @@ void main() {
       expect(
         await _failureOf(
           gleonAlchemistExpectation(),
-          Future.value(image),
+          Future.syncValue(image),
           Swatch.golden,
         ),
         isNull,

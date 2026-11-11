@@ -8,7 +8,7 @@ import 'release.dart';
 /// A fresh download cache for every test of the suite that creates it (in
 /// `main`, outside any test).
 final class DownloadCache {
-  DownloadCache() {
+  new() {
     setUp(() => _dir = Directory.systemTemp.createTempSync('gleon_hook_'));
     tearDown(() => _dir?.deleteSync(recursive: true));
   }

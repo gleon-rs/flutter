@@ -12,7 +12,7 @@ import 'stray_home_config.dart';
 /// kept) of one run.
 final class RunResources {
   /// The resources of a run in [work].
-  RunResources(this.work, {required this.isKept});
+  new(this.work, {required this.isKept});
 
   /// The directory of the run.
   final Directory work;
