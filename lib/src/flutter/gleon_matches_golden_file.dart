@@ -26,7 +26,7 @@ import 'text_regions.dart';
 class GleonMatchesGoldenFile extends flutter_test.MatchesGoldenFile {
   /// Creates the matcher; prefer `matchesGoldenFile`, which validates the
   /// arguments.
-  const GleonMatchesGoldenFile(
+  const new(
     super.key,
     super.version, {
     this.tolerance,
@@ -113,7 +113,7 @@ class GleonMatchesGoldenFile extends flutter_test.MatchesGoldenFile {
   static Future<String?> _matchOther(Object? item, _Golden golden) =>
       switch (item) {
         final Future<ui.Image?> pending => _matchImage(pending, golden),
-        final ui.Image image => _matchImage(.value(image), golden),
+        final ui.Image image => _matchImage(.syncValue(image), golden),
         final flutter_test.Finder finder => _matchWidget(finder, golden),
         _ => throw AssertionError(
           'must provide a Finder, Image, Future<Image>, List<int>, or '
@@ -149,10 +149,10 @@ class GleonMatchesGoldenFile extends flutter_test.MatchesGoldenFile {
   ) {
     final found = finder.evaluate();
     if (found.isEmpty) {
-      return .value('could not be rendered because no widget was found');
+      return .syncValue('could not be rendered because no widget was found');
     }
     final element = found.singleOrNull;
-    if (element == null) return .value('matched too many widgets');
+    if (element == null) return .syncValue('matched too many widgets');
     // The capture first: its scene is built now, so the paint that finding
     // the text replays can never reach its pixels. Both before awaiting
     // anything: the tree must be the one captured. An update needs the text

@@ -68,7 +68,7 @@ enum _Scenario {
   mismatch(isPass: false),
   samePixels(isPass: true);
 
-  _Scenario({required this.isPass});
+  new({required this.isPass});
 
   /// Whether the candidate matches the golden.
   final bool isPass;

@@ -14,17 +14,10 @@ const consumerGolden = 'goldens/number.png';
 const deadProxy = 'http://127.0.0.1:9';
 
 /// The entries of the package root a consumer never gets (top level only:
-/// `lib/src/core/native/` is code): everything `.pubignore` leaves out there
-/// (a test keeps them in sync), and what the hook needs not (`example/`,
-/// `test/`, `native/` but its pin).
+/// `lib/src/core/native/` is code), besides hidden ones ([isHidden]):
+/// everything else `.pubignore` leaves out there (a test keeps them in sync),
+/// and what the hook needs not (`example/`, `test/`, `native/` but its pin).
 const notShipped = {
-  '.antigravity',
-  '.dart_tool',
-  '.flutter-plugins',
-  '.flutter-plugins-dependencies',
-  '.git',
-  '.github',
-  '.packages',
   'CLAUDE.local.md',
   'benchmark',
   'bin',
@@ -69,9 +62,20 @@ String _resolvedPath(Directory dir) {
   return Platform.isWindows ? path.toLowerCase() : path;
 }
 
+/// Whether [name] is hidden: pub leaves such entries out of the archive at
+/// every level (`.dart_tool`, `.git`, `.fvm`, `.DS_Store`).
+bool isHidden(String name) => name.startsWith('.');
+
+/// Whether [copyPackage] copies the entry [name] ([isRoot]: of the package
+/// root, where [notShipped] applies).
+bool _isShipped(String name, {required bool isRoot}) =>
+    !isHidden(name) && (!isRoot || !notShipped.contains(name));
+
 /// Copies this package [from] its root into [into] without the directories a
 /// consumer never gets: of `native/` only the pin, as in a git checkout of
-/// the package (no library, so the hook has to download it).
+/// the package (no library, so the hook has to download it). Hidden entries
+/// and symbolic links are left out at every level: a link may lead anywhere
+/// (FVM's `.fvm/flutter_sdk` is a whole Flutter SDK).
 void copyPackage(Directory from, Directory into) {
   final pin = File.fromUri(NativeTarget.pinFile(from.uri));
   if (pin.existsSync()) {
@@ -84,9 +88,10 @@ void copyPackage(Directory from, Directory into) {
     final (source, destination) = pending.removeLast();
     destination.createSync(recursive: true);
     final isRoot = source.path == from.path;
-    final shipped = source.listSync().where(
-      (entry) => !isRoot || !notShipped.contains(nameOf(entry)),
-    );
+    // Not following links: a link is listed as a Link, and skipped below.
+    final shipped = source
+        .listSync(followLinks: false)
+        .where((entry) => _isShipped(nameOf(entry), isRoot: isRoot));
     for (final entry in shipped) {
       final target = '${destination.path}/${nameOf(entry)}';
       switch (entry) {
@@ -113,7 +118,8 @@ String nameOf(FileSystemEntity entry) => entry.uri.pathSegments.lastWhere(
 /// Writes the consumer app into [app]: gleon from [package], the library from
 /// [releaseUrl], a golden test of a number with the app's real fonts and no
 /// `.gleon/gleon.yaml`. Its language version is 3.0, as in most apps, so the
-/// test is written without dot shorthands.
+/// test is written without dot shorthands; Material comes from `material_ui`,
+/// as in apps that `flutter create` makes.
 void writeConsumerApp(
   Directory app, {
   required Directory package,
@@ -132,6 +138,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  material_ui: ^1.1.0
 
 dev_dependencies:
   flutter_test:
@@ -158,8 +165,8 @@ Future<void> testExecutable(FutureOr<void> Function() testMain) async {
 }
 ''');
   File('${app.path}/test/number_test.dart').writeAsStringSync('''
-import 'package:flutter/material.dart';
 import 'package:gleon/gleon.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'number.dart';
 

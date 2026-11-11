@@ -6,10 +6,9 @@ analyzer:
     - build/**
     - dist/**
     - example/**
+  # strict-casts and strict-raw-types are the lints no_dynamic_casts and no_raw_types (Dart 3.13).
   language:
-    strict-casts: true
     strict-inference: true
-    strict-raw-types: true
 
   errors:
     # Info
@@ -190,6 +189,8 @@ dart_code_metrics:
     - parameters-ordering: false # Order follows meaning (x, y, width, height; baseline, candidate).
     - prefer-correct-throws: false # No DCM `@Throws` annotations (extra dependency).
     - prefer-prefixed-global-constants: false # Effective Dart: no prefix letters (`k`).
+    - prefer-primary-constructors: false # As use_primary_constructors (see its reason below).
+    - prefer-test-body-last: false # Conflicts with arguments-ordering (`skip:` after the body).
     - prefer-test-matchers: false # Matter of style + introduces coupling in tests.
     - prefer-test-structure: false # Matter of style.
 
@@ -225,12 +226,10 @@ linter:
     prefer_double_quotes: false # Conflicts with: prefer_single_quotes.
     specify_nonobvious_local_variable_types: false # Conflicts with: avoid-explicit-type-declaration.
     unnecessary_final: false # Conflicts with: prefer_final_locals.
-    # Primary constructors, `new`/`factory` constructor names and `;` class
-    # bodies (Dart 3.13) stay off for now: `dart fix` misplaces field docs
-    # when converting, and pana bundles an older analyzer. Revisit
-    # with the next tooling bump.
-    empty_container_bodies: false
-    unnecessary_type_name_in_constructor: false
+    # Primary constructors (Dart 3.13) stay off, checked 2026-11-11 on Dart 3.14
+    # and DCM 1.40: the fix gives every class without a constructor an empty
+    # `()` (static-only classes, FFI Opaque and Struct types), and the analyzer
+    # then asks for docs on the `this : super._();` body of a private one.
     use_primary_constructors: false
 
     # Enabled:
@@ -300,10 +299,12 @@ linter:
     document_ignores: true
     empty_catches: true
     empty_constructor_bodies: true
+    empty_container_bodies: true
     empty_statements: true
     eol_at_end_of_file: true
     exhaustive_cases: true
     file_names: true
+    future_sync_value: true
     hash_and_equals: true
     implementation_imports: true
     implicit_call_tearoffs: true
@@ -434,6 +435,7 @@ linter:
     unnecessary_string_interpolations: true
     unnecessary_this: true
     unnecessary_to_list_in_spreads: true
+    unnecessary_type_name_in_constructor: true
     unnecessary_unawaited: true
     unnecessary_underscores: true
     unreachable_from_main: true

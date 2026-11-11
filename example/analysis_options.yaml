@@ -15,6 +15,4 @@ dart_code_metrics:
 
 linter:
   rules:
-    # Keeps the SDK's Material library: the goldens were recorded with it.
-    migrate_design_widgets: false
     public_member_api_docs: false # An app, not a library.

@@ -7,7 +7,7 @@ import 'package:meta/meta.dart';
 @immutable
 final class NativeOutcome {
   /// Creates the outcome; a summary without texts has none of them.
-  const NativeOutcome(
+  const new(
     this.verdict, {
     this.errorKind = .none,
     this.message = '',
@@ -55,7 +55,7 @@ enum NativeVerdict {
   /// The golden was written (`--update-goldens`).
   updated(5);
 
-  NativeVerdict(this.code);
+  new(this.code);
 
   /// The code of `gleon-ffi`.
   final int code;
@@ -94,7 +94,7 @@ enum NativeErrorKind {
   /// The call did not fail.
   none(0);
 
-  NativeErrorKind(this.code);
+  new(this.code);
 
   /// The code of `gleon-ffi`.
   final int code;

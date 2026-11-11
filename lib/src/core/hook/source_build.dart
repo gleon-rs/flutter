@@ -22,14 +22,14 @@ typedef ProcessRunner = Future<ProcessResult> Function(
 /// Plain Dart (no Flutter imports): used by `hook/build.dart` and tested
 /// directly.
 abstract final class SourceBuild {
-  /// Why a toolchain that works in a shell may fail in the build hook: the
-  /// hooks runner forwards only a few variables (`PATH`, `HOME`, proxies),
-  /// not `RUSTUP_HOME`, `CARGO_HOME` or `RUSTFLAGS`.
+  /// Why a build that works in a shell may fail in the build hook: the hooks
+  /// runner forwards `PATH`, `HOME`, proxies and the `CARGO_*`/`RUSTUP_*`
+  /// variables, but not `RUSTFLAGS` or `RUSTC_WRAPPER`.
   static const hookEnvironmentHint =
-      'Build hooks see only PATH, HOME and a few other variables: a Rust '
-      'toolchain under a custom RUSTUP_HOME or CARGO_HOME (the rust Docker '
-      'image) is not found there; build with `dart bin/build_native.dart` '
-      'outside the hook instead.';
+      'Build hooks do not see RUSTFLAGS or RUSTC_WRAPPER: use '
+      'CARGO_BUILD_RUSTFLAGS / CARGO_BUILD_RUSTC_WRAPPER or a '
+      '.cargo/config.toml in the checkout, or build with '
+      '`dart bin/build_native.dart` outside the hook.';
 
   /// The Rust crate that produces the library.
   static const crate = 'gleon-ffi';
@@ -153,8 +153,7 @@ abstract final class SourceBuild {
       'gleon: `cargo` was not found (searched '
       '${['PATH', ...cargoBin].join(' and ')}), but the '
       '`gleon_repo` user-define asks for a source build. Install Rust via '
-      'rustup, or remove `gleon_repo` to use the prebuilt library. '
-      '$hookEnvironmentHint',
+      'rustup, or remove `gleon_repo` to use the prebuilt library.',
     );
   }
 
@@ -187,8 +186,9 @@ abstract final class SourceBuild {
   static List<Uri> dependencies(Uri checkout, Uri library) {
     final root = _asDirectory(checkout);
     final compiled = _compiled(root, library);
-    if (compiled == null) return _inputs(root);
-    final manifests = _inputs(root).where(
+    final inputs = _inputs(root);
+    if (compiled == null) return inputs;
+    final manifests = inputs.where(
       (input) => switch (input.pathSegments.lastOrNull) {
         final name? => name.endsWith('.toml') || name == 'Cargo.lock',
         null => false,

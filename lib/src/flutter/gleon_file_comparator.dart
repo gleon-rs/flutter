@@ -38,10 +38,10 @@ import 'gleon_golden_comparator.dart';
 class GleonFileComparator extends LocalFileComparator {
   /// Creates a comparator for the goldens of the test file [testFile], like
   /// [LocalFileComparator].
-  GleonFileComparator(super.testFile) : _names = null;
+  new(super.testFile) : _names = null;
 
   /// Any file name in the directory of [_names]: only the directory is used.
-  GleonFileComparator._naming(LocalFileComparator this._names)
+  new _naming(LocalFileComparator this._names)
     : super(_names.basedir.resolve('gleon_test.dart'));
 
   /// A comparator for the goldens of [existing], the [LocalFileComparator]
@@ -52,19 +52,18 @@ class GleonFileComparator extends LocalFileComparator {
   ///
   /// Throws an [ArgumentError] for any other comparator: it has no golden
   /// directory to take.
-  factory GleonFileComparator.fromExisting(GoldenFileComparator existing) =>
-      switch (existing) {
-        final GleonFileComparator installed => installed,
-        final LocalFileComparator local => ._naming(local),
-        final other => throw ArgumentError.value(
-          other,
-          'existing',
-          'gleon: GleonFileComparator.fromExisting takes the golden directory '
-              'of a LocalFileComparator, but goldenFileComparator is '
-              '${other.runtimeType}; install it from '
-              'test/flutter_test_config.dart under flutter test',
-        ),
-      };
+  factory fromExisting(GoldenFileComparator existing) => switch (existing) {
+    final GleonFileComparator installed => installed,
+    final LocalFileComparator local => ._naming(local),
+    final other => throw ArgumentError.value(
+      other,
+      'existing',
+      'gleon: GleonFileComparator.fromExisting takes the golden directory '
+          'of a LocalFileComparator, but goldenFileComparator is '
+          '${other.runtimeType}; install it from '
+          'test/flutter_test_config.dart under flutter test',
+    ),
+  };
 
   /// The comparator of `fromExisting`, which names the goldens; null: this
   /// one.

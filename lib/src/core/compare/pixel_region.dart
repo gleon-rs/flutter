@@ -7,7 +7,7 @@ import 'package:meta/meta.dart';
 @pragma('vm:deeply-immutable')
 final class PixelRegion {
   /// Creates a region.
-  const PixelRegion({
+  const new({
     required this.x,
     required this.y,
     required this.width,
@@ -19,7 +19,7 @@ final class PixelRegion {
   ///
   /// The edges must be finite and non-negative (asserted): callers validate
   /// them (`ignoreRegions`) or clip them to the image (text regions).
-  factory PixelRegion.outwards({
+  factory outwards({
     required double left,
     required double top,
     required double right,

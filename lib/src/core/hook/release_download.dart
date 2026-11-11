@@ -117,7 +117,7 @@ abstract final class ReleaseDownload {
 
 /// One release being fetched: its URL, the local cache and the HTTP client.
 final class _Release {
-  _Release({
+  new({
     required this.url,
     required this.packageVersion,
     required this.cacheDir,
@@ -313,7 +313,7 @@ final class _Release {
       final bytes = await _attempt(source, isLast: attempt == _attempts);
       if (bytes != null) return bytes;
       // Linear backoff before retrying a transient failure.
-      await Future<void>.delayed(Duration(seconds: attempt));
+      await Future.pause(Duration(seconds: attempt));
     }
   }
 

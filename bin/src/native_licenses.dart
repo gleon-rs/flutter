@@ -9,7 +9,7 @@ import 'license_crate.dart';
 /// Plain Dart (no Flutter imports): maintainer tooling, tested directly.
 final class NativeLicenses {
   /// The licenses of [crates], generated for [gleonCommit].
-  NativeLicenses(List<LicenseCrate> crates, {required this.gleonCommit})
+  new(List<LicenseCrate> crates, {required this.gleonCommit})
     : _crates = [...crates, _std];
 
   /// The gleon commit the crates were read from (`native/gleon_ref`).
@@ -113,7 +113,8 @@ DEALINGS IN THE SOFTWARE.''';
     final byText = <String, List<String>>{};
     for (final crate in _crates) {
       for (final text in crate.texts) {
-        (byText[text] ??= []).add(crate.label);
+        // ignore: avoid-collection-mutating-methods, appends instead of copying the list per crate.
+        byText.putIfAbsent(text, () => []).add(crate.label);
       }
     }
 

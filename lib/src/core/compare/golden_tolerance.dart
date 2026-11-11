@@ -33,7 +33,7 @@ import 'tolerances.dart';
 @immutable
 @pragma('vm:deeply-immutable')
 sealed class GoldenTolerance {
-  const GoldenTolerance._();
+  const new _();
 
   /// Every pixel must be identical, like Flutter's `matchesGoldenFile`; the
   /// text of a widget follows `textTolerance`.
@@ -94,7 +94,7 @@ sealed class GoldenTolerance {
 @immutable
 @pragma('vm:deeply-immutable')
 final class ExactTolerance extends GoldenTolerance {
-  const ExactTolerance._() : super._();
+  const new _() : super._();
 
   @override
   int get hashCode => 'exact'.hashCode;
@@ -107,7 +107,7 @@ final class ExactTolerance extends GoldenTolerance {
 @immutable
 @pragma('vm:deeply-immutable')
 final class PixelTolerance extends GoldenTolerance {
-  const PixelTolerance._({
+  const new _({
     required this.maxDiffRatio,
     this.channelTolerance = 0,
     this.antiAlias = false,
@@ -153,8 +153,7 @@ final class PixelTolerance extends GoldenTolerance {
 @immutable
 @pragma('vm:deeply-immutable')
 final class SsimTolerance extends GoldenTolerance {
-  const SsimTolerance._({this.minSimilarity = 0.8, this.colorTolerance = 8})
-    : super._();
+  const new _({this.minSimilarity = 0.8, this.colorTolerance = 8}) : super._();
 
   /// Minimum local SSIM (0.0–1.0).
   final double minSimilarity;

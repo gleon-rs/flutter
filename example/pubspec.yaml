@@ -4,18 +4,19 @@ publish_to: none
 version: 0.1.0
 
 environment:
-  sdk: ^3.13.0
-  flutter: ">=3.47.5"
+  sdk: ^3.14.0
+  flutter: ">=3.50.0"
 
 dependencies:
   flutter:
     sdk: flutter
+  material_ui: ^1.11.0
 
 dev_dependencies:
   # Golden harness whose tests compare with gleon (test/counter_page_test.dart).
   alchemist: ^0.14.1
-  bench_press: ^0.4.1
-  dart_code_metrics_presets: ^2.33.0
+  bench_press: ^0.4.2
+  dart_code_metrics_presets: ^2.34.0
   flutter_lints: ^6.0.0 # Included by ../analysis_options.yaml.
   # Only for Flutter's own matcher, the baseline of benchmark/: gleon re-exports the rest of
   # flutter_test, so tests import only package:gleon/gleon.dart.

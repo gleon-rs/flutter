@@ -4,5 +4,5 @@
 /// infrastructure failure (`HookFailures.reporting`).
 final class NetworkFailure extends StateError {
   /// Creates the failure [message].
-  NetworkFailure(super.message);
+  new(super.message);
 }

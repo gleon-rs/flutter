@@ -315,16 +315,17 @@ void main() {
     // 160x10 grown by the margin to 162.5x12.5: 13 pieces of 12.5x12.5.
     expect(regions, hasLength(13));
     int area(PixelRegion region) => region.width * region.height;
-    final bounds = regions
-        .map(
-          (region) => Rect.fromLTWH(
-            region.x.toDouble(),
-            region.y.toDouble(),
-            region.width.toDouble(),
-            region.height.toDouble(),
-          ),
-        )
-        .reduce((a, b) => a.expandToInclude(b));
+    final rects = [
+      for (final PixelRegion(:height, :width, :x, :y) in regions)
+        Rect.fromLTWH(
+          x.toDouble(),
+          y.toDouble(),
+          width.toDouble(),
+          height.toDouble(),
+        ),
+    ];
+    // ignore: avoid-unsafe-reduce, 13 regions (asserted above).
+    final bounds = rects.reduce((a, b) => a.expandToInclude(b));
     expect(
       regions.map(area).reduce((a, b) => a + b),
       lessThan(bounds.width * bounds.height / 2),
@@ -336,27 +337,52 @@ void main() {
     final pixels =
         await tester.runAsync(() => _pixelsOf(element)) ?? fail('no capture');
     const side = 200;
-    final masked = List.filled(side * side, false);
-    for (final PixelRegion(:height, :width, :x, :y) in regions) {
-      for (int row = y; row < y + height; row += 1) {
-        masked.fillRange(row * side + x, row * side + x + width, true);
-      }
-    }
-    final ink = [
-      for (int at = 0; at < side * side; at += 1)
-        if (pixels[at * 4 + 3] > 0) at,
+    final inRegions = {
+      for (final PixelRegion(:height, :width, :x, :y) in regions)
+        for (int row = y; row < y + height; row += 1)
+          for (int col = x; col < x + width; col += 1) row * side + col,
+    };
+    // The pixels (row-major indices) whose alpha is not 0.
+    final inked = [
+      for (final (index, byte) in pixels.indexed)
+        if (index % 4 == 3 && byte > 0) index ~/ 4,
     ];
-    final columns = ink.map((at) => at % side);
+    final inkColumns = inked.map((pixel) => pixel % side);
     // The 16 glyphs of the line, 45° turned: about (160 + 10) / √2 wide.
     expect(
-      columns.reduce(math.max) - columns.reduce(math.min),
+      inkColumns.reduce(math.max) - inkColumns.reduce(math.min),
       greaterThan(110),
     );
-    expect([
-      for (final at in ink)
-        if (!masked[at]) (x: at % side, y: at ~/ side),
-    ], isEmpty);
+    final outside = [
+      for (final pixel in inked)
+        if (!inRegions.contains(pixel)) (x: pixel % side, y: pixel ~/ side),
+    ];
+    expect(outside, isEmpty);
   });
+
+  // A line turned by a multiple of 90° stays on the axes of the image: one
+  // region, not pieces. `Matrix4.rotationZ(π)` has sin(π) = 1.2e-16, not 0
+  // (`Transform.rotate` rounds exact turns itself).
+  for (final (turn, transform) in [
+    ('half', Matrix4.rotationZ(math.pi)),
+    ('quarter', Matrix4.rotationZ(math.pi / 2)),
+  ]) {
+    testWidgets('a line turned by a $turn turn is one region', (tester) async {
+      await tester.pumpWidget(
+        _Boundary(
+          Center(
+            child: Transform(
+              transform: transform,
+              alignment: .center,
+              child: const Text('abcde', style: _style),
+            ),
+          ),
+        ),
+      );
+
+      expect(_regions(tester), hasLength(1));
+    });
+  }
 
   testWidgets('editable text has a region', (tester) async {
     final controller = TextEditingController(text: 'ab');
@@ -529,7 +555,7 @@ void main() {
 
 /// A 100x50 repaint boundary at the top left around [child].
 class _Boundary extends StatelessWidget {
-  const _Boundary(this.child);
+  const new(this.child);
 
   final Widget child;
 

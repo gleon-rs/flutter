@@ -127,7 +127,7 @@ void main() {
 /// A git stand-in: `rev-parse` prints [head], `status` prints [status],
 /// both exit with [exitCode]; without [isInstalled], git is not found.
 final class _Git {
-  _Git({this.status = '', this.exitCode = 0, this.isInstalled = true});
+  new({this.status = '', this.exitCode = 0, this.isInstalled = true});
 
   static const head = '18bc3075e002360815ae856d0a854cb6a62fa5a5\n';
 
@@ -149,7 +149,7 @@ final class _Git {
     calls.add(arguments);
     final out = arguments.firstOrNull == 'rev-parse' ? head : status;
 
-    return .value(ProcessResult(1, exitCode, out, _noOutput));
+    return .syncValue(ProcessResult(1, exitCode, out, _noOutput));
   }
 
   static const _noOutput = '';

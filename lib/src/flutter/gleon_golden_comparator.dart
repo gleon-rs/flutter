@@ -23,7 +23,7 @@ import 'flutter_session.dart';
 class GleonGoldenComparator extends GoldenFileComparator {
   /// Wraps [delegate]; [tolerance], [masks] and [textTolerance] come from
   /// the matcher call. [session] defaults to [FlutterSession.process].
-  GleonGoldenComparator(
+  new(
     this.delegate, {
     this.tolerance,
     this.masks = const [],

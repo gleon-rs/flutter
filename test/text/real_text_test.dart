@@ -1,10 +1,9 @@
 import 'dart:typed_data';
 
-// ignore: migrate_design_widgets, the text field to test is Material's.
-import 'package:flutter/material.dart';
 import 'package:gleon/gleon.dart';
 import 'package:gleon/src/core/compare/pixel_region.dart';
 import 'package:gleon/src/flutter/text_regions.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../helpers/caption.dart';
 import '../helpers/workspace_sandbox.dart';

@@ -71,6 +71,11 @@ void main() {
           .matchAsync(find.byKey(const ValueKey('nope')));
 
       expect(message, contains('no widget was found'));
+      expect(
+        await matchesGoldenFile(Swatch.golden)
+            .matchAsync(find.byWidgetPredicate((_) => true)),
+        contains('matched too many widgets'),
+      );
     });
 
     testWidgets('passing tests write nothing', (tester) async {
@@ -111,7 +116,7 @@ void main() {
 }
 
 class _TolerantComparator extends LocalFileComparator {
-  _TolerantComparator(super.testFile);
+  new(super.testFile);
 
   @override
   Future<bool> compare(Uint8List imageBytes, Uri golden) async => true;

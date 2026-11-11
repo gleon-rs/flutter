@@ -44,7 +44,7 @@ Future<ByteData?> _assets(ByteData? message) {
       ? null
       : utf8.decode(Uint8List.sublistView(message));
 
-  return .value(switch (key) {
+  return .syncValue(switch (key) {
     'FontManifest.json' => ByteData.sublistView(
       utf8.encode(
         json.encode([

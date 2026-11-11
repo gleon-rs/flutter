@@ -58,7 +58,7 @@ Future<({Uint8List png, Uint8List raw})> _capture(
 /// Translucent fills, a fading gradient, group opacity and an anti-aliased
 /// circle over a transparent background.
 class _Translucent extends StatelessWidget {
-  const _Translucent();
+  const new();
 
   static const boundaryKey = ValueKey<String>('translucent');
 
@@ -77,7 +77,7 @@ class _Translucent extends StatelessWidget {
 }
 
 class _TranslucentPainter extends CustomPainter {
-  const _TranslucentPainter();
+  const new();
 
   @override
   void paint(Canvas canvas, Size size) {

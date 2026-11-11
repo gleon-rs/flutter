@@ -9,10 +9,10 @@ import 'check_failure.dart';
 /// a workspace root, so it must change nothing for the app (which has no
 /// `.git`). Refuses to touch an existing one.
 final class StrayHomeConfig {
-  const StrayHomeConfig._(this.file, {required this.isDirCreated});
+  const new _(this.file, {required this.isDirCreated});
 
   /// Writes the stray config of the home directory [home].
-  factory StrayHomeConfig.write(String home) {
+  factory write(String home) {
     final dir = Directory('$home/.gleon');
     final file = File('${dir.path}/gleon.yaml');
     if (file.existsSync()) {

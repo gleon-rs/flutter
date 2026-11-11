@@ -293,25 +293,34 @@ abstract final class NativeEngine {
   /// Writes the `GleonCall` fields of [tolerance] into [call], whose fields
   /// start at 0 (`Struct.create`): kind 0 uses the `.gleon/gleon.yaml` rule,
   /// and the fields of other kinds stay 0.
+  ///
+  /// [call] is written in place: it is the struct the native call reads.
   static void _writeTolerance(GleonCall call, GoldenTolerance? tolerance) {
     switch (tolerance) {
       case null:
+        // ignore: avoid-mutating-parameters, the struct the native call reads.
         call.toleranceKind = 0;
+
       case ExactTolerance():
+        // ignore: avoid-mutating-parameters, the struct the native call reads.
         call.toleranceKind = 1;
+
       case PixelTolerance(
         :final antiAlias,
         :final channelTolerance,
         :final edgeThreshold,
         :final maxDiffRatio,
       ):
+        // ignore: avoid-mutating-parameters, the struct the native call reads.
         call
           ..toleranceKind = 2
           ..maxDiffRatio = maxDiffRatio
           ..channelTolerance = channelTolerance
           ..antiAlias = antiAlias ? 1 : 0
           ..edgeThreshold = edgeThreshold;
+
       case SsimTolerance(:final colorTolerance, :final minSimilarity):
+        // ignore: avoid-mutating-parameters, the struct the native call reads.
         call
           ..toleranceKind = 3
           ..minSimilarity = minSimilarity
@@ -324,11 +333,11 @@ abstract final class NativeEngine {
     final flat = Uint32List(regions.length * 4);
     for (final (index, PixelRegion(:height, :width, :x, :y))
         in regions.indexed) {
-      final at = index * 4;
-      flat[at] = x;
-      flat[at + 1] = y;
-      flat[at + 2] = width;
-      flat[at + 3] = height;
+      final offset = index * 4;
+      flat[offset] = x;
+      flat[offset + 1] = y;
+      flat[offset + 2] = width;
+      flat[offset + 3] = height;
     }
 
     return flat;

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'counter_page.dart';
 
@@ -6,7 +6,7 @@ void main() => runApp(const Main());
 
 class Main extends StatelessWidget {
   /// Creates the app.
-  const Main({super.key});
+  const new({super.key});
 
   @override
   Widget build(BuildContext context) => MaterialApp(

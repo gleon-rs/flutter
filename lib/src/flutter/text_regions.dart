@@ -11,7 +11,8 @@ abstract final class TextRegions {
   /// anti-aliasing beyond that.
   static const _margin = 0.125;
 
-  /// The character a `WidgetSpan` takes in the text.
+  /// The character a `WidgetSpan` takes in the text. A U+FFFC that is part
+  /// of the text itself is taken for one too: it gets no region.
   static final _placeholder = String.fromCharCode(0xFFFC);
 
   /// The boxes of text in the image `captureImage` takes of [element]: its
@@ -78,19 +79,35 @@ abstract final class TextRegions {
   /// bounds of a turned line are a box around it, mostly no text for a long
   /// line, while those of short pieces follow it.
   static List<Rect> _pieces(Rect line, Matrix4 toImage) {
-    final isTurned = toImage.entry(0, 1) != 0 || toImage.entry(1, 0) != 0;
-    if (!isTurned || line.height <= 0) return [line];
-    final count = (line.width / line.height).ceil().clamp(1, _maxPieces);
-    final step = line.width / count;
+    final Rect(:height, :left, :top, :width) = line;
+    if (!_isTurned(toImage) || height <= 0) return [line];
+    final count = (width / height).ceil().clamp(1, _maxPieces);
+    final step = width / count;
 
     return [
       for (int i = 0; i < count; i += 1)
-        Rect.fromLTWH(line.left + step * i, line.top, step, line.height),
+        Rect.fromLTWH(left + step * i, top, step, height),
     ];
   }
 
   /// The most pieces a turned line is cut into ([_pieces]).
   static const _maxPieces = 64;
+
+  /// Whether [toImage] turns lines off the axes of the image (a rotation by
+  /// other than a multiple of 90°, a skew): only then do pieces follow a line
+  /// closer than its bounds. Rounding is no turn (`sin(π)` is 1.2e-16).
+  static bool _isTurned(Matrix4 toImage) {
+    final isOnAxes =
+        // Kept or flipped (a half turn), else swapped (a quarter turn).
+        (_isRounding(toImage.entry(0, 1)) &&
+            _isRounding(toImage.entry(1, 0))) ||
+        (_isRounding(toImage.entry(0, 0)) && _isRounding(toImage.entry(1, 1)));
+
+    return !isOnAxes;
+  }
+
+  /// Whether a transform [entry] is 0 but for rounding ([_isTurned]).
+  static bool _isRounding(double entry) => entry.abs() < 1e-9;
 
   /// [child] as [parent] paints it, given the transform and clip of [parent].
   static _Painted _child(
@@ -239,7 +256,7 @@ typedef _Painted = ({Rect clip, RenderObject object, Matrix4 toImage});
 /// so the layers it updates keep their values and the frames after it render
 /// as before.
 final class _PaintRecorder extends PaintingContext {
-  _PaintRecorder(ContainerLayer root, this._painted) : super(root, .largest);
+  new(ContainerLayer root, this._painted) : super(root, .largest);
 
   final Set<RenderObject> _painted;
 

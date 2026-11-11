@@ -72,6 +72,24 @@ void main() {
     });
   }
 
+  // An `OS/2` table of version 0 is 78 bytes, not a whole number of words:
+  // its checksum pads the last word, and the font's checksum is kept.
+  test('a 78-byte OS/2 table is aligned too, checksums kept', () {
+    final font = File(_path('Roboto-Regular.ttf')).readAsBytesSync();
+    final record = _record(font, 'OS/2');
+    ByteData.sublistView(font).setUint32(record + 12, 78);
+    final portable = AppFonts.withPortableLineMetrics(font);
+    final data = ByteData.sublistView(portable);
+    final os2 = data.getUint32(record + 8);
+
+    expect(data.getUint16(os2 + 74), 1900);
+    expect(data.getUint32(record + 4), AppFonts.checksum(data, os2, 78));
+    expect(
+      AppFonts.checksum(data, 0, portable.length),
+      AppFonts.checksum(ByteData.sublistView(font), 0, font.length),
+    );
+  });
+
   testWidgets('Roboto lays text out alike on every OS', (tester) async {
     await tester.runAsync(loadAppFonts);
     final lines = [
@@ -140,7 +158,7 @@ Future<void> _loadTwice() async {
   await _loadVariant(_loadedTwice, _setLineGap);
   final loader = FontLoader(_loadedTwice);
   for (final file in _files) {
-    loader.addFont(.value(ByteData.sublistView(_bytesOf(file))));
+    loader.addFont(.syncValue(ByteData.sublistView(_bytesOf(file))));
   }
   await loader.load();
 }
@@ -155,7 +173,7 @@ Future<void> _loadVariant(String family, void Function(Uint8List font) change) {
     final font = _bytesOf(file);
     change(font);
     final portable = AppFonts.withPortableLineMetrics(font);
-    loader.addFont(.value(ByteData.sublistView(portable)));
+    loader.addFont(.syncValue(ByteData.sublistView(portable)));
   }
 
   return loader.load();

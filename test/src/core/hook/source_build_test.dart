@@ -126,13 +126,7 @@ void main() {
         target: .linuxX64,
         environment: {'HOME': empty, 'PATH': empty},
       ),
-      // Names the variables the hook never sees.
-      throwsState(
-        allOf(
-          contains('`cargo` was not found'),
-          contains(SourceBuild.hookEnvironmentHint),
-        ),
-      ),
+      throwsState(contains('`cargo` was not found')),
     );
     expect(Directory.fromUri(targetDir).existsSync(), isFalse);
   });
@@ -388,7 +382,11 @@ void main() {
               .having(
                 (error) => error.message,
                 'message',
-                contains('out\nerr'),
+                // Names the variables the hook never sees.
+                allOf(
+                  contains('out\nerr'),
+                  contains(SourceBuild.hookEnvironmentHint),
+                ),
               ),
         ),
       );

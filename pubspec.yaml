@@ -12,8 +12,8 @@ topics:
   - flutter-test
 
 environment:
-  sdk: ^3.13.0
-  flutter: ">=3.47.5"
+  sdk: ^3.14.0
+  flutter: ">=3.50.0"
 
 # Runtime dependencies are only what the build hook and the re-exported
 # flutter_test need; the hook runs in the consumer's package graph.
@@ -25,7 +25,7 @@ dependencies:
   flutter_test:
     sdk: flutter
   hooks: ^2.2.0
-  meta: ^1.18.0
+  meta: ^1.19.0
   # flutter_test pins one exact 0.x of test_api per SDK release; `TestHandle`
   # (test names for metrics) comes from here. A caret would refuse the next
   # minor and break `pub get` for every consumer until a release of gleon.
@@ -33,7 +33,8 @@ dependencies:
   test_api: ">=0.7.0 <1.0.0"
 
 dev_dependencies:
-  bench_press: ^0.4.1
-  dart_code_metrics_presets: ^2.33.0
+  bench_press: ^0.4.2
+  dart_code_metrics_presets: ^2.34.0
   flutter_lints: ^6.0.0
   json_schema: ^5.2.2
+  material_ui: ^1.11.0 # Material's TextField in test/text/real_text_test.dart.
