@@ -58,12 +58,16 @@ responsive would instead copy into `malloc`ed memory and make non-leaf calls in 
 
 ## Checks
 
+The SDK is pinned in `.fvmrc` ([FVM](https://fvm.app)): run Flutter and Dart through `fvm`, as
+below. Without FVM, use Flutter 3.50.0. Tools that the scripts start (`flutter`, `dart`) come
+from `PATH`, which `fvm` sets to the pinned SDK.
+
 ```sh
-dart format --set-exit-if-changed .
-flutter analyze --fatal-infos     # also in example/
-dcm analyze .                     # DCM 1.39.2, also in example/
-flutter test                      # also in example/
-dart bin/consumer_check.dart      # the package as a consumer meets it (see below)
+fvm dart format --set-exit-if-changed .
+fvm flutter analyze --fatal-infos     # also in example/
+dcm analyze .                         # DCM 1.39.2, also in example/
+fvm flutter test                      # also in example/
+fvm dart bin/consumer_check.dart      # the package as a consumer meets it (see below)
 ```
 
 `bin/consumer_check.dart` builds a fresh app with gleon as a dependency without `native/`, no Rust
@@ -85,24 +89,58 @@ skipped.
 `analysis_options.yaml` is the single, strict configuration (analyzer lints plus DCM presets);
 every disabled or narrowed rule carries its reason.
 
+## Git dependencies and mirrors
+
+The pub.dev package contains the libraries of all four hosts. A git dependency on this repository
+(a release tag, or `ref: main`) has none:
+
+```yaml
+dev_dependencies:
+  gleon:
+    git:
+      url: https://github.com/gleon-rs/flutter.git
+      ref: v0.6.0
+```
+
+On the first `flutter test`, its build hook downloads the library of the test host from the
+GitHub Release of the package version, verifies it against the release's `SHA256SUMS.txt`
+(releases are immutable) and caches it in `.dart_tool/hooks_runner/shared/`. Later runs, also
+offline ones, reuse the cache until `flutter clean`. `HTTPS_PROXY` is honored. A commit between
+releases (`ref: main`) gets the libraries of the release its version names only while they were
+built from the gleon commit the checkout pins (`gleon_ref.txt` of the release against
+`native/gleon_ref`); otherwise the build fails and names the version to depend on.
+
+The `release_url` user-define replaces the GitHub Release with a mirror (for air-gapped
+machines): the directory of the release, with its `SHA256SUMS.txt` and assets, without a query or
+fragment; `https`, or plain `http` to this machine only. The first source that applies wins:
+`ffi_path`, then `gleon_repo`, then a library in the package's `native/<target>/` (the pub.dev
+package's, or a maintainer's build), then the download.
+
+```yaml
+hooks:
+  user_defines:
+    gleon:
+      release_url: https://mirror.example/gleon/v0.6.0/
+```
+
 ## Benchmarks
 
 `benchmark/` holds [bench_press](https://pub.dev/packages/bench_press) benchmarks that need the
 Flutter engine (`dart:ui`), so they run under `flutter test`, not `dart run bench_press run`:
 
 ```sh
-flutter test benchmark/      # ~3 min; results in build/benchmark/*.json
-dart run bench_press report --from-json build/benchmark/golden_comparison.json
-dart run bench_press report --from-json build/benchmark/widget_capture.json
+fvm flutter test benchmark/      # ~3 min; results in build/benchmark/*.json
+fvm dart run bench_press report --from-json build/benchmark/golden_comparison.json
+fvm dart run bench_press report --from-json build/benchmark/widget_capture.json
 ```
 
 To check a change for regressions, keep the JSON of a run before it and compare
-(`dart run bench_press diff old.json build/benchmark/golden_comparison.json`). Run on an idle
+(`fvm dart run bench_press diff old.json build/benchmark/golden_comparison.json`). Run on an idle
 machine: bench_press withholds ratios of unstable samples ("unresolved"). `BENCH_PRESS_ARGS`
 passes options (`--validate` for a smoke run, as CI does; `--trials 30`). The manual
 **Benchmark** workflow runs them on every supported host and puts the report into each job's
 summary. `example/benchmark/` (run in `example/`) measures alchemist's default assertion against
-gleon's for a passing golden of the example app (see [alchemist](#alchemist)).
+gleon's for a passing golden of the example app (see [doc/alchemist.md](doc/alchemist.md)).
 
 ## Maintainers
 
@@ -111,10 +149,10 @@ The native code (`gleon-engine`, `gleon-model`, `gleon-ffi`) lives in the
 Build the library for this machine into `native/<target>/` (the hook prefers it over downloading):
 
 ```sh
-dart bin/build_native.dart                 # host; --target all: every target this host can
+fvm dart bin/build_native.dart             # host; --target all: every target this host can
 ```
 
-Use plain `dart`, not `dart run`: `dart run` executes the build hook first. `--target all` builds
+Use `dart`, not `dart run`: `dart run` executes the build hook first. `--target all` builds
 all four targets on macOS and all but macOS elsewhere; Linux targets of another OS or
 architecture need zig and `cargo-zigbuild` (`cargo install --locked cargo-zigbuild` on any host),
 Windows from macOS or Linux `cargo-xwin`. CI builds every target natively. A library is replaced
@@ -136,15 +174,28 @@ it). The gleon repo must be at the pinned commit: its `git rev-parse HEAD` is ch
 exported without git, pass the commit with `--commit`. To leave your gleon checkout alone:
 
 ```sh
-dart bin/native_licenses.dart              # --check: fail when it is stale
+fvm dart bin/native_licenses.dart          # --check: fail when it is stale
+mkdir -p /tmp/gleon-pin
 git -C ../gleon archive "$(cat native/gleon_ref)" | tar -x -C /tmp/gleon-pin
-dart bin/native_licenses.dart --gleon-repo /tmp/gleon-pin --commit "$(cat native/gleon_ref)"
+fvm dart bin/native_licenses.dart --gleon-repo /tmp/gleon-pin --commit "$(cat native/gleon_ref)"
 ```
 
 Releasing: bump `version` in `pubspec.yaml`, `FlutterSession.packageVersion` and `CHANGELOG.md`,
 update `native/gleon_ref` (and `NATIVE_LICENSES.md`) if the engine changed, and push the tag
-`vX.Y.Z`. The release workflow builds and tests all targets on
+`vX.Y.Z` of a commit on `main`. The release workflow builds and tests all targets on
 their own OS, attaches the libraries, `gleon_ref.txt` (the gleon commit they were built from,
 which the hook of a git checkout compares with its pin) and `SHA256SUMS.txt` to a GitHub Release,
 fails unless that release is immutable (enable it in the repository settings first), and then
 verifies the download path on every OS.
+
+Then publish to pub.dev from a copy that holds the libraries of that release:
+
+```sh
+fvm dart bin/prepare_publish.dart          # clones the tag, adds the 4 libraries, runs --dry-run
+cd <the directory it prints> && fvm flutter pub publish
+```
+
+`bin/prepare_publish.dart` verifies each library against the release's `SHA256SUMS.txt` and its
+`gleon_ref.txt` against `native/gleon_ref`, and fails when the archive lacks a library or holds
+`bin/`, `test/` or a pin. Never publish from the working tree: it has no libraries of the release
+and may have a local build of one target.

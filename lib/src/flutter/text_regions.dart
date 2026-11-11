@@ -94,16 +94,21 @@ abstract final class TextRegions {
   static const _maxPieces = 64;
 
   /// Whether [toImage] turns lines off the axes of the image (a rotation by
-  /// other than a multiple of 90°, a skew): only then do pieces follow a line
-  /// closer than its bounds. Rounding is no turn (`sin(π)` is 1.2e-16).
+  /// other than a multiple of 90°, a skew, a perspective): only then do pieces
+  /// follow a line closer than its bounds. Rounding is no turn (`sin(π)` is
+  /// 1.2e-16).
   static bool _isTurned(Matrix4 toImage) {
     final isOnAxes =
         // Kept or flipped (a half turn), else swapped (a quarter turn).
         (_isRounding(toImage.entry(0, 1)) &&
             _isRounding(toImage.entry(1, 0))) ||
         (_isRounding(toImage.entry(0, 0)) && _isRounding(toImage.entry(1, 1)));
+    // A perspective (w depends on x or y, as after `rotateY` with a depth)
+    // makes a line narrower towards its far end: a trapezoid.
+    final isAffine =
+        _isRounding(toImage.entry(3, 0)) && _isRounding(toImage.entry(3, 1));
 
-    return !isOnAxes;
+    return !isOnAxes || !isAffine;
   }
 
   /// Whether a transform [entry] is 0 but for rounding ([_isTurned]).

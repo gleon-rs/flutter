@@ -1,0 +1,152 @@
+Publishing gleon 0.6.0 to https://pub.dev:
+├── CHANGELOG.md (18 KB)
+├── CONTRIBUTING.md (9 KB)
+├── LICENSE (1 KB)
+├── NATIVE_LICENSES.md (282 KB)
+├── README.md (38 KB)
+├── analysis_options.yaml (17 KB)
+├── doc
+│   └── alchemist.md (3 KB)
+├── example
+│   ├── .gleon
+│   │   └── gleon.yaml (<1 KB)
+│   ├── README.md (<1 KB)
+│   ├── analysis_options.yaml (<1 KB)
+│   ├── dart_test.yaml (<1 KB)
+│   ├── lib
+│   │   ├── counter_page.dart (1 KB)
+│   │   └── main.dart (<1 KB)
+│   ├── linux
+│   │   ├── CMakeLists.txt (4 KB)
+│   │   ├── flutter
+│   │   │   ├── CMakeLists.txt (2 KB)
+│   │   │   ├── generated_plugin_registrant.cc (<1 KB)
+│   │   │   ├── generated_plugin_registrant.h (<1 KB)
+│   │   │   └── generated_plugins.cmake (<1 KB)
+│   │   └── runner
+│   │       ├── CMakeLists.txt (<1 KB)
+│   │       ├── main.cc (<1 KB)
+│   │       ├── my_application.cc (5 KB)
+│   │       └── my_application.h (<1 KB)
+│   ├── macos
+│   │   ├── Flutter
+│   │   │   ├── Flutter-Debug.xcconfig (<1 KB)
+│   │   │   ├── Flutter-Release.xcconfig (<1 KB)
+│   │   │   └── GeneratedPluginRegistrant.swift (<1 KB)
+│   │   ├── Runner
+│   │   │   ├── AppDelegate.swift (<1 KB)
+│   │   │   ├── Assets.xcassets
+│   │   │   │   └── AppIcon.appiconset
+│   │   │   │       ├── Contents.json (1 KB)
+│   │   │   │       ├── app_icon_1024.png (100 KB)
+│   │   │   │       ├── app_icon_128.png (5 KB)
+│   │   │   │       ├── app_icon_16.png (<1 KB)
+│   │   │   │       ├── app_icon_256.png (13 KB)
+│   │   │   │       ├── app_icon_32.png (1 KB)
+│   │   │   │       ├── app_icon_512.png (35 KB)
+│   │   │   │       └── app_icon_64.png (2 KB)
+│   │   │   ├── Base.lproj
+│   │   │   │   └── MainMenu.xib (23 KB)
+│   │   │   ├── Configs
+│   │   │   │   ├── AppInfo.xcconfig (<1 KB)
+│   │   │   │   ├── Debug.xcconfig (<1 KB)
+│   │   │   │   ├── Release.xcconfig (<1 KB)
+│   │   │   │   └── Warnings.xcconfig (<1 KB)
+│   │   │   ├── DebugProfile.entitlements (<1 KB)
+│   │   │   ├── Info.plist (1 KB)
+│   │   │   ├── MainFlutterWindow.swift (<1 KB)
+│   │   │   └── Release.entitlements (<1 KB)
+│   │   ├── Runner.xcodeproj
+│   │   │   ├── project.pbxproj (27 KB)
+│   │   │   ├── project.xcworkspace
+│   │   │   │   └── xcshareddata
+│   │   │   │       ├── IDEWorkspaceChecks.plist (<1 KB)
+│   │   │   │       └── swiftpm
+│   │   │   │           └── configuration
+│   │   │   └── xcshareddata
+│   │   │       └── xcschemes
+│   │   │           └── Runner.xcscheme (4 KB)
+│   │   ├── Runner.xcworkspace
+│   │   │   ├── contents.xcworkspacedata (<1 KB)
+│   │   │   └── xcshareddata
+│   │   │       ├── IDEWorkspaceChecks.plist (<1 KB)
+│   │   │       └── swiftpm
+│   │   │           └── configuration
+│   │   └── RunnerTests
+│   │       └── RunnerTests.swift (<1 KB)
+│   ├── pubspec.yaml (<1 KB)
+│   ├── test
+│   │   ├── counter_page_test.dart (5 KB)
+│   │   ├── counter_test.dart (1 KB)
+│   │   ├── flutter_test_config.dart (2 KB)
+│   │   ├── goldens
+│   │   │   ├── counter_initial.png (12 KB)
+│   │   │   ├── counter_page.png (27 KB)
+│   │   │   └── counter_three_taps.png (12 KB)
+│   │   └── helpers
+│   │       └── counter_page_table.dart (1 KB)
+│   └── windows
+│       ├── CMakeLists.txt (4 KB)
+│       ├── flutter
+│       │   ├── CMakeLists.txt (3 KB)
+│       │   ├── generated_plugin_registrant.cc (<1 KB)
+│       │   ├── generated_plugin_registrant.h (<1 KB)
+│       │   └── generated_plugins.cmake (<1 KB)
+│       └── runner
+│           ├── CMakeLists.txt (1 KB)
+│           ├── Runner.rc (2 KB)
+│           ├── flutter_window.cpp (2 KB)
+│           ├── flutter_window.h (<1 KB)
+│           ├── main.cpp (1 KB)
+│           ├── resource.h (<1 KB)
+│           ├── resources
+│           │   └── app_icon.ico (32 KB)
+│           ├── runner.exe.manifest (<1 KB)
+│           ├── utils.cpp (2 KB)
+│           ├── utils.h (<1 KB)
+│           ├── win32_window.cpp (8 KB)
+│           └── win32_window.h (3 KB)
+├── hook
+│   └── build.dart (2 KB)
+├── lib
+│   ├── alchemist.dart (<1 KB)
+│   ├── gleon.dart (1 KB)
+│   └── src
+│       ├── core
+│       │   ├── compare
+│       │   │   ├── golden_tolerance.dart (5 KB)
+│       │   │   ├── pixel_region.dart (1 KB)
+│       │   │   └── tolerances.dart (4 KB)
+│       │   ├── config
+│       │   │   └── gleon_session.dart (3 KB)
+│       │   ├── hook
+│       │   │   ├── atomic_write.dart (2 KB)
+│       │   │   ├── hook_failures.dart (1 KB)
+│       │   │   ├── hook_user_defines.dart (<1 KB)
+│       │   │   ├── native_library.dart (8 KB)
+│       │   │   ├── native_target.dart (8 KB)
+│       │   │   ├── network_failure.dart (<1 KB)
+│       │   │   ├── release_download.dart (17 KB)
+│       │   │   ├── source_build.dart (12 KB)
+│       │   │   └── user_defines.dart (<1 KB)
+│       │   └── native
+│       │       ├── gleon_ffi.dart (7 KB)
+│       │       ├── native_engine.dart (13 KB)
+│       │       └── native_outcome.dart (2 KB)
+│       └── flutter
+│           ├── alchemist_expectation.dart (5 KB)
+│           ├── app_fonts.dart (10 KB)
+│           ├── flutter_session.dart (2 KB)
+│           ├── gleon_file_comparator.dart (3 KB)
+│           ├── gleon_golden_comparator.dart (5 KB)
+│           ├── gleon_matches_golden_file.dart (8 KB)
+│           ├── ignore_regions.dart (1 KB)
+│           ├── match_golden_file.dart (2 KB)
+│           ├── shared_load.dart (1 KB)
+│           └── text_regions.dart (13 KB)
+├── native
+│   └── macos-arm64
+│       └── libgleon_ffi.dylib (1007 KB)
+└── pubspec.yaml (1 KB)
+
+Total compressed archive size: 881 KB.

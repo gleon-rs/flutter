@@ -1,7 +1,7 @@
 # Used by `dart pub publish` instead of .gitignore (keep in sync with it).
-# Unlike .gitignore, native/ is NOT ignored: prebuilt libraries placed there by
-# the release workflow ship inside the pub.dev archive, so pub.dev users never
-# download from GitHub.
+# Unlike .gitignore, native/ is NOT ignored: `bin/prepare_publish.dart` puts the
+# libraries of the release there, so they ship inside the pub.dev archive and
+# pub.dev users never download from GitHub. Publish only from its copy.
 
 .dart_tool/
 .packages
@@ -25,10 +25,11 @@ CLAUDE.local.md
 .DS_Store
 .fvm/
 
-# Maintainer-only
+# Maintainer-only (the tests import bin/, which is not shipped either)
 /benchmark/
 /bin/
-/test/tooling/
+/test/
+/example/benchmark/
 /dist/
 /.github/
 /native/gleon_ref

@@ -384,6 +384,30 @@ void main() {
     });
   }
 
+  // A perspective keeps the axes of a line (its entries (0, 1) and (1, 0) stay
+  // 0) but narrows its far end: pieces follow the trapezoid closer than one
+  // box around it.
+  testWidgets('a line in perspective is cut into pieces', (tester) async {
+    final perspective = Matrix4.identity()
+      ..setEntry(3, 2, 0.004)
+      ..rotateY(0.8);
+    expect(perspective.entry(0, 1), 0);
+    expect(perspective.entry(1, 0), 0);
+    await tester.pumpWidget(
+      _Boundary(
+        Center(
+          child: Transform(
+            transform: perspective,
+            alignment: .center,
+            child: const Text('abcdefghijklmnop', style: _style),
+          ),
+        ),
+      ),
+    );
+
+    expect(_regions(tester).length, greaterThan(1));
+  });
+
   testWidgets('editable text has a region', (tester) async {
     final controller = TextEditingController(text: 'ab');
     final focusNode = FocusNode();

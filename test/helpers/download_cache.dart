@@ -23,6 +23,7 @@ final class DownloadCache {
     Uri releaseUrl, {
     String packageVersion = '1.0.0',
     String? pin,
+    bool isPinRequired = false,
     Duration redirectTimeout = const .new(seconds: 30),
     Duration bodyTimeout = const .new(minutes: 1),
     int maxBytes = 64 << 20,
@@ -32,6 +33,7 @@ final class DownloadCache {
     target: Release.target,
     cacheDir: dir,
     pin: pin,
+    isPinRequired: isPinRequired,
     redirectTimeout: redirectTimeout,
     bodyTimeout: bodyTimeout,
     maxBytes: maxBytes,

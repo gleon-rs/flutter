@@ -1,5 +1,8 @@
 ## 0.6.0
 
+- **First release on pub.dev:** `flutter pub add dev:gleon`. The package contains the native
+  libraries of the four hosts, so `flutter test` downloads nothing. A git dependency still
+  downloads its library from the GitHub Release, and its errors name the pub.dev version too.
 - **Requires Flutter 3.50 (Dart 3.14) or newer.** Earlier versions of Flutter keep gleon 0.5.0.
 - **The gleon CLI reads your workspace as it is.** `gleon init` of the CLI writes
   `baselines: goldens` into `.gleon/gleon.yaml`: the goldens next to the tests are the baselines,
@@ -8,7 +11,7 @@
   (older ones reject it as unknown); it changes nothing in how goldens compare.
 - README: an optional section on what the CLI adds (run summary, HTML report, PR comment,
   `/gleon approve` from CI) and how to start. Without the CLI the package works as before.
-- The native library is built from gleon `efe75bc`, with the key and the `ssim` size check below;
+- The native library knows the `baselines` key and the `ssim` size check below;
   `NATIVE_LICENSES.md` follows its dependency updates. A `diff` key of another mode in
   `.gleon/gleon.yaml` is named in backticks in the error (`` `diff.threshold` applies to
   `mode: pixel` only ``).
@@ -98,7 +101,7 @@
   capture without drawing or touching its layers, after the image is captured.
 - **The build hook runs only when an input changes.** It declared files that may not exist (the
   bundled library, the pins), which the hooks runner takes for files modified during the build:
-  every `flutter test` of a git or pub.dev dependency ran the hook again and printed "File
+  every `flutter test` of an app that depends on the package ran the hook again and printed "File
   modified during build. Build must be rerun.".
 - Hook failures are reported as hook errors (the message, not an unhandled `Bad state` with its
   stack trace; network failures as infrastructure failures); HTTP 408 and 429 are retried; the
@@ -123,9 +126,10 @@
   `await tester.runAsync(loadAppFonts)` is the way there. Concurrent calls share one load, and a
   failed load is started again by the next call.
 - The alchemist integration moved to `doc/alchemist.md`; maintainer notes to `CONTRIBUTING.md`.
-- Needs the gleon commit `native/gleon_ref` pins (ABI 13 and case reports v5 unchanged).
 
 ## 0.4.0
+
+Never tagged: these changes first shipped in 0.5.0.
 
 - **Breaking: no per-platform golden folders.** The package no longer reads or writes
   `goldens/<os>-<arch>/`: every platform compares the goldens next to the tests, as in Flutter.
@@ -143,7 +147,8 @@
   them as its own (for its CI job). `gleon approve` stamps the goldens it writes with the platform
   of their case and prefers the `fallback_platform`'s candidate when several platforms offer one.
 - **Breaking: case reports v5.** `golden.platform` names the stamp; `golden.fallback` is gone.
-  Native ABI 13 (the `GLEON_REQUIRE_CANONICAL` session value).
+  Libraries of older versions (`ffi_path`, `release_url`, `gleon_repo`) are refused (native ABI
+  13).
 - `bin/check_cases.dart` takes `--fallback-platform` only (`--own` is gone) and fails on goldens
   recorded on another platform.
 
@@ -193,10 +198,8 @@
 - **Text tiles:** a text region thinner than a 16x16 tile, or clipped at the image edge, is judged
   as a whole tile (the rest of the square counts as equal): one differing pixel of a 4x1 strip is
   no longer a quarter of a tile.
-- **Breaking:** native ABI 12 (`gleon_golden` takes its scalars as one struct and writes its
-  summary to the caller's buffer; verdict code 0 is an error): libraries of 0.2.0 from
-  `ffi_path`, `release_url` mirrors or `gleon_repo` checkouts are refused with the ABI message.
-  Case reports are schema 4 with `policy_version` 4 (text tiles and text under SSIM). A yaml
+- **Breaking:** libraries of 0.2.0 from `ffi_path`, `release_url` mirrors or `gleon_repo`
+  checkouts are refused (native ABI 12). Case reports are schema 4 with `policy_version` 4 (text tiles and text under SSIM). A yaml
   `mode: pixel` rule without `threshold` allows 0.01 of the pixels (was 0.1), like `.pixel()`.
   Globs that would match differently than written, differently on Windows, or never, are config
   errors naming the pattern: `{a,b}` alternatives, `[^...]` (use `[!...]`), a class only `/`
@@ -205,7 +208,7 @@
 
 ## 0.2.0
 
-The first release (a git tag; pub.dev publishing is postponed).
+The first release, as a git tag.
 
 - **Drop-in `matchesGoldenFile`:** replace the `flutter_test` import with
   `package:gleon/gleon.dart`; without extra parameters goldens behave like Flutter's (exact,

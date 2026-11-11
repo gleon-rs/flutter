@@ -1,8 +1,8 @@
 # Push a tag `vX.Y.Z` equal to `version` in pubspec.yaml to release. Every target is built
 # natively from the gleon commit in native/gleon_ref, tested on its own OS, attested, and attached
 # to an immutable GitHub Release (enable "release immutability" in the repository settings), which
-# the build hook downloads from. A later job will also `dart pub publish` with the libraries
-# bundled (pub.dev OIDC requires exactly this kind of tag-push trigger).
+# the build hook of a git dependency downloads from. The pub.dev archive gets these libraries
+# from `bin/prepare_publish.dart`, run by a maintainer after this workflow (see CONTRIBUTING).
 name: Release
 
 on:
