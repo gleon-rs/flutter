@@ -27,18 +27,14 @@ environment:
 # flutter_test need; the hook runs in the consumer's package graph.
 dependencies:
   code_assets: ^2.1.0
-  crypto: ^3.0.7
+  crypto: ^3.0.8
   flutter:
     sdk: flutter
   flutter_test:
     sdk: flutter
   hooks: ^2.2.0
   meta: ^1.19.0
-  # flutter_test pins one exact 0.x of test_api per SDK release; `TestHandle`
-  # (test names for metrics) comes from here. A caret would refuse the next
-  # minor and break `pub get` for every consumer until a release of gleon.
-  # ignore: prefer-caret-version-syntax, flutter_test pins one exact 0.x per SDK release; a caret breaks pub get on the next minor.
-  test_api: ">=0.7.0 <1.0.0"
+  test_api: ^0.7.14
 
 dev_dependencies:
   bench_press: ^0.4.2

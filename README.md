@@ -53,7 +53,7 @@ Run `flutter test --update-goldens` once on the platform where you record golden
 | --------------------------------------------------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------- |
 | Only the import                                                 | Exact, as in Flutter                                      | Compared on the platform that recorded the golden, ignored on the others    |
 | `tolerance:` on a call                                          | [`.pixel(…)` or `.ssim()`](#tolerance) for that golden    | The same                                                                    |
-| [`.gleon/gleon.yaml`](#configuration-with-gleongleonyaml)       | Rules per path, masks, metrics, the canonical platform    | The same; CI can require every golden to be recorded on the canonical one  |
+| [`.gleon/gleon.yaml`](#configuration-with-gleongleonyaml)       | Rules per path, masks, metrics, the canonical platform    | The same; CI on the canonical platform can compare the text of every golden |
 
 ### Migrate
 
@@ -184,8 +184,10 @@ the text of a golden only on the platform that recorded it:
 
 **CI:** run one job on the platform that records your goldens (a macOS runner for goldens of a
 Mac). Only this job compares text. With that platform as `fallback_platform` in
-`.gleon/gleon.yaml`, set `GLEON_REQUIRE_CANONICAL=1` in this job: goldens recorded on other
-platforms then fail there until they are recorded on it.
+`.gleon/gleon.yaml`, set `GLEON_REQUIRE_CANONICAL=1` in this job: it then compares the text of
+every golden as its own, also of goldens recorded on other platforms (under the text tolerance:
+5% of each square, or the `textTolerance` you set). Their glyphs fail there where they differ,
+until the golden is recorded on that platform.
 
 ### Recording goldens on any platform
 
@@ -345,14 +347,24 @@ A failing golden that a rule covers keeps its `golden.png`, `candidate.png` and 
 `.gleon/runs/latest/cases/<platform>/`; the failure message names the report. Both go away when the
 golden passes again. Git ignores `.gleon/runs/`.
 
-With metrics on, every comparison writes a case report and prints one line, so you can set
-tolerances from measurements:
+With metrics on, every comparison of a golden that a rule covers writes a case report and prints
+one line, so you can set tolerances from measurements:
 
 ```text
 gleon ✓ test/goldens/swatch.png  ssim 0.931 (≥0.800, +0.131)  color 5.2 (≤8, +2.8)  12 ms
 ```
 
-Turn them on with `metrics: {enabled: true}` in `.gleon/gleon.yaml` or with `GLEON_METRICS=1`.
+Turn them on in `.gleon/gleon.yaml`, or with `GLEON_METRICS=1` (which beats the file). A golden
+that no rule covers records nothing, also with `GLEON_METRICS=1`:
+
+```yaml
+# .gleon/gleon.yaml
+screenshots:
+  - include: "test/**/*.png"
+    mode: exact
+metrics:
+  enabled: true
+```
 
 <details>
 <summary>Case reports, run ids and the artifacts directory</summary>

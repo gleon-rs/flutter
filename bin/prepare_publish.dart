@@ -58,28 +58,28 @@ Future<void> main(List<String> args) async {
     ProcessSignal.sigint,
     if (!Platform.isWindows) ProcessSignal.sigterm,
   ].map((signal) => signal.watch().listen((_) => _interrupted(made))).toList();
+  // Whatever ends the run before the archive passed (a check, a process or
+  // file that failed) removes what this run made.
+  bool isReady = false;
   try {
-    await _clone(root, version: version, copy: copy);
-    final releaseUrl =
-        options.releaseUrl ?? ReleaseDownload.defaultUrl(version);
-    stdout.writeln('Adding the libraries of $releaseUrl ...');
-    await bundleLibraries(
-      package: copy,
-      releaseUrl: releaseUrl,
+    await _prepare(
+      root,
       version: version,
-      cacheDir: cache,
+      copy: copy,
+      cache: cache,
+      releaseUrl: options.releaseUrl ?? ReleaseDownload.defaultUrl(version),
     );
-    await _checkArchive(copy);
+    isReady = true;
     stdout.writeln('''
 The archive of gleon $version is ready in ${copy.path}:
 the libraries of the four hosts, nothing only maintainers need. Publish it:
 
-  cd ${copy.path} && fvm flutter pub publish
+  cd ${_quoted(copy.path)} && fvm flutter pub publish
 ''');
   } on CheckFailure catch (error) {
-    _remove(made);
     _cli.report(error.message);
   } finally {
+    if (!isReady) _remove(made);
     // The downloads are in the copy now.
     _remove([cache]);
     for (final interrupt in interrupts) {
@@ -87,6 +87,34 @@ the libraries of the four hosts, nothing only maintainers need. Publish it:
     }
   }
 }
+
+/// Clones the tag of [version] into [copy], adds the libraries of the release
+/// at [releaseUrl] (downloads cached in [cache]) and checks the archive.
+///
+/// Throws a [CheckFailure] for a failed step.
+Future<void> _prepare(
+  Uri root, {
+  required String version,
+  required Directory copy,
+  required Directory cache,
+  required Uri releaseUrl,
+}) async {
+  await _clone(root, version: version, copy: copy);
+  // A mirror URL may hold credentials: never print them.
+  stdout.writeln(
+    'Adding the libraries of ${releaseUrl.replace(userInfo: _noUserInfo)} ...',
+  );
+  await bundleLibraries(
+    package: copy,
+    releaseUrl: releaseUrl,
+    version: version,
+    cacheDir: cache,
+  );
+  await _checkArchive(copy);
+}
+
+/// A URL without its user and password ([Uri.replace]).
+const _noUserInfo = '';
 
 /// Removes what [made] holds after an interrupt (Ctrl+C skips `finally`) and
 /// exits as an interrupted process does.
@@ -96,12 +124,23 @@ void _interrupted(List<Directory> made) {
   exit(130);
 }
 
-/// Deletes each of [dirs] that exists.
+/// Deletes each of [dirs] that exists. A directory that cannot be deleted is
+/// named, never thrown: the failure that ended the run stays the one shown.
 void _remove(List<Directory> dirs) {
   for (final dir in dirs) {
-    if (dir.existsSync()) dir.deleteSync(recursive: true);
+    try {
+      if (dir.existsSync()) dir.deleteSync(recursive: true);
+    } on FileSystemException catch (error) {
+      stderr.writeln('prepare_publish: could not remove ${dir.path}: $error');
+    }
   }
 }
+
+/// [path] as one argument of the shell the command is pasted into: in single
+/// quotes for a POSIX shell, in double quotes on Windows (whose paths hold no
+/// `"`).
+String _quoted(String path) =>
+    Platform.isWindows ? '"$path"' : "'${path.replaceAll("'", r"'\''")}'";
 
 /// Clones the tag of [version] of the package at [root] into [copy]: exactly
 /// the files the tag tracks.

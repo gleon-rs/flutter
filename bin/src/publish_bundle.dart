@@ -152,10 +152,12 @@ List<String> archiveProblems(List<String> files) {
 }
 
 /// Files the archive always holds: without them in the list of pub, the list
-/// was not read right ([archiveFiles]).
+/// was not read right ([archiveFiles]), or the archive lacks a notice it must
+/// carry (`NATIVE_LICENSES.md`: the licenses of the crates in the libraries).
 const alwaysShipped = [
   'CHANGELOG.md',
   'LICENSE',
+  'NATIVE_LICENSES.md',
   'README.md',
   'hook/build.dart',
   'lib/gleon.dart',
