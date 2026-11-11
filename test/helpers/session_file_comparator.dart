@@ -9,7 +9,7 @@ import 'package:gleon/src/flutter/gleon_golden_comparator.dart';
 /// environment it runs in: what harness users get, hermetic.
 final class SessionFileComparator extends GleonFileComparator {
   /// Creates the comparator of [testFile] comparing in [session].
-  SessionFileComparator(super.testFile, this.session);
+  new(super.testFile, this.session);
 
   /// The session of every comparison.
   final GleonSession session;

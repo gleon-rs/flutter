@@ -14,7 +14,7 @@ import 'package:gleon/src/core/hook/release_download.dart';
 
 /// A local release: a directory of assets served at [url].
 final class ReleaseServer {
-  ReleaseServer._(this._server, this._assets, this._checksums);
+  new _(this._server, this._assets, this._checksums);
 
   /// The `SHA256SUMS.txt` of the assets.
   final String _checksums;
@@ -72,6 +72,7 @@ final class ReleaseServer {
   void _serve(HttpRequest request) {
     final HttpRequest(:response, :uri) = request;
     final name = uri.pathSegments.join('/');
+    // ignore: avoid-collection-mutating-methods, the log of this server: recording is its purpose.
     _requests.add(name);
     if (name == ReleaseDownload.checksumsFileName) {
       response

@@ -15,7 +15,7 @@ import 'dart:convert';
 final class CaseCheck {
   /// Checks reports against [fallbackPlatform]; [minCases] is 1 and
   /// [outcomes] are [defaultOutcomes] unless given.
-  const CaseCheck({
+  const new({
     required this.fallbackPlatform,
     int? minCases,
     Set<String>? outcomes,
@@ -99,7 +99,7 @@ final class CaseCheck {
 
 /// The fields of a case report that are checked.
 final class _Case {
-  const _Case({
+  const new({
     required this.recorded,
     required this.name,
     required this.outcome,

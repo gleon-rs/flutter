@@ -123,10 +123,12 @@ records the gleon commit it was made from, and the hook uses it only while `nati
 that commit. To try an unmerged engine change on top of the pinned commit, build with
 `--allow-dirty` (and rebuild after every change: the hook cannot tell two dirty builds apart); to
 test another checkout, use the `gleon_repo` user-define. That build runs inside Flutter's hooks
-runner, which passes on only part of the environment: `RUSTFLAGS` and `RUSTC_WRAPPER` never
-reach it, and `CARGO_*`/`RUSTUP_*` only from Flutter 3.49. Use `CARGO_BUILD_RUSTFLAGS` /
-`CARGO_BUILD_RUSTC_WRAPPER` (Flutter 3.49+), a `.cargo/config.toml` in the checkout, or
-`bin/build_native.dart`, which sees the whole environment.
+runner, which passes on only part of the environment: `CARGO_*` and `RUSTUP_*` reach it,
+`RUSTFLAGS` and `RUSTC_WRAPPER` never do. Use `CARGO_BUILD_RUSTFLAGS` /
+`CARGO_BUILD_RUSTC_WRAPPER`, a `.cargo/config.toml` in the checkout (a change to it builds again),
+or `bin/build_native.dart`, which sees the whole environment. On Windows rustflags come from the
+variables only: the build sets the target's own (a static C runtime), so cargo ignores
+`build.rustflags` of a `.cargo/config.toml` there.
 
 `NATIVE_LICENSES.md` lists every crate linked into the library with its license texts and names
 the pinned commit it was generated for. After moving `native/gleon_ref`, regenerate it (CI checks

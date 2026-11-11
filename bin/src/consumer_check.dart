@@ -24,7 +24,7 @@ bool hasPhrase(String output, String phrase) =>
 
 /// The checks, in order, on the consumer [app].
 final class ConsumerCheck {
-  const ConsumerCheck({
+  const new({
     required this.app,
     required this.library,
     required this.package,

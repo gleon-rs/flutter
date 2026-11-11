@@ -54,6 +54,11 @@ String _goldenPath(String fileName, String environmentName) => 'goldens/$fileNam
 - Do not install `GleonFileComparator` as well: alchemist refuses a `diffThreshold` above 0 with
   any comparator but Flutter's own (`UnsupportedError` before comparing), and the adapter needs
   none.
+- alchemist 0.14.1 gives the widgets of a golden the theme and localizations of the SDK's Material
+  library, which Flutter 3.50 deprecates. Widgets of `material_ui` do not read them: wrap them in
+  `Localizations.override` with `DefaultMaterialLocalizations.delegate` of `material_ui`, else an
+  `AppBar` fails with "No MaterialLocalizations found" (the example does this in
+  `example/test/helpers/counter_page_table.dart`).
 - alchemist's `diffThreshold` does not apply, and a failure says so: set a tolerance instead. Its
   `forceUpdateGoldenFiles` writes like `--update-goldens` (see
   [Recording goldens on any platform](../README.md#recording-goldens-on-any-platform)).

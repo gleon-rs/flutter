@@ -6,7 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// [offset], emulating rasterization noise between machines.
 class Blob extends StatelessWidget {
   /// Creates the blob, shifted by [offset] pixels on both axes.
-  const Blob({this.offset = 0, super.key});
+  const new({this.offset = 0, super.key});
 
   /// Key of the captured boundary.
   static const boundaryKey = ValueKey<String>('blob');
@@ -43,7 +43,7 @@ class Blob extends StatelessWidget {
 }
 
 class _BlobPainter extends CustomPainter {
-  const _BlobPainter(this.offset);
+  const new(this.offset);
 
   final double offset;
 

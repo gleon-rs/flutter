@@ -1,5 +1,6 @@
 ## 0.6.0
 
+- **Requires Flutter 3.50 (Dart 3.14) or newer.** Earlier versions of Flutter keep gleon 0.5.0.
 - **The gleon CLI reads your workspace as it is.** `gleon init` of the CLI writes
   `baselines: goldens` into `.gleon/gleon.yaml`: the goldens next to the tests are the baselines,
   so the CLI sums up and reports the runs of `gleon test -- flutter test` and commits approved
@@ -19,14 +20,22 @@
   `gleon.yaml`: `must be between 0 and 254`.
 - **Text regions:** lines of a paragraph are told apart by their full height, so dense lines
   (a `height` below 1 with mixed sizes) keep a region each instead of merging; a clip that a
-  perspective sends to infinity no longer breaks finding the text.
+  perspective sends to infinity no longer breaks finding the text. A line of rotated or skewed
+  text is covered by pieces about as long as it is high (at most 64), not by one box around the
+  whole line, which was mostly no text; a line turned by a quarter or half turn keeps one box.
 - **`loadAppFonts` is cheaper per test file:** a font file listed under several weights is
   loaded once, and the font checksum is updated from the changed bytes instead of reading the
   whole font.
 - README: goldens compared through `GleonFileComparator` see no text, so with real fonts they
   fail on other operating systems and `--update-goldens` there writes them over.
+- `doc/alchemist.md`: alchemist 0.14.1 gives a golden only the localizations of the SDK's
+  Material library, which Flutter 3.50 deprecates; widgets of `material_ui` need their own. The
+  example app uses `material_ui` and shows how.
 - Contributors: a `gleon_repo` checkout reached through a symbolic link keeps tracking its
   sources.
+- Contributors: a `gleon_repo` build in the hook sees `CARGO_*` and `RUSTUP_*`, so a toolchain
+  under a custom `CARGO_HOME` or `RUSTUP_HOME` works there. `RUSTFLAGS` and `RUSTC_WRAPPER` still
+  do not reach it; a failed build names the alternatives.
 
 ## 0.5.0
 

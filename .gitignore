@@ -42,3 +42,6 @@ CLAUDE.local.md
 !/native/gleon_ref
 /dist/
 .DS_Store
+
+# FVM Version Cache
+.fvm/

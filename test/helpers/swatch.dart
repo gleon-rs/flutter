@@ -7,7 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 class Swatch extends StatelessWidget {
   /// Creates the swatch; [dot] adds one black pixel, [accent] recolors the
   /// left half.
-  const Swatch({
+  const new({
     this.size = const Size(100, 60),
     this.dot,
     this.accent = const Color(0xFF2196F3),
@@ -61,7 +61,7 @@ class Swatch extends StatelessWidget {
 }
 
 class _SwatchPainter extends CustomPainter {
-  const _SwatchPainter({required this.dot, required this.accent});
+  const new({required this.dot, required this.accent});
 
   final Offset? dot;
   final Color accent;

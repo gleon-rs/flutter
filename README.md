@@ -7,10 +7,11 @@ goldens with the app's real fonts that compare their text on the platform they w
 It is a comparison engine, not a golden harness: themes, locales and devices stay with your tests
 or [any harness](#golden-harnesses).
 
-> **Status: 0.6.0.** The API may still change before 1.0. Host `flutter test` on macOS arm64,
-> Linux x64/arm64 (the glibc of Ubuntu 26.04 or newer; every release names the exact floor) and
-> Windows x64; no Rust toolchain is needed. A real app suite of 1 800 goldens runs on it in `ssim`
-> mode, and the package's own CI runs every change on all four hosts.
+> **Status: 0.6.0.** The API may still change before 1.0. It needs Flutter 3.50 (Dart 3.14) or
+> newer. Host `flutter test` on macOS arm64, Linux x64/arm64 (the glibc of Ubuntu 26.04 or newer;
+> every release names the exact floor) and Windows x64; no Rust toolchain is needed. A real app
+> suite of 1 800 goldens runs on it in `ssim` mode, and the package's own CI runs every change on
+> all four hosts.
 
 ## Quick start
 
@@ -276,13 +277,14 @@ The boxes of text come from the render tree: one per line of each paragraph and 
 that is painted, grown by an eighth of the line's height for ink beyond it (diacritics, negative
 letter spacing, outlined text), clipped like the text is, without `WidgetSpan`s. Text laid out
 but not painted has none (the hidden pages of an `IndexedStack`, `Offstage`, `Visibility`, a
-route under an opaque one), so it never hides changes of what is painted there. Rotated or skewed
-text is covered by the bounding box of its lines. Icons are text too (`Icon` draws a glyph of an
-icon font, which each OS rasterizes its own way): an icon swapped for another of the same size
-passes on other platforms by default. A box keeps covering its text when an opaque widget is
-painted over it. On macOS, at 0.1, every mutation of the package tests
-fails (a changed digit with 24% of a square, a frame tight around text with 23%, the rest with
-51% or more); with text ignored only those that move pixels outside the text do.
+route under an opaque one), so it never hides changes of what is painted there. A line of rotated
+or skewed text is covered by pieces about as long as it is high (at most 64), not by one box
+around the whole line; a quarter or half turn keeps one box. Icons are text too (`Icon` draws a
+glyph of an icon font, which each OS rasterizes its own way): an icon swapped for another of the
+same size passes on other platforms by default. A box keeps covering its text when an opaque
+widget is painted over it. On macOS, at 0.1, every mutation of the package tests fails (a changed
+digit with 24% of a square, a frame tight around text with 23%, the rest with 51% or more); with
+text ignored only those that move pixels outside the text do.
 
 A widget (a `Finder`) or a `ui.Image` is compared as raw pixels: a PNG is encoded only to keep
 the candidate of a failure (see [Metrics](#metrics)). Text applies to widgets only, with every

@@ -4,7 +4,7 @@ library;
 /// A check of the consumer that did not hold: what [message] says.
 final class CheckFailure implements Exception {
   /// Creates the failure [message].
-  const CheckFailure(this.message);
+  const new(this.message);
 
   /// Why the check failed.
   final String message;

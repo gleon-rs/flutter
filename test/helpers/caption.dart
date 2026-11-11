@@ -7,7 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// parameter is a mutation the text tolerance must still catch.
 class Caption extends StatelessWidget {
   /// Creates the caption; the defaults render its golden.
-  const Caption({
+  const new({
     this.paragraph = sample,
     this.digits = '0123456789',
     this.color = const Color(0xFF000000),
