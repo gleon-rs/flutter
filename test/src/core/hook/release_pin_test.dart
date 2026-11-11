@@ -41,16 +41,25 @@ void main() {
     expect(downloaded.readAsBytesSync(), library);
   });
 
-  test('a release of another pin fails, naming both and the tag', () async {
-    final server = await pinnedRelease();
+  test(
+    'a release of another pin fails, naming both, the pub.dev version and the '
+    'tag',
+    () async {
+      final server = await pinnedRelease();
 
-    await expectLater(
-      fetch(server.url, pin: 'bbbb'),
-      throwsDownload(
-        allOf(contains('aaaa'), contains('bbbb'), contains('ref: v1.0.0')),
-      ),
-    );
-  });
+      await expectLater(
+        fetch(server.url, pin: 'bbbb'),
+        throwsDownload(
+          allOf(
+            contains('aaaa'),
+            contains('bbbb'),
+            contains('gleon: ^1.0.0'),
+            contains('ref: v1.0.0'),
+          ),
+        ),
+      );
+    },
+  );
 
   test('without a pin (the pub.dev archive) none is asked', () async {
     final server = await pinnedRelease();
@@ -69,6 +78,25 @@ void main() {
     addTearDown(server.close);
 
     final downloaded = await fetch(server.url, pin: 'bbbb');
+    expect(downloaded.readAsBytesSync(), library);
+
+    // Publishing must know the engine of the libraries it ships.
+    await expectLater(
+      fetch(server.url, pin: 'bbbb', isPinRequired: true),
+      throwsDownload(
+        allOf(contains('names no gleon commit'), contains('bbbb')),
+      ),
+    );
+  });
+
+  test('a required pin that matches passes', () async {
+    final server = await pinnedRelease();
+
+    final downloaded = await fetch(
+      server.url,
+      pin: releasePin,
+      isPinRequired: true,
+    );
     expect(downloaded.readAsBytesSync(), library);
   });
 }

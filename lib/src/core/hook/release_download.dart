@@ -76,7 +76,9 @@ abstract final class ReleaseDownload {
   ///
   /// A checkout of the package (a git dependency) passes its [pin]
   /// (`native/gleon_ref`): a release whose libraries were built from another
-  /// commit fails, since its engine is not the one the checkout expects.
+  /// commit fails, since its engine is not the one the checkout expects. A
+  /// release that names no commit (before 0.5.0) is accepted unless
+  /// [isPinRequired] (publishing its libraries needs to know their engine).
   ///
   /// [redirectTimeout] bounds reading the body of a redirect response,
   /// [bodyTimeout] a pause in a downloaded file (a slow but steady download
@@ -87,6 +89,7 @@ abstract final class ReleaseDownload {
     required NativeTarget target,
     required Directory cacheDir,
     String? pin,
+    bool isPinRequired = false,
     Duration redirectTimeout = const Duration(seconds: 30),
     Duration bodyTimeout = const Duration(minutes: 1),
     int maxBytes = 64 << 20,
@@ -108,7 +111,11 @@ abstract final class ReleaseDownload {
       maxBytes: maxBytes,
     );
     try {
-      return await fetch.library(target, pin: pin);
+      return await fetch.library(
+        target,
+        pin: pin,
+        isPinRequired: isPinRequired,
+      );
     } finally {
       fetch.close();
     }
@@ -187,19 +194,40 @@ final class _Release {
   void close() => _client.close(force: true);
 
   /// The verified library of [target]; the release must have been built
-  /// from [pin] when one is given and the release names its own.
-  Future<File> library(NativeTarget target, {String? pin}) async {
+  /// from [pin] when one is given and the release names its own (or
+  /// [isPinRequired]).
+  Future<File> library(
+    NativeTarget target, {
+    String? pin,
+    bool isPinRequired = false,
+  }) async {
     final (:file, :checksums) = await _library(target);
-    if (pin != null) await _checkPin(pin, checksums);
+    if (pin != null) {
+      await _checkPin(pin, checksums, isPinRequired: isPinRequired);
+    }
 
     return file;
   }
 
-  /// Fails unless the release names no pin or [pin]: its libraries were
-  /// built from another gleon commit than the checkout's.
-  Future<void> _checkPin(String pin, _Checksums checksums) async {
+  /// Fails unless the release names [pin], or names none and the pin is not
+  /// [isPinRequired]: its libraries were built from another gleon commit
+  /// than the checkout's.
+  Future<void> _checkPin(
+    String pin,
+    _Checksums checksums, {
+    required bool isPinRequired,
+  }) async {
     final expected = checksums.hashes[ReleaseDownload.pinFileName];
-    if (expected == null) return;
+    if (expected == null) {
+      if (!isPinRequired) return;
+
+      throw failure(
+        'the release v$packageVersion at $url names no gleon commit (no '
+        '${ReleaseDownload.pinFileName} in its '
+        '${ReleaseDownload.checksumsFileName}), so its libraries cannot be '
+        'matched with native/gleon_ref ($pin).$_mirrorHint',
+      );
+    }
     final cached = File.fromUri(
       cacheDir.uri.resolve('$expected/${ReleaseDownload.pinFileName}'),
     );
@@ -223,8 +251,9 @@ final class _Release {
         'this checkout of the package pins gleon $pin (native/gleon_ref), but '
         'the release v$packageVersion at $url was built from gleon '
         '$released: its engine is not the one this checkout expects. Depend '
-        'on a released version (git `ref: v$packageVersion`, or the tag of a '
-        'later release), whose libraries match its pin. $_overridesHint',
+        'on a released version, whose libraries match its pin: from pub.dev '
+        '(`gleon: ^$packageVersion`), or git `ref: v$packageVersion` (or the '
+        'tag of a later release). $_overridesHint',
       );
     }
   }
@@ -333,8 +362,8 @@ final class _Release {
                     '$_overridesHint'
               : '$source does not exist (HTTP 404). Prebuilt libraries are '
                     'attached to tagged releases only: depend on a released '
-                    'version (git `ref: vX.Y.Z`) rather than an untagged '
-                    'commit. $_overridesHint',
+                    'version (from pub.dev, or git `ref: vX.Y.Z`) rather '
+                    'than an untagged commit. $_overridesHint',
         );
       }
       // A failing or busy server, or one that timed out the request.

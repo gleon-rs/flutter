@@ -241,7 +241,7 @@ abstract final class NativeEngine {
   /// What to do about a library the host cannot load.
   static const _hostAdvice =
       'The released Linux libraries are built on Ubuntu 26.04 and need its '
-      'glibc or a newer one (the PLATFORMS.txt of the release names the exact '
+      'glibc or a newer one (the notes of the release name the exact '
       'version); musl (Alpine) is not supported; macOS needs 11 or newer. Run '
       'the tests on a supported host, or build the library for this one with '
       'the `gleon_repo` user-define and point `ffi_path` at it (see the '

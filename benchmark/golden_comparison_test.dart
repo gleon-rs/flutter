@@ -103,6 +103,7 @@ void main() {
       hasWorkspaces: false,
       environment: const GleonEnvironment(),
     );
+    addTearDown(session.dispose);
     final candidates = <String, GoldenFileComparator>{
       'gleon': GleonGoldenComparator(flutter, session: session),
       'gleon_ssim': GleonGoldenComparator(
@@ -180,14 +181,13 @@ void main() {
     final dir = Directory.systemTemp.createTempSync('gleon_bench_');
     addTearDown(() => dir.deleteSync(recursive: true));
     final flutter = LocalFileComparator(dir.uri.resolve('bench_test.dart'));
-    final gleon = GleonGoldenComparator(
-      flutter,
-      session: GleonSession(
-        integration: FlutterSession.integration,
-        hasWorkspaces: false,
-        environment: const GleonEnvironment(),
-      ),
+    final session = GleonSession(
+      integration: FlutterSession.integration,
+      hasWorkspaces: false,
+      environment: const GleonEnvironment(),
     );
+    addTearDown(session.dispose);
+    final gleon = GleonGoldenComparator(flutter, session: session);
     // Registered first: frames taken before a failing one are released too.
     final captures = <_Capture>[];
     addTearDown(() => _dispose(captures));

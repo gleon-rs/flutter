@@ -16,8 +16,6 @@ import 'dart:async';
 
 import 'package:alchemist/alchemist.dart'
     show AlchemistConfig, CiGoldensConfig, PlatformGoldensConfig;
-// Until alchemist exports it (Betterment/alchemist#188).
-// The implementation_imports lint checks only the files under lib, not tests.
 import 'package:alchemist/src/golden_test_adapter.dart' show goldenFileExpectationFn;
 import 'package:gleon/alchemist.dart';
 import 'package:gleon/gleon.dart';

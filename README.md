@@ -1,186 +1,122 @@
-# gleon (Flutter)
+# gleon
 
-A drop-in replacement for Flutter's `matchesGoldenFile`, powered by the gleon comparison engine
-(Rust, the same engine as the [gleon CLI](https://github.com/gleon-rs/gleon)): the same goldens
-next to the tests, 5–20x faster comparisons, `pixel` and `ssim` tolerances, ignore regions, and
-goldens with the app's real fonts that compare their text on the platform they were recorded on.
-It is a comparison engine, not a golden harness: themes, locales and devices stay with your tests
-or [any harness](#golden-harnesses).
+A drop-in replacement for Flutter's `matchesGoldenFile`, with a comparison engine in Rust (the
+same engine as the [gleon CLI](https://github.com/gleon-rs/gleon)):
 
-> **Status: 0.6.0.** The API may still change before 1.0. It needs Flutter 3.50 (Dart 3.14) or
-> newer. Host `flutter test` on macOS arm64, Linux x64/arm64 (the glibc of Ubuntu 26.04 or newer;
-> every release names the exact floor) and Windows x64; no Rust toolchain is needed. A real app
-> suite of 1 800 goldens runs on it in `ssim` mode, and the package's own CI runs every change on
-> all four hosts.
+- **5–20x faster** than Flutter's own comparator ([Performance](#performance)).
+- **Tolerances:** `pixel` (a share of the pixels may differ) and `ssim` (rendering noise passes,
+  changed content fails), plus ignore regions.
+- **Real fonts:** goldens show the app's real text. A golden compares its text on the platform
+  that recorded it and ignores the glyphs on other platforms ([Real text](#real-text)).
+- **The same workflow:** PNG goldens next to the tests, `--update-goldens` writes them. No Rust
+  toolchain is needed.
+
+gleon compares goldens; it is not a golden harness. Themes, locales and devices stay with your
+tests or [your harness](#golden-harnesses).
+
+Requires Flutter 3.50 (Dart 3.14) or newer. `flutter test` runs on macOS arm64, Linux x64 and
+arm64 (Ubuntu 26.04 or newer) and Windows x64. The API can change before 1.0.
 
 ## Quick start
 
-**1. Add the package** (a released tag: prebuilt libraries exist for tags only):
+1. Add the package:
 
-```yaml
-dev_dependencies:
-  gleon:
-    git:
-      url: https://github.com/gleon-rs/flutter.git
-      ref: v0.6.0
-```
+   ```bash
+   flutter pub add dev:gleon
+   ```
 
-**2. Replace one import.** Everything else from `flutter_test` stays available, and goldens
-behave as in Flutter (exact, next to the test, `--update-goldens` rewrites them):
+2. Replace one import. All of `flutter_test` stays available, and goldens behave as in Flutter
+   (exact, next to the test, `--update-goldens` writes them):
 
-```diff
--import 'package:flutter_test/flutter_test.dart';
-+import 'package:gleon/gleon.dart';
-```
+   ```diff
+   -import 'package:flutter_test/flutter_test.dart';
+   +import 'package:gleon/gleon.dart';
+   ```
 
-**3. Load the app's real fonts** (optional, recommended), once in `test/flutter_test_config.dart`:
+3. Optional, recommended: load the app's real fonts once, in `test/flutter_test_config.dart`:
 
-```dart
-import 'dart:async';
+   ```dart
+   import 'dart:async';
 
-import 'package:gleon/gleon.dart';
+   import 'package:gleon/gleon.dart';
 
-Future<void> testExecutable(FutureOr<void> Function() testMain) async {
-  await loadAppFonts();
-  await testMain();
-}
-```
+   Future<void> testExecutable(FutureOr<void> Function() testMain) async {
+     await loadAppFonts();
+     await testMain();
+   }
+   ```
 
-(`setUpAll(loadAppFonts)` works too. Inside a test body time is fake and the font files never
-load: there, `await tester.runAsync(loadAppFonts)`.)
+Run `flutter test --update-goldens` once on the platform where you record goldens. Then run
+`flutter test` on any platform.
 
-Then run `flutter test --update-goldens` once on the platform you record goldens on, and
-`flutter test` anywhere. The first `flutter test` downloads the native library of the host (see
-[Install](#install)). What you get:
+| You use                                                         | Comparison                                                | Text of widgets (real fonts)                                                |
+| --------------------------------------------------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Only the import                                                 | Exact, as in Flutter                                      | Compared on the platform that recorded the golden, ignored on the others    |
+| `tolerance:` on a call                                          | [`.pixel(…)` or `.ssim()`](#tolerance) for that golden    | The same                                                                    |
+| [`.gleon/gleon.yaml`](#configuration-with-gleongleonyaml)       | Rules per path, masks, metrics, the canonical platform    | The same; CI on the canonical platform can compare the text of every golden |
 
-| You have                                                  | Comparison                                                             | Text of widgets (real fonts)                                                                               |
-| --------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Nothing else                                              | Exact, as Flutter.                                                     | Compared on the platform the golden was recorded on (`--update-goldens` stamps it), ignored on other OSes. |
-| `tolerance:` on a call                                    | [`.pixel(maxDiffRatio: …)` or `.ssim()`](#tolerance) for that golden.  | The same.                                                                                                  |
-| [`.gleon/gleon.yaml`](#configuration-with-gleongleonyaml) | Rules per path, masks, metrics, the canonical platform of the goldens. | The same, plus a CI job that requires every golden to be recorded on the canonical platform.               |
+### Migrate
 
-The example app (`example/`, a counter with real fonts) records its goldens on macOS and passes
-them on Linux and Windows in CI, exact except for the text.
+A file that must keep the `flutter_test` import adds `hide matchesGoldenFile` to it.
 
-## Install
+<details>
+<summary>Flutter's matcher for some tests, golden_toolkit, fonts in a test body</summary>
 
-On the first `flutter test`, the package's build hook downloads the native library for the test
-host from the GitHub Release of that version, verifies it against the release's `SHA256SUMS.txt`
-(releases are immutable) and caches it in `.dart_tool/hooks_runner/shared/`. Later runs, including
-offline ones, reuse the cache until `flutter clean`. `HTTPS_PROXY` is honored. The hook never
-needs Rust, cargo or a compiler. A git dependency on a commit between releases (`ref: main`)
-downloads the libraries of the release its version names only while they were built from the
-engine commit the checkout pins; otherwise the build fails and names the tag to depend on.
+- To keep Flutter's own matcher for some tests (for example a `goldenFileComparator` that is no
+  `LocalFileComparator`, such as a remote golden store, which gleon does not support), import
+  `flutter_test` with a prefix too:
 
-Overrides (in the app's `pubspec.yaml`), e.g. for air-gapped machines or a mirror:
+  ```dart
+  import 'package:flutter_test/flutter_test.dart' as ft;
+  import 'package:gleon/gleon.dart';
 
-```yaml
-hooks:
-  user_defines:
-    gleon:
-      ffi_path: path/to/libgleon_ffi.dylib # use this library file as is
-      # release_url: https://mirror.example/gleon/v0.6.0/ # SHA256SUMS.txt + assets
-      # gleon_repo: ../gleon               # contributors: build from a gleon checkout
-```
+  await expectLater(
+    find.byType(MyWidget),
+    ft.matchesGoldenFile('goldens/my_widget.png'),
+  );
+  ```
 
-The first source that applies wins: `ffi_path`, then `gleon_repo`, then a library inside the
-package's `native/<target>/` (a maintainer's build, or one shipped in the package), then the
-download, from `release_url` when it is set (the release's directory, without a query or
-fragment; `https`, or plain `http` to this machine only). `ffi_path` and `gleon_repo` must be
-paths: any other value fails the build.
+- `golden_toolkit` has its own `loadAppFonts`: add `hide loadAppFonts` to one of the two imports.
+- `setUpAll(loadAppFonts)` also loads the fonts. In a test body the time is fake and font files
+  never load: use `await tester.runAsync(loadAppFonts)` there.
 
-## Migrate
-
-If a file must keep both imports, add `hide matchesGoldenFile` to the `flutter_test` import. To
-keep Flutter's own matcher for some tests (e.g. goldens of a custom `goldenFileComparator` that is
-not a `LocalFileComparator` subclass, such as a remote golden store, which gleon does not
-support), import `flutter_test` with a prefix as well and call it there:
-
-```dart
-import 'package:flutter_test/flutter_test.dart' as ft;
-import 'package:gleon/gleon.dart';
-
-await expectLater(
-  find.byType(MyWidget),
-  ft.matchesGoldenFile('goldens/my_widget.png'),
-);
-```
-
-A file that also imports `golden_toolkit`, which has a `loadAppFonts` of its own, adds
-`hide loadAppFonts` to one of the two imports.
+</details>
 
 ## Tolerance
 
-`tolerance` takes a `GoldenTolerance`:
+`tolerance` takes a `GoldenTolerance`; `ignoreRegions` works with each of them:
 
 ```dart
-// Up to 0.5% of pixels may differ.
-await expectLater(
-  find.byType(MyWidget),
-  matchesGoldenFile(
-    'goldens/my_widget.png',
-    tolerance: const GoldenTolerance.pixel(maxDiffRatio: 0.005),
-  ),
-);
-
-// Tolerates rendering noise (anti-aliasing, sub-pixel geometry, color drift),
-// still catches changed/missing content, color and alpha changes, blur.
 await expectLater(
   find.byType(MyWidget),
   matchesGoldenFile(
     'goldens/my_widget.png',
     tolerance: const GoldenTolerance.ssim(),
-  ),
-);
-
-// Ignore a dynamic region (pixels of the golden PNG, origin top-left).
-await expectLater(
-  find.byType(MyWidget),
-  matchesGoldenFile(
-    'goldens/my_widget.png',
-    ignoreRegions: [const Rect.fromLTWH(0, 0, 400, 80)],
+    ignoreRegions: [const Rect.fromLTWH(0, 0, 400, 80)], // pixels of the golden PNG
   ),
 );
 ```
 
-With a language version of 3.10 or newer (the `sdk` lower bound of your own `pubspec.yaml`), dot
-shorthands keep call sites short: `tolerance: const .ssim()`.
+| Tolerance                                     | The golden passes when                                                                                       |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `.exact()`                                    | every pixel is identical, as in Flutter. Without `tolerance`, the golden's rule applies, else this.         |
+| `.pixel(maxDiffRatio: 0.005)`                 | at most this share of the pixels differs (0.0–1.0; see "Pixel options" below for rendering noise).          |
+| `.ssim(minSimilarity: 0.8, colorTolerance: 8)` | only rendering noise differs (anti-aliasing, sub-pixel shifts, color drift). Changed or missing content, color, alpha and blur fail. |
 
-| Tolerance                                          | Meaning                                                                                                                  |
-| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `.exact()`                                         | Every pixel identical, like Flutter (text: see `textTolerance`); an omitted `tolerance` is the golden's rule, else this. |
-| `.pixel({required maxDiffRatio, …options})`        | At most this fraction (0.0–1.0, 0 for none) of pixels may differ; see [Pixel options](#pixel-options).                   |
-| `.ssim({minSimilarity = 0.8, colorTolerance = 8})` | Min local SSIM of every neighborhood (0.0–1.0) and tolerated deviation beyond the local 3x3 envelope (0–255); see below. |
+Each variant takes only the parameters of its mode. Out-of-range values, and ignore regions that
+are empty or negative, throw an `ArgumentError` when the matcher is created. With a language
+version of 3.10 or newer, dot shorthands keep calls short: `tolerance: const .ssim()`. Rules for
+many goldens go into [`.gleon/gleon.yaml`](#configuration-with-gleongleonyaml).
 
-`ignoreRegions` (rectangles excluded from the comparison) works with every tolerance. Each
-variant only has the parameters of its mode, so a setting for the wrong mode cannot be written;
-out-of-range values, and ignore regions that are empty, negative or reach beyond 4294967295
-pixels, throw an `ArgumentError` when the matcher is created.
+A failure shows the metric and the thresholds, and writes `failures/<name>_masterImage.png`,
+`_testImage.png` and `_gleonDiff.png` next to the test, like Flutter does.
 
-On failure the test message contains the metric and the thresholds, and
-`failures/<name>_masterImage.png`, `_testImage.png` and `_gleonDiff.png` are written next to the
-test (like Flutter's own failure output). As in Flutter, `<name>` is only the golden's file name:
-goldens of the same name in different folders, compared from tests in one directory, share these
-files, and the later failure replaces the earlier one's. The artifacts directory (see
-[Failure images](#failure-images)) keeps every golden apart. Warnings (masks clipped to the
-image, a case report that cannot be written) are printed one per line and never fail a test. A
-failure caused by a bug in gleon itself, not by the test or its files, ends with a request to
-report it.
+<details>
+<summary>Pixel options: count rendering noise of shapes as equal</summary>
 
-Images of different sizes fail with both sizes in the message; their diff image has the larger
-width and height: the area both cover compared like `exact`, the golden's own area with blue
-stripes, the test image's own area with green ones.
-
-Suite-wide tolerances per path live in `.gleon/gleon.yaml`, see below.
-
-### Pixel options
-
-Three options of `.pixel(maxDiffRatio: …)`, all off by default, let some differing pixels count
-as equal (yellow in the diff image, cyan for edges; case reports count them as `tolerated_pixels`
-and `edge_pixels`). They are for rendering noise of shapes in a pixel comparison, not a substitute
-for `.ssim()`. They never apply to text: a changed glyph keeps its whole share of its tile (see
-[Real text](#real-text)). In `.gleon/gleon.yaml` they belong to `mode: pixel` rules (a config
-error elsewhere).
+Three options of `.pixel(maxDiffRatio: …)`, all off by default, count some differing pixels as
+equal (yellow in the diff image, cyan for edges). They never apply to text. In
+`.gleon/gleon.yaml` they belong to `mode: pixel` rules.
 
 | Option (yaml key)                        | A differing pixel counts as equal when                                      |
 | ---------------------------------------- | --------------------------------------------------------------------------- |
@@ -188,148 +124,166 @@ error elsewhere).
 | `antiAlias` (`anti_alias`)               | it looks anti-aliased in either image (the detection of pixelmatch).        |
 | `edgeThreshold` (`edge_threshold`)       | the Sobel gradient of the golden's luma there exceeds this (0–254; 0: off). |
 
-Measured on this package's anti-aliased test shape moved by 0.3 px: 611 of 9600 pixels differ
-exactly, 75 with `antiAlias`, 22 with `edgeThreshold: 64`; a one-pixel dot on a flat area fails
-with all three. The price of `edgeThreshold` (Skia Gold's edge mask has it too): every change
-that lies on the golden's edges passes, and on the calibration corpus of the gleon engine that
-includes a missing glyph, a card moved by 1 px and, at 64, a missing small icon. The gradient is
-unnormalized like Skia Gold's: a sharp step of 16 luma levels already gives 64. Prefer `antiAlias`
-with a small `maxDiffRatio`, or `.ssim()`.
+On an anti-aliased shape moved by 0.3 px, 611 of 9600 pixels differ exactly, 75 with
+`antiAlias`, 22 with `edgeThreshold: 64`; a one-pixel dot on a flat area fails with all three.
+`edgeThreshold` lets every change on the golden's edges pass, also a missing glyph, a card moved
+by 1 px and, at 64, a missing small icon. Prefer `antiAlias` with a small `maxDiffRatio`, or
+`.ssim()`.
+
+</details>
+
+<details>
+<summary>How <code>ssim</code> decides</summary>
+
+Two gates, both computed only around the pixels that differ:
+
+1. **Envelope gate** (full resolution): each pixel of one image must lie within the value range
+   of the other image's 3x3 neighborhood (premultiplied RGBA, so alpha counts), widened by
+   `colorTolerance` and a share of the local contrast. Re-rasterization and sub-pixel shifts give
+   values between neighbors; new content, color and alpha changes do not. Unexplained pixels fail
+   as regions of 3 or more pixels, or with a strong deviation.
+2. **Structural gate** (half resolution, as in MS-SSIM): the _minimum_ local SSIM (11x11 Gaussian
+   window) must reach `minSimilarity`. This catches blur. The minimum, not the mean, so a small
+   change on a large golden is not averaged away.
+
+The defaults come from a corpus of rendering noise and regressions
+(`gleon-engine/tests/ssim_corpus.rs` in the gleon repository). Content that a GPU or a shader
+draws differs between machines even on one OS: compare it under `ssim`.
+
+</details>
+
+<details>
+<summary>Failure output in detail</summary>
+
+- `<name>` is the file name of the golden only, as in Flutter: goldens of the same name in
+  different folders, compared from tests in one directory, share these files. The
+  [failure images](#metrics) of a workspace keep each golden apart.
+- Images of different sizes fail with both sizes in the message. The diff image has the larger
+  width and height: the common area compared like `exact`, the golden's own area with blue
+  stripes, the test image's own area with green ones.
+- Warnings (masks clipped to the image, a case report that cannot be written) print one line each
+  and never fail a test.
+- A failure caused by a bug in gleon, not by the test or its files, asks you to report it.
+
+</details>
 
 ## Real text
 
-`flutter test` draws every glyph as the same box (the `FlutterTest` font), so goldens cannot see
-text. `loadAppFonts()` (see [Quick start](#quick-start)) loads the app's real fonts instead: every
-family of its `FontManifest.json` (its own fonts, those of its packages, `MaterialIcons`) and
-Roboto from the Flutter SDK. Operating systems then lay text out alike (the fonts' Windows line
-metrics are aligned with the ones macOS and Linux use, so line heights on Windows can differ from
-the real app there), but rasterize glyphs differently: measured on CI, 40% or more of the pixels
-of a 16x16 square of text differ between macOS and Linux, more than a changed digit of the same
-width does (24%). No tolerance tells them apart, so a golden compares text only on the platform
-it was recorded on.
+`flutter test` draws every glyph as the same box, so goldens cannot see text. `loadAppFonts()`
+loads the app's real fonts (each family of its `FontManifest.json`, `MaterialIcons` and Roboto).
+But each operating system rasterizes glyphs in its own way: about 40% of the pixels of a 16x16
+square of text differ between macOS and Linux, more than a changed digit (24%). So gleon compares
+the text of a golden only on the platform that recorded it:
 
-gleon writes that platform into the golden itself: a `tEXt` chunk of the PNG (`gleon:platform`,
-e.g. `macos-aarch64`) that image decoders ignore, so the golden stays one file next to the test,
-with or without a `.gleon/gleon.yaml`. Then a golden compares in one of two ways:
+- `--update-goldens` writes that platform into the golden: a `gleon:platform` text chunk of the
+  PNG, which image decoders ignore. The golden stays one file next to the test.
+- **On that platform** at most 5% of the pixels of each 16x16 square of text may differ. A
+  changed digit fails.
+- **On other platforms** text is ignored. All else is compared under the golden's tolerance, so a
+  longer word, another font weight or a moved line still fails.
 
-1. **On the platform it was recorded on:** text is compared too. By default at most 5% of the
-   pixels of any 16x16 square of text may differ: the same OS draws the same glyphs alike across
-   its versions (a pixel per square, measured between macOS 15 on CI and macOS 26), a changed
-   digit differs by 24%.
-2. **On any other platform:** the same golden, with text ignored by default (everything else is
-   compared under the golden's tolerance). Changes that move anything (a longer word, another
-   weight, a shifted line) still fail; changes of text alone (a digit, a color) do not. A failure
-   names the platform the golden was recorded on.
-
-A golden without that chunk (recorded by Flutter, or by gleon before 0.5.0) counts as recorded on
-the `fallback_platform` of its `.gleon/gleon.yaml`, else as recorded nowhere known: then no
-platform compares its text, and a pass whose text differed says so once per test process
-(`flutter test` runs each test file in its own). Record such goldens again with
-`flutter test --update-goldens` on your main platform: the same image is written once more, with
-its stamp. Tools that strip text chunks from PNGs (optimizers such as `oxipng --strip`) drop the
-platform too.
-
-**CI recipe:** run one job on the platform you record goldens on (a macOS runner for goldens
-recorded on a Mac). It is the only job that compares text; the others compare everything else.
-With a `.gleon/gleon.yaml` naming that platform as `fallback_platform`, set
-`GLEON_REQUIRE_CANONICAL=1` in that job: goldens recorded on other platforms are then compared as
-its own, so their glyphs fail until they are recorded there.
+**CI:** run one job on the platform that records your goldens (a macOS runner for goldens of a
+Mac). Only this job compares text. With that platform as `fallback_platform` in
+`.gleon/gleon.yaml`, set `GLEON_REQUIRE_CANONICAL=1` in this job: it then compares the text of
+every golden as its own, also of goldens recorded on other platforms (under the text tolerance:
+5% of each square, or the `textTolerance` you set). Their glyphs fail there where they differ,
+until the golden is recorded on that platform.
 
 ### Recording goldens on any platform
 
-`flutter test --update-goldens` works on every platform and writes the golden stamped with the
-platform it ran on:
+`flutter test --update-goldens` works on every platform and stamps the golden with that platform.
+A contributor on Linux can add a screen: its golden compares text on Linux and ignores it on
+macOS.
 
-| The golden                                               | `--update-goldens`                                                                                                                                                                        |
-| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Missing, recorded on this platform, or without a stamp   | written, stamped with this platform (the same image too, once, for the stamp)                                                                                                             |
-| The same image, stamped                                  | left as it is                                                                                                                                                                             |
-| Recorded on another platform, no `fallback_platform`     | written: nothing else could record it again                                                                                                                                               |
-| Recorded on another platform, with a `fallback_platform` | left as it is while only its text differs (one line says so and names the `fallback_platform`), so it never flips between platforms over their glyphs; written when anything else changes |
-| Recorded elsewhere, updated on the `fallback_platform`   | written: the `fallback_platform` records it again                                                                                                                                         |
+<details>
+<summary>What <code>--update-goldens</code> does with an existing golden</summary>
 
-So a contributor on Linux adds or changes a screen with `--update-goldens`, and the golden then
-compares its text on Linux and ignores it on macOS. The `fallback_platform` is the canonical
-platform of a workspace: it warns about each golden recorded elsewhere (its text is not compared
-there), `--update-goldens` there records them again, and `GLEON_REQUIRE_CANONICAL=1` makes it
-compare them as its own (see the CI recipe above). To record goldens on the canonical platform
-from CI, let a job you start by hand there run `flutter test --update-goldens` and upload the
-goldens for you to commit, or let the [gleon CLI](#the-gleon-cli-optional) commit the
-candidates of a failing CI run with `/gleon approve`.
+| The golden                                               | `--update-goldens`                                                                                                                       |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Missing, recorded on this platform, or without a stamp   | written and stamped with this platform (the same image too, once, for the stamp)                                                        |
+| The same image, stamped                                  | kept                                                                                                                                     |
+| Recorded on another platform, no `fallback_platform`     | written: no other platform could record it again                                                                                         |
+| Recorded on another platform, with a `fallback_platform` | kept while only its text differs (one line says so), so it never flips between platforms over their glyphs; written when all else changes |
+| Recorded elsewhere, updated on the `fallback_platform`   | written: the `fallback_platform` records it again                                                                                        |
+
+The `fallback_platform` is the canonical platform of a workspace. It warns about each golden
+recorded elsewhere (their text is not compared there), and `--update-goldens` there records them
+again. To record on it from CI, let a job there run `flutter test --update-goldens` and upload the
+goldens, or let the [gleon CLI](#the-gleon-cli-optional) commit the candidates of a failed run
+with `/gleon approve`.
+
+</details>
+
+<details>
+<summary><code>textTolerance</code>: compare text on other platforms too, or never</summary>
 
 `textTolerance` (0.0–1.0, or `text_tolerance` of the golden's rule) is the largest share of
-differing pixels allowed in any 16x16 square of text. Unset, it depends on the golden: 0.05 on
-the platform it was recorded on, 1 (text never fails) anywhere else. A value you set always
-applies: lower it to compare text on other operating systems too, at your own risk, or set 1 to
-turn text comparison off on the golden's platform as well:
+differing pixels in any 16x16 square of text. Unset, it is 0.05 on the golden's platform and 1
+(text never fails) on the others. A value you set applies on every platform: lower it to compare
+text on other operating systems too (at your own risk), or set 1 to never compare text.
 
 ```dart
 await expectLater(
   find.byType(MyWidget),
-  matchesGoldenFile(
-    'goldens/my_widget.png',
-    textTolerance: 0.1, // text compared on other operating systems too
-  ),
+  matchesGoldenFile('goldens/my_widget.png', textTolerance: 0.1),
 );
 ```
 
-The boxes of text come from the render tree: one per line of each paragraph and editable text
-that is painted, grown by an eighth of the line's height for ink beyond it (diacritics, negative
-letter spacing, outlined text), clipped like the text is, without `WidgetSpan`s. Text laid out
-but not painted has none (the hidden pages of an `IndexedStack`, `Offstage`, `Visibility`, a
-route under an opaque one), so it never hides changes of what is painted there. A line of rotated
-or skewed text is covered by pieces about as long as it is high (at most 64), not by one box
-around the whole line; a quarter or half turn keeps one box. Icons are text too (`Icon` draws a
-glyph of an icon font, which each OS rasterizes its own way): an icon swapped for another of the
-same size passes on other platforms by default. A box keeps covering its text when an opaque
-widget is painted over it. On macOS, at 0.1, every mutation of the package tests fails (a changed
-digit with 24% of a square, a frame tight around text with 23%, the rest with 51% or more); with
-text ignored only those that move pixels outside the text do.
+</details>
 
-A widget (a `Finder`) or a `ui.Image` is compared as raw pixels: a PNG is encoded only to keep
-the candidate of a failure (see [Metrics](#metrics)). Text applies to widgets only, with every
-tolerance (with `ssim` it is judged by the same tiles and left out of both SSIM gates; a warning
-when a byte or an image input leaves a `textTolerance` unused); `ignoreRegions` beat it, for
-unstable backgrounds under text. Byte and image inputs (`Uint8List`, `ui.Image`) have no text
-boxes: their text is compared like every other pixel, so they fail on other operating systems
-wherever glyphs differ; match a widget instead.
+<details>
+<summary>Goldens without a stamp</summary>
 
-Compared exactly, so different on other operating systems:
+A golden without the stamp (recorded by Flutter, or by gleon before 0.5.0) counts as recorded on
+the `fallback_platform` of its `.gleon/gleon.yaml`. Without one, no platform compares its text,
+and a pass whose text differed says so once per test process. Run `flutter test --update-goldens`
+on your main platform to stamp such goldens: the same image is written once more. PNG optimizers
+that strip text chunks (`oxipng --strip`) remove the stamp.
 
-- Text drawn on a canvas (`TextPainter` in a `CustomPainter`, charts): it has no render object
-  to take boxes from.
-- `TextStyle.shadows`: Flutter's tests turn elevation shadows off (`debugDisableShadows`), not
-  the shadows of text.
+</details>
 
-With `debugDefaultTargetPlatformOverride` set to iOS or macOS, Material's theme asks for Apple's
-system fonts, which no test can load: that text stays in Flutter's test font (the same on every
-OS, but boxes). Bundle a font and name it in the theme instead. Fonts shipped as TrueType
-collections (`.ttc`) are loaded as they are, so their line heights on Windows can differ.
+<details>
+<summary>Which text is compared as text</summary>
+
+- The boxes of text come from the render tree: one per line of each painted paragraph and
+  editable text, grown by an eighth of the line height for ink beyond it, clipped like the text.
+  Text that is laid out but not painted (`Offstage`, `Visibility`, the hidden pages of an
+  `IndexedStack`, a route under an opaque one) has no box. A rotated or skewed line is covered by
+  pieces about as long as it is high.
+- Icons are text too: an icon swapped for another of the same size passes on other platforms.
+- Only widgets (a `Finder`) have text boxes. Byte and image inputs (`Uint8List`, `ui.Image`)
+  compare text like all other pixels, so they fail on other operating systems where glyphs
+  differ: match a widget instead. `ignoreRegions` beat text boxes.
+- Compared exactly, so different on other operating systems: text drawn on a canvas
+  (`TextPainter` in a `CustomPainter`, charts) and `TextStyle.shadows`.
+- With `debugDefaultTargetPlatformOverride` set to iOS or macOS, Material asks for Apple's system
+  fonts, which no test can load: that text stays in boxes. Bundle a font and name it in the theme.
+- Windows line metrics of the fonts are aligned with those of macOS and Linux, so line heights on
+  Windows can differ from the real app there. TrueType collections (`.ttc`) load as they are.
+
+</details>
 
 ## Configuration with `.gleon/gleon.yaml`
 
-Suite settings live in the [gleon CLI](https://github.com/gleon-rs/gleon)'s workspace file —
-the very same file, so a project that later adopts the CLI keeps its rules. The smallest useful
-one names the platform the goldens are recorded on:
+Rules for many goldens live in `.gleon/gleon.yaml`, the workspace file of the
+[gleon CLI](https://github.com/gleon-rs/gleon). It is the same file, so a project that adopts
+the CLI later keeps its rules. Without it, gleon behaves like Flutter. The smallest useful file
+names the platform that records the goldens:
 
 ```yaml
 # .gleon/gleon.yaml
 fallback_platform: macos-aarch64
 ```
 
-Each golden belongs to the nearest directory above it with `.gleon/gleon.yaml` (its workspace;
-the working directory of the test does not matter, and one test run may span several
-workspaces), no further up than the repository root (the first directory with `.git`, `.hg`,
-`.jj` or `.sl`), and never the home directory or a directory above it unless that is a repository
-root itself (CI that points `HOME` at the checkout). The rule of a golden is resolved by its path relative
-to the workspace root, with the CLI's own code; the file is read again when it changes.
+<details>
+<summary>A full example</summary>
 
 ```yaml
 # .gleon/gleon.yaml (the gleon CLI writes one with `gleon init`)
 # For the gleon CLI: the goldens are the baselines (the package ignores this line).
 baselines: goldens
 
-# The canonical platform: goldens without a platform stamp were recorded there, see Real text.
+# The canonical platform: goldens without a stamp were recorded there (see Real text).
 fallback_platform: macos-aarch64
 
 exclude: "test/goldens/experimental/**"
@@ -342,7 +296,7 @@ screenshots:
     masks:
       - path: "**/clock*.png"
         zones: [{ x: 0, y: 0, width: "25%", height: 40 }] # pixels or "NN%"
-  - include: "test/widgets/**/*.png" # before test/**: the first match wins
+  - include: "test/widgets/**/*.png"
     mode: exact # every pixel, no `diff` keys
   - include: "test/**/*.png"
     mode: pixel
@@ -356,96 +310,94 @@ metrics:
 artifacts: .gleon/runs/latest/artifacts
 ```
 
-- **Globs** (`include`, `exclude`, mask `path`) match paths relative to the workspace root,
-  case-insensitively: `*` and `?` stay within a directory, `**` (a whole segment) crosses
-  directories, `[abc]` and `[!abc]` are character classes. `{a,b}` alternatives, `[^abc]`,
-  `[/]`, `\`, a leading `/`, a `.`, `..` or empty segment and a trailing `/` are config errors
-  naming the pattern: they would match differently than written, differently on Windows, or
-  never.
-- **`mode`** is required in every rule (`exact`, `pixel` or `ssim`), and `pixel` requires
-  `diff.threshold` (like `maxDiffRatio`): no share of the pixels is ever tolerated silently.
-  **Diff keys** belong to their mode (`threshold` and the pixel options to `pixel`,
-  `min_similarity` and `color_tolerance` to `ssim`, none to `exact`): a key of another mode is a
-  config error, even at its default, never silently ignored.
-- **Priority:** the `tolerance` argument of a call beats the golden's rule, which beats exact;
-  `textTolerance` beats the rule's `text_tolerance`. Masks of the rule are added to the call's
-  `ignoreRegions`.
-- `fallback_platform` applies to every golden of the workspace, matched by a rule or not. A
-  golden matched by `exclude` (or inside a directory the CLI never scans, such as `build/`) is
-  the one opt-out: compared exactly, its text as pixels like the rest (unless the call sets a
-  `textTolerance`), and written without a stamp, like Flutter does. A golden no
-  rule matches is compared exactly and records nothing, but is stamped and tracked like the rest.
-- Golden paths must be valid gleon test names (`[a-z0-9_.-]` segments, case-insensitive), as for
-  `gleon stage`; an invalid config or name fails the test with the file path and the parser's
-  message. Unknown keys are rejected.
-- `fallback_platform` takes OS and architecture only (renderer and labels are ignored), under the
-  names a process reports (`macos-aarch64`, `linux-x86_64`, `linux-aarch64`, `windows-x86_64`;
-  `macos-arm64`, `linux-x64` and `darwin` are read as them). `required_version` is optional and
-  only checked for syntax here (the CLI enforces it); `platform` and the `GLEON_PLATFORM` /
-  `GLEON_FALLBACK_PLATFORM` variables are the CLI's and unused by the package.
-  `GLEON_REQUIRE_CANONICAL` (1/0, like `GLEON_METRICS`) makes the `fallback_platform` compare
-  goldens recorded elsewhere as its own.
-- Without `.gleon/gleon.yaml` everything behaves like Flutter: exact by default, no metrics, and
-  nothing is written on passing tests (goldens are still stamped by `--update-goldens`).
+</details>
 
-### Failure images
+<details>
+<summary>How the rules apply</summary>
 
-A failing golden covered by a rule also keeps its images in the workspace's artifacts directory,
-`<artifacts>/<platform>/<test name>/golden.png`, `candidate.png` and `diff.png`, where
-`<platform>` is the platform the test ran on (`macos-aarch64`, `linux-x86_64`, ...; a missing
-golden keeps its candidate only), and its case report (see [Metrics](#metrics)), with or without
-metrics; the failure message names the report. When the golden passes again, the images are
-removed and so is the report (with metrics, the report of the pass replaces it). The directory is
-`.gleon/runs/latest/artifacts` unless `artifacts:` or the environment variable
-`GLEON_ARTIFACTS_DIR` (which beats the file) names another directory under `.gleon/runs/` outside
-`latest/` (any other value fails every golden; `<platform>/` is added below it too), so the images
-are always ignored by Git. Platforms sharing a workspace (a Mac and a Linux container on one
-checkout) never overwrite each other's images or reports. To keep them on a RAM disk, link
-`.gleon/runs` there. The `failures/` files next to the test are written as before.
+- **Workspace:** a golden belongs to the nearest directory above it with `.gleon/gleon.yaml`. The
+  search stops at the repository root (`.git`, `.hg`, `.jj` or `.sl`) and never takes the home
+  directory or a directory above it, unless that is a repository root. The working directory of
+  the test does not matter; the file is read again when it changes.
+- **Globs** (`include`, `exclude`, mask `path`) match paths relative to the workspace root, without
+  case: `*` and `?` stay within a directory, `**` crosses directories, `[abc]` and `[!abc]` are
+  classes. `{a,b}`, `[^abc]`, `\`, a leading `/`, a `.`, `..` or empty segment and a trailing `/`
+  are config errors: they would match differently than written.
+- **`mode`** is required in each rule, and `pixel` requires `diff.threshold`. A `diff` key of
+  another mode is a config error, never silently ignored. Unknown keys are rejected.
+- **Priority:** the `tolerance` of a call beats the rule, which beats exact; `textTolerance` beats
+  `text_tolerance`. The masks of the rule are added to the call's `ignoreRegions`.
+- **`fallback_platform`** applies to every golden of the workspace. It takes OS and architecture
+  under the names a process reports (`macos-aarch64`, `linux-x86_64`, `linux-aarch64`,
+  `windows-x86_64`; `macos-arm64`, `linux-x64` and `darwin` read as them).
+- **`exclude`** is the opt-out: such a golden compares exactly, its text as pixels, and is written
+  without a stamp, as Flutter does. A golden that no rule matches compares exactly too, but is
+  stamped and tracked.
+- Golden paths must be valid gleon test names (`[a-z0-9_.-]` segments, without case). An invalid
+  config or name fails the test with the file path and the reason.
+- `required_version`, `platform` and the `GLEON_PLATFORM` / `GLEON_FALLBACK_PLATFORM` variables
+  belong to the CLI; the package checks only their syntax or ignores them.
+
+</details>
 
 ## Metrics
 
-Passing goldens don't show how close they came to failing. A golden covered by a rule writes a
-case report to `.gleon/runs/latest/cases/<platform>/<test name>.json` when it fails, and with
-metrics on for every comparison (overwritten by each run; `.gleon/.gitignore` ignores `runs/` and
-is created like `gleon init` would if it is missing); metrics also print one line:
+A failing golden that a rule covers keeps its `golden.png`, `candidate.png` and `diff.png` in
+`.gleon/runs/latest/artifacts/<platform>/<test name>/`, and a case report in
+`.gleon/runs/latest/cases/<platform>/`; the failure message names the report. Both go away when the
+golden passes again. Git ignores `.gleon/runs/`.
+
+With metrics on, every comparison of a golden that a rule covers writes a case report and prints
+one line, so you can set tolerances from measurements:
 
 ```text
 gleon ✓ test/goldens/swatch.png  ssim 0.931 (≥0.800, +0.131)  color 5.2 (≤8, +2.8)  12 ms
 ```
 
-Turn them on with `metrics: {enabled: true}` in `.gleon/gleon.yaml` or with the environment
-variable `GLEON_METRICS` (which beats the file): `1` or `true` turns them on, `0` or `false` off
-(any case, surrounding spaces ignored), an empty value counts as unset, and any other value fails
-every golden. `metrics: {console: false}` keeps the files and drops the lines. A report that
-cannot be written is printed as a warning and never fails the test. A case report records the
-golden SHA-256 and size (and `golden.platform`, the platform its stamp names), the candidate size
-and SHA-256 (a widget's raw pixels have one only when its PNG is kept), the effective tolerance
-and masks, the outcome (`identical`, `match`, `mismatch`, `dimension_mismatch`, `error` with its
-kind, `updated`, `missing` for a golden that does not exist yet), the metrics with their headroom
-to each threshold (for SSIM `min_ssim - min_similarity` and `color_tolerance - peak_excess`), the
-paths of the failure images, the test name, platform, Flutter version and timings. The format is
-a JSON Schema in the gleon repository (`gleon-model/schema/case.v5.json`), shared with the CLI.
+Turn them on in `.gleon/gleon.yaml`, or with `GLEON_METRICS=1` (which beats the file). A golden
+that no rule covers records nothing, also with `GLEON_METRICS=1`:
 
-Reports of different goldens come from different test processes and stay until overwritten, so a
-report does not show by itself which run wrote it. Set `GLEON_RUN_ID` (e.g.
-`GLEON_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}` in GitHub Actions; up to 128
-letters, digits, `.`, `_` and `-`) to stamp every report of a run with the same id. A golden that
-cannot be read or written is recorded as an `io` error.
+```yaml
+# .gleon/gleon.yaml
+screenshots:
+  - include: "test/**/*.png"
+    mode: exact
+metrics:
+  enabled: true
+```
 
-Use them to set tolerances from measurements instead of guesses, e.g. by collecting the reports
-from CI runs on every OS.
+<details>
+<summary>Case reports, run ids and the artifacts directory</summary>
 
-### The gleon CLI (optional)
+- `GLEON_METRICS` beats the file: `1`/`true` on, `0`/`false` off (any case), empty is unset, any
+  other value fails every golden. `metrics: {console: false}` keeps the files and drops the lines.
+- A case report holds the SHA-256 and size of golden and candidate, the platform of the golden's
+  stamp, the tolerance and masks, the outcome (`identical`, `match`, `mismatch`,
+  `dimension_mismatch`, `error`, `updated`, `missing`), the metrics with their headroom to each
+  threshold, the failure images, the test name, platform, Flutter version and timings. The JSON
+  Schema is `gleon-model/schema/case.v5.json` in the gleon repository, shared with the CLI.
+- Each test file runs in its own process, so reports of one run stay until overwritten. Set
+  `GLEON_RUN_ID` (for example `${{ github.run_id }}-${{ github.run_attempt }}`; letters, digits,
+  `.`, `_` and `-`, up to 128) to stamp the reports of a run with one id.
+- `artifacts:` or `GLEON_ARTIFACTS_DIR` (which beats the file) can name another directory under
+  `.gleon/runs/` outside `latest/`; any other value fails every golden. Platforms that share a
+  workspace (a Mac and a Linux container on one checkout) never overwrite each other's images or
+  reports. To keep them on a RAM disk, link `.gleon/runs` there.
+- A report that cannot be written prints a warning and never fails the test. A golden that cannot
+  be read or written is recorded as an `io` error.
 
-Each test file runs in its own process, so `flutter test` alone cannot sum up a run. The case
-reports are also the input of the [gleon CLI](https://github.com/gleon-rs/gleon), which reads
-the workspace you already have. You don't need it to use this package. It adds:
+</details>
+
+## The gleon CLI (optional)
+
+`flutter test` runs each test file in its own process, so it cannot sum up a run. The
+[gleon CLI](https://github.com/gleon-rs/gleon) reads the same workspace and case reports, and
+adds:
 
 - the totals of a run and one line per failure, at the end of the test output;
 - an HTML report with each failing golden, its candidate and diff side by side;
-- in CI, a PR comment listing the failures and a `/gleon approve` comment that commits the new
-  goldens (stamped with the platform that recorded them) to the PR branch.
+- in CI, a PR comment with the failures, and a `/gleon approve` comment that commits the new
+  goldens to the PR branch.
 
 ```bash
 gleon init                       # next to pubspec.yaml; keeps an existing .gleon/gleon.yaml
@@ -454,16 +406,16 @@ gleon report html --out .gleon/runs/latest/report.html
 gleon approve                    # writes the failed candidates over their goldens
 ```
 
-`gleon init` writes `baselines: goldens` (the goldens next to the tests are the baselines; add
-the line yourself to a config you wrote by hand). In GitHub Actions, the gleon Action runs the
-tests with `command: verify` and `test-command: flutter test`; its README has the workflow, and
-the one for `/gleon approve`. The CLI is free for local use and for public repositories; private
-repositories need a license in CI. Binaries for Linux x64, macOS on Apple silicon and Windows x64
-are on its [releases](https://github.com/gleon-rs/gleon/releases) page.
+You do not need the CLI to use this package. It is licensed under the Business Source License
+1.1: free for individuals, hobbyists, non-commercial open-source repositories and local
+development, and free for all users until December 31, 2026 (see its
+[license](https://github.com/gleon-rs/gleon#-license)). The
+[gleon Action](https://github.com/gleon-rs/gleon#-cicd-integration-github-actions) runs it in
+GitHub Actions.
 
 ## Golden harnesses
 
-Packages that build golden scenes (alchemist, golden_toolkit, golden_screenshot, …) call
+Harnesses that build golden scenes (alchemist, golden_toolkit, golden_screenshot, …) call
 `flutter_test`'s own `matchesGoldenFile`. Install `GleonFileComparator` once to compare their
 goldens with gleon too:
 
@@ -479,42 +431,37 @@ Future<void> testExecutable(FutureOr<void> Function() testMain) async {
 }
 ```
 
-Goldens stay where they are (a `LocalFileComparator` subclass keeps naming them, through its
-`getTestUri`; installing twice keeps the first); tolerances and masks come from
-`.gleon/gleon.yaml`, failures and `--update-goldens` behave as with gleon's matcher. Which path
-compares best:
-
-1. **A widget (`Finder`) through gleon's `matchesGoldenFile`:** its raw pixels with the boxes of
-   its text, so real text is compared right, and no PNG is encoded (see
-   [Performance](#performance)). It works with `GleonFileComparator` installed too.
-2. **A `ui.Image` or PNG bytes through gleon's matcher, and everything through
-   `GleonFileComparator`:** best effort. The same engine and rules, but without text boxes, so
-   text is compared like every other pixel; a comparator also gets a PNG that Flutter encoded
-   first. Text a harness has already replaced in its image (alchemist's `obscureText` draws
-   glyphs as rectangles) cannot be compared at all.
-
-With real fonts (`loadAppFonts`) this matters across operating systems: a golden compared
-through `GleonFileComparator` sees no text, so on another OS than its own its glyphs differ as
-pixels and fail, and `--update-goldens` there writes it over even with a `fallback_platform`
-(only text it can see is ignored). Compare such goldens on the platform they are recorded on,
-or match the widgets with gleon's `matchesGoldenFile` (for alchemist:
-[doc/alchemist.md](doc/alchemist.md)).
-
-Whichever `goldenFileComparator` is assigned last wins: a harness that installs a tolerant
-comparator of its own (alchemist with `diffThreshold` above 0, golden_screenshot's default
-`allowedDiffPercent`, ff_golden with a non-strict tolerance) bypasses gleon or refuses to run.
-Turn its threshold off and set the tolerance in `.gleon/gleon.yaml`.
-
-alchemist can hand its widgets to gleon's matcher instead, real text included:
+Tolerances and masks then come from `.gleon/gleon.yaml`. A comparator gets PNG bytes without text
+boxes, so with real fonts its goldens fail on other operating systems. Where you can, match the
+widget with gleon's `matchesGoldenFile`. alchemist can do that: see
 [doc/alchemist.md](doc/alchemist.md).
+
+<details>
+<summary>Comparator details</summary>
+
+- Goldens stay where they are: a `LocalFileComparator` subclass keeps naming them through its
+  `getTestUri`. Installing twice keeps the first. Failures and `--update-goldens` behave as with
+  gleon's matcher.
+- The best path is a widget (`Finder`) through gleon's `matchesGoldenFile`: its raw pixels with
+  the boxes of its text, and no PNG encoding. A `ui.Image` or PNG bytes through gleon's matcher,
+  and everything through `GleonFileComparator`, are best effort: the same engine and rules,
+  without text boxes.
+- Through `GleonFileComparator`, `--update-goldens` on another OS than the golden's writes it over
+  even with a `fallback_platform`, because the comparator sees no text to ignore.
+- The `goldenFileComparator` assigned last wins. A harness that installs a tolerant comparator of
+  its own (alchemist with `diffThreshold` above 0, golden_screenshot's default
+  `allowedDiffPercent`, ff_golden with a non-strict tolerance) bypasses gleon or refuses to run:
+  turn its threshold off and set the tolerance in `.gleon/gleon.yaml`.
+- Text that a harness has already replaced in its image (alchemist's `obscureText`) cannot be
+  compared.
+
+</details>
 
 ## Performance
 
-A widget golden (a `Finder`), from the captured frame to the verdict: Flutter encodes the frame
-as a PNG and compares it with its comparator (a pass short-cuts on equal bytes); gleon passes the
-frame's raw pixels and encodes a PNG only to keep it (a failure); a `ui.Image` goes the same way.
-Rendering the frame is the same for both and not measured. Exact, no `.gleon/` workspace; Apple
-M3 Max, macOS, Flutter 3.47.6, measured with gleon 0.3.0, mean latency with
+A widget golden from the captured frame to the verdict: Flutter encodes the frame as a PNG, gleon
+compares its raw pixels and encodes a PNG only to keep a failure. Exact, no workspace; Apple M3
+Max, Flutter 3.47.6, gleon 0.3.0, mean latency with
 [bench_press](https://pub.dev/packages/bench_press):
 
 | Scenario                                      | Golden    | Flutter SDK |   gleon | Speedup |
@@ -525,21 +472,21 @@ M3 Max, macOS, Flutter 3.47.6, measured with gleon 0.3.0, mean latency with
 | Failing (small change, failure files written) | 400x300   |     43.7 ms |  1.9 ms |     23x |
 |                                               | 390x844   |     77.5 ms |  4.2 ms |     18x |
 
-Encoding the PNG is most of Flutter's cost. gleon's is reading the frame's pixels (`toByteData`,
-which Flutter pays as well) and decoding the golden PNG; comparing them is a `memcmp` per equal
-row. gleon's failing samples (writing files) varied too much for bench_press to resolve a ratio,
-so their speedups are ratios of means.
+<details>
+<summary>Real text, PNG byte inputs and how the numbers were taken</summary>
 
-The table leaves out what gleon adds for real text: finding the painted text of the widget (a
-walk of its render tree and a replay of its paint without drawing). Measured the same way with
-gleon 0.5.0: 0.6 ms for 50 lines of text, 1.9 ms for a 1170x2532 screen of 1000 rows (127
-visible). Widgets full of text therefore gain less than the table shows: 0.6 ms of text on top
-of the 0.43 ms of the passing 400x300 golden would bring its 22x to about 9x.
+Encoding the PNG is most of Flutter's cost. gleon's cost is reading the frame's pixels
+(`toByteData`, which Flutter pays too) and decoding the golden; comparing is a `memcmp` per equal
+row. The failing samples varied too much for bench_press to resolve a ratio, so their speedups are
+ratios of means.
 
-One golden comparison of PNG bytes (byte inputs), Flutter's own comparator
-(`LocalFileComparator`, behind `flutter_test`'s `matchesGoldenFile`) against gleon, with the same
-golden file and candidate bytes, measured inside `flutter test` (mean latency; the resolved
-ratios have 95% confidence intervals within ±8%):
+Finding the painted text of a widget adds time (measured with gleon 0.5.0): 0.6 ms for 50 lines
+of text, 1.9 ms for a 1170x2532 screen of 1000 rows. 0.6 ms of text on top of the 0.43 ms of the
+passing 400x300 golden would bring its 22x to about 9x.
+
+One comparison of PNG bytes, Flutter's `LocalFileComparator` against gleon, with the same golden
+and candidate, inside `flutter test` (mean latency; resolved ratios within ±8% at 95%
+confidence):
 
 | Scenario                                      | Golden    | Flutter SDK | gleon (exact) | Speedup | gleon `ssim` |
 | --------------------------------------------- | --------- | ----------: | ------------: | ------: | -----------: |
@@ -552,62 +499,54 @@ ratios have 95% confidence intervals within ±8%):
 | Failing (small change, failure files written) | 400x300   |     35.7 ms |       1.76 ms |     20x |      1.79 ms |
 |                                               | 390x844   |     63.0 ms |       3.69 ms |     17x |      3.83 ms |
 
-Across the resolved cases gleon is 5.8x faster (geometric mean; the failing ones write files and
-varied too much to resolve), and tolerant `ssim` costs no more than exact. A failing 1170x2532
-golden is beyond bench_press's 200 ms limit for one operation and not measured here. Flutter
-decodes through the engine but inverts both images and compares them pixel by pixel in Dart, and
-a failure renders two diff images and encodes four PNGs; gleon decodes and compares in Rust and
-writes one diff image.
+Across the resolved cases gleon is 5.8x faster (geometric mean), and `ssim` costs no more than
+exact. Flutter inverts both images and compares them pixel by pixel in Dart, and a failure renders
+two diff images and encodes four PNGs; gleon decodes and compares in Rust and writes one diff
+image.
 
-## How `ssim` decides
-
-Two gates, both computed only around the pixels that actually differ:
-
-1. **Envelope gate** (full resolution): every pixel of one image must lie within the value range
-   of the other image's 3x3 neighborhood (premultiplied RGBA, so alpha counts), widened by
-   `colorTolerance` plus a share of the local contrast. Re-rasterization and sub-pixel shifts only
-   produce values between neighbors; new content, color and alpha changes don't. Unexplained
-   pixels fail as regions of 3+ pixels or with a strong deviation.
-2. **Structural gate** (half resolution, as in MS-SSIM): the _minimum_ local SSIM (11x11 Gaussian
-   window) must reach `minSimilarity`, catching structural loss such as blur. The minimum, not the
-   mean, so a small change on a large golden is not averaged away.
-
-The defaults are calibrated on a corpus of benign rendering noise vs. regressions in
-`gleon-engine/tests/ssim_corpus.rs` in the gleon repository; off-the-shelf crates (`image-compare`,
-pixelmatch/`dify`, `butteraugli`) could not separate that corpus with any threshold. Content
-whose pixels depend on the GPU or a shader (`CustomPaint` with fragment shaders) differs between
-machines even on one OS: compare it under `ssim`.
+</details>
 
 ## Known limitations
 
-- `ssim` fails when glyphs move by half a pixel or more — typical of different operating
-  systems' font engines — where it has no text boxes: byte and image inputs, text drawn on a
-  canvas. The text of a widget is judged by its tiles instead (see Real text).
-- `ssim` can pass a low-contrast color change of a one-pixel line. Use `exact`/`pixel` where every
-  pixel matters.
-- `ssim` compares images up to 4096x4096 pixels (16,777,216). `--update-goldens` does not record a
-  larger golden under `ssim`, and gleon reports such a golden as not comparable, also when the
-  images are identical. Use `exact` or `pixel` for larger images.
-- gleon's matcher takes the directory of the goldens from `goldenFileComparator`, which must be
-  a `LocalFileComparator`: Flutter's default, a subclass of it (alchemist's, the
-  `_TolerantGoldenFileComparator` example of Flutter's documentation) or `GleonFileComparator`.
-  A subclass's own comparison and threshold never run; gleon's tolerance applies. Any other
-  comparator (a remote golden store) fails with a message naming the ways out: remove it, or use
-  `ft.matchesGoldenFile` for those tests (see [Migrate](#migrate)).
-- alchemist with `obscureText` (its default for CI goldens) passes an image of blocked text: no
-  text is compared there (see [doc/alchemist.md](doc/alchemist.md)).
-- Web (`--platform chrome`) does not compile: the package uses `dart:ffi`. Keep web tests in files
-  that import `flutter_test` (with `hide matchesGoldenFile` next to a gleon import, or a prefixed
-  `ft.matchesGoldenFile`, see [Migrate](#migrate)) and run them apart.
-- Linux hosts need the glibc of Ubuntu 26.04 or newer (the `PLATFORMS.txt` of each release names
-  the exact version); musl (Alpine) and macOS x64 are not supported. A library the host cannot
-  load fails the first golden with a message saying so and how to build one for that host.
-- On-device tests and app builds for Android, iOS or other targets get no native library (the
-  build hook adds none instead of failing the build), so the first `matchesGoldenFile` there fails
-  with a message saying the library is missing. A desktop debug `flutter run` of an app with gleon
-  in `dev_dependencies` still runs the hook and fetches the library: Flutter runs the hooks of
-  dev_dependencies for every non-release build, and the hook cannot tell a test build from an app
-  build.
+- `ssim` fails when glyphs move by half a pixel or more where it has no text boxes (byte and image
+  inputs, text drawn on a canvas). It can pass a low-contrast color change of a one-pixel line:
+  use `exact` or `pixel` where every pixel matters.
+- `ssim` compares images up to 4096x4096 pixels. It does not record a larger golden and reports
+  one as not comparable: use `exact` or `pixel` there.
+- gleon's matcher needs `goldenFileComparator` to be a `LocalFileComparator` (Flutter's default,
+  a subclass of it, or `GleonFileComparator`). Any other comparator fails with a message that
+  names the ways out (see [Migrate](#migrate)).
+- Web (`--platform chrome`) does not compile: the package uses `dart:ffi`. Keep web tests in
+  files that import `flutter_test`, and run them apart.
+- Linux needs the glibc of Ubuntu 26.04 or newer; musl (Alpine) and macOS x64 are not supported.
+  On-device tests and app builds for Android, iOS and other targets get no native library, so
+  `matchesGoldenFile` fails there with a message that says so.
+
+<details>
+<summary>Native library: where it comes from, and overrides</summary>
+
+The package contains the native library of each supported host in `native/<target>/`. The build
+hook takes the one of the test host; it never needs Rust or a network. The hook also runs for a
+desktop debug `flutter run` of an app that has gleon in `dev_dependencies`: Flutter runs the hooks
+of dev dependencies for every non-release build.
+
+For a host without a prebuilt library, build one from a
+[gleon](https://github.com/gleon-rs/gleon) checkout and point the package at it, in the app's
+`pubspec.yaml`:
+
+```yaml
+hooks:
+  user_defines:
+    gleon:
+      ffi_path: path/to/libgleon_ffi.so # use this library file as is
+      # gleon_repo: ../gleon            # or build it from a gleon checkout
+```
+
+`ffi_path` wins over `gleon_repo`, which wins over the library of the package. Both must be
+paths. A git dependency on this repository and the `release_url` user-define are described in
+[CONTRIBUTING.md](CONTRIBUTING.md#git-dependencies-and-mirrors).
+
+</details>
 
 ## Contributing
 

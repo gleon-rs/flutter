@@ -384,6 +384,38 @@ void main() {
     });
   }
 
+  // A perspective narrows the far end of a line (a trapezoid) while its
+  // entries (0, 1) and (1, 0) stay 0. A translation of the line in the image
+  // would mix the perspective into them, so the line sits at the top left of
+  // the image, untranslated: only the perspective entries tell it is turned.
+  // The line (80px) fits the 100px boundary on one line.
+  testWidgets('a line in perspective is cut into pieces', (tester) async {
+    Future<int> regionsOf(Matrix4 transform) async {
+      await tester.pumpWidget(
+        _Boundary(
+          Align(
+            alignment: .topLeft,
+            child: Transform(
+              transform: transform,
+              child: const Text('abcdefgh', style: _style),
+            ),
+          ),
+        ),
+      );
+
+      return _regions(tester).length;
+    }
+
+    final perspective = Matrix4.identity()
+      ..setEntry(3, 2, 0.004)
+      ..rotateY(0.8);
+    expect(perspective.entry(0, 1), 0);
+    expect(perspective.entry(1, 0), 0);
+
+    expect(await regionsOf(Matrix4.identity()), 1);
+    expect(await regionsOf(perspective), greaterThan(1));
+  });
+
   testWidgets('editable text has a region', (tester) async {
     final controller = TextEditingController(text: 'ab');
     final focusNode = FocusNode();
