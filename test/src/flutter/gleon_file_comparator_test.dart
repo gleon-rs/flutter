@@ -31,8 +31,13 @@ void main() {
     await expectLater(Swatch.finder, matchesGoldenFile(Swatch.golden));
 
     await tester.pumpWidget(const Swatch(dot: Swatch.dotOffset));
-    final message = await matchesGoldenFile(Swatch.golden)
-        .matchAsync(Swatch.finder);
+    // A mismatch also in a run with `--update-goldens`, which would rewrite
+    // the golden instead.
+    final message = await withGoldenUpdates<Object?>(
+      () async =>
+          await matchesGoldenFile(Swatch.golden).matchAsync(Swatch.finder),
+      isUpdating: false,
+    );
     expect(message, allOf(contains('1 of 6000px'), contains('gleon exact')));
   });
 
