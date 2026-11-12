@@ -11,6 +11,15 @@ void main() {
 
   File fileIn(String name) => .new('${(temp ?? .systemTemp).path}/$name');
 
+  /// The failure of a write to a [_FullDisk].
+  final throwsWriteFailure = throwsA(
+    isA<FileSystemException>().having(
+      (error) => error.message,
+      'message',
+      _FullDisk.message,
+    ),
+  );
+
   test('creates missing parent directories', () async {
     final file = fileIn('a/b/c.bin');
     await AtomicWrite.bytes(file, const [1, 2, 3]);
@@ -68,6 +77,43 @@ void main() {
     );
   });
 
+  // A disk that fills up: the temp file is written part way.
+  test(
+    'a failed write is reported and deletes its partial temp file',
+    () async {
+      final file = fileIn('data.bin')..writeAsBytesSync(const [9, 8]);
+
+      await expectLater(
+        IOOverrides.runWithIOOverrides(
+          () => AtomicWrite.bytes(file, const [1, 2, 3, 4]),
+          _FullDisk(),
+        ),
+        throwsWriteFailure,
+      );
+      expect(file.readAsBytesSync(), [9, 8]);
+      expect(
+        file.parent.listSync().map(
+          (entity) => entity.uri.pathSegments.lastOrNull,
+        ),
+        ['data.bin'],
+      );
+    },
+  );
+
+  // Windows: a virus scanner may hold the partial temp file.
+  test('a temp file that cannot be deleted leaves the write error', () async {
+    final file = fileIn('data.bin');
+
+    await expectLater(
+      IOOverrides.runWithIOOverrides(
+        () => AtomicWrite.bytes(file, const [1, 2, 3, 4]),
+        _FullDisk(isLocked: true),
+      ),
+      throwsWriteFailure,
+    );
+    expect(file.existsSync(), isFalse);
+  });
+
   test(
     'a file that cannot be replaced is kept only with the expected content',
     () async {
@@ -105,4 +151,54 @@ void main() {
     },
     skip: Platform.isWindows ? 'no chmod on Windows' : null,
   );
+}
+
+/// A disk that fills up while a temp file (`*.tmp`) is written: half of its
+/// bytes land, then the write fails. When [isLocked], deleting it fails too.
+final class _FullDisk extends IOOverrides {
+  new({this.isLocked = false});
+
+  /// The message of a failed write.
+  static const message = 'No space left on device';
+
+  /// Whether the temp file cannot be deleted.
+  final bool isLocked;
+
+  @override
+  File createFile(String path) {
+    final file = super.createFile(path);
+
+    return path.endsWith('.tmp')
+        ? _PartialWrite(file, isLocked: isLocked)
+        : file;
+  }
+}
+
+/// A temp [_file] on a [_FullDisk].
+final class _PartialWrite extends Fake implements File {
+  new(this._file, {required this.isLocked});
+
+  /// Whether [delete] fails.
+  final bool isLocked;
+
+  final File _file;
+
+  @override
+  String get path => _file.path;
+
+  @override
+  Future<File> writeAsBytes(
+    List<int> bytes, {
+    FileMode mode = .write,
+    bool flush = false,
+  }) async {
+    await _file.writeAsBytes(bytes.sublist(0, bytes.length ~/ 2), flush: flush);
+
+    throw FileSystemException(_FullDisk.message, path);
+  }
+
+  @override
+  Future<FileSystemEntity> delete({bool recursive = false}) => isLocked
+      ? .error(FileSystemException('locked', path))
+      : _file.delete(recursive: recursive);
 }

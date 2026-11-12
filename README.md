@@ -1,5 +1,13 @@
 # gleon
 
+[![verify](https://github.com/gleon-rs/flutter/actions/workflows/ci.yaml/badge.svg)](https://github.com/gleon-rs/flutter/actions/workflows/ci.yaml)
+[![codecov](https://codecov.io/gh/gleon-rs/flutter/graph/badge.svg?token=7rCWP0verS)](https://codecov.io/gh/gleon-rs/flutter)
+[![coderabbit](https://img.shields.io/coderabbit/prs/github/gleon-rs/flutter?logo=vowpalwabbit&logoColor=orange&color=dark-green)](https://coderabbit.ai)
+[![issues](https://img.shields.io/github/issues-raw/gleon-rs/flutter)](https://github.com/gleon-rs/flutter/issues?q=is%3Aissue+is%3Aopen)
+[![points](https://img.shields.io/pub/points/gleon)](https://pub.dev/packages/gleon/score)
+[![license](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![package](https://img.shields.io/pub/v/gleon.svg)](https://pub.dev/packages/gleon)
+
 A drop-in replacement for Flutter's `matchesGoldenFile`, with a comparison engine in Rust (the
 same engine as the [gleon CLI](https://github.com/gleon-rs/gleon)):
 
@@ -49,11 +57,11 @@ arm64 (Ubuntu 26.04 or newer) and Windows x64. The API can change before 1.0.
 Run `flutter test --update-goldens` once on the platform where you record goldens. Then run
 `flutter test` on any platform.
 
-| You use                                                         | Comparison                                                | Text of widgets (real fonts)                                                |
-| --------------------------------------------------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------- |
-| Only the import                                                 | Exact, as in Flutter                                      | Compared on the platform that recorded the golden, ignored on the others    |
-| `tolerance:` on a call                                          | [`.pixel(…)` or `.ssim()`](#tolerance) for that golden    | The same                                                                    |
-| [`.gleon/gleon.yaml`](#configuration-with-gleongleonyaml)       | Rules per path, masks, metrics, the canonical platform    | The same; CI on the canonical platform can compare the text of every golden |
+| You use                                                   | Comparison                                             | Text of widgets (real fonts)                                                |
+| --------------------------------------------------------- | ------------------------------------------------------ | --------------------------------------------------------------------------- |
+| Only the import                                           | Exact, as in Flutter                                   | Compared on the platform that recorded the golden, ignored on the others    |
+| `tolerance:` on a call                                    | [`.pixel(…)` or `.ssim()`](#tolerance) for that golden | The same                                                                    |
+| [`.gleon/gleon.yaml`](#configuration-with-gleongleonyaml) | Rules per path, masks, metrics, the canonical platform | The same; CI on the canonical platform can compare the text of every golden |
 
 ### Migrate
 
@@ -97,10 +105,10 @@ await expectLater(
 );
 ```
 
-| Tolerance                                     | The golden passes when                                                                                       |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `.exact()`                                    | every pixel is identical, as in Flutter. Without `tolerance`, the golden's rule applies, else this.         |
-| `.pixel(maxDiffRatio: 0.005)`                 | at most this share of the pixels differs (0.0–1.0; see "Pixel options" below for rendering noise).          |
+| Tolerance                                      | The golden passes when                                                                                                               |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `.exact()`                                     | every pixel is identical, as in Flutter. Without `tolerance`, the golden's rule applies, else this.                                  |
+| `.pixel(maxDiffRatio: 0.005)`                  | at most this share of the pixels differs (0.0–1.0; see "Pixel options" below for rendering noise).                                   |
 | `.ssim(minSimilarity: 0.8, colorTolerance: 8)` | only rendering noise differs (anti-aliasing, sub-pixel shifts, color drift). Changed or missing content, color, alpha and blur fail. |
 
 Each variant takes only the parameters of its mode. Out-of-range values, and ignore regions that
@@ -198,13 +206,13 @@ macOS.
 <details>
 <summary>What <code>--update-goldens</code> does with an existing golden</summary>
 
-| The golden                                               | `--update-goldens`                                                                                                                       |
-| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Missing, recorded on this platform, or without a stamp   | written and stamped with this platform (the same image too, once, for the stamp)                                                        |
-| The same image, stamped                                  | kept                                                                                                                                     |
-| Recorded on another platform, no `fallback_platform`     | written: no other platform could record it again                                                                                         |
+| The golden                                               | `--update-goldens`                                                                                                                        |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Missing, recorded on this platform, or without a stamp   | written and stamped with this platform (the same image too, once, for the stamp)                                                          |
+| The same image, stamped                                  | kept                                                                                                                                      |
+| Recorded on another platform, no `fallback_platform`     | written: no other platform could record it again                                                                                          |
 | Recorded on another platform, with a `fallback_platform` | kept while only its text differs (one line says so), so it never flips between platforms over their glyphs; written when all else changes |
-| Recorded elsewhere, updated on the `fallback_platform`   | written: the `fallback_platform` records it again                                                                                        |
+| Recorded elsewhere, updated on the `fallback_platform`   | written: the `fallback_platform` records it again                                                                                         |
 
 The `fallback_platform` is the canonical platform of a workspace. It warns about each golden
 recorded elsewhere (their text is not compared there), and `--update-goldens` there records them

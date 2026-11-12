@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/widgets.dart';
 import 'package:gleon/gleon.dart';
 
 import '../helpers/golden_updates.dart';
@@ -42,6 +43,77 @@ void main() {
     final owned = await capture;
     expect(owned.debugDisposed, isFalse);
     owned.dispose();
+  });
+
+  // Flutter's matcher fails so too: inside `runAsync`, which reports the error
+  // to the test.
+  testWidgets('a Future<ui.Image> of null is an error', (tester) async {
+    final matcher = matchesGoldenFile(Swatch.golden);
+
+    expect(await matcher.matchAsync(Future<ui.Image?>.value()), isNull);
+    expect(
+      tester.takeException(),
+      isA<AssertionError>().having(
+        (error) => error.message,
+        'message',
+        'Future<Image> completed to null',
+      ),
+    );
+  });
+
+  // The paint that finding the text replays fails after the capture started:
+  // the error surfaces, and the capture, which no one else holds, is
+  // disposed once it is there.
+  testWidgets('a capture is disposed when finding text fails', (tester) async {
+    final painter = _BreakingPainter();
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: _boundaryKey,
+        child: CustomPaint(painter: painter, size: const .square(10)),
+      ),
+    );
+    final created = <ui.Image>[];
+    final disposed = <ui.Image>[];
+    final (onCreate, onDispose) = (ui.Image.onCreate, ui.Image.onDispose);
+    void restoreHooks() {
+      ui.Image.onCreate = onCreate;
+      ui.Image.onDispose = onDispose;
+    }
+
+    void recordCreated(ui.Image image) {
+      onCreate?.call(image);
+      created.add(image);
+    }
+
+    void recordDisposed(ui.Image image) {
+      onDispose?.call(image);
+      disposed.add(image);
+    }
+
+    // For 5 s at most: a capture that never comes then fails the expectation
+    // below, not the test's timeout.
+    Future<void> untilCaptured() async {
+      for (int looks = 0; looks < 500; looks += 1) {
+        if (created.isNotEmpty) return;
+        // The engine completes the capture on its own time: look again soon.
+        await Future<void>.delayed(const .new(milliseconds: 10));
+      }
+    }
+
+    addTearDown(restoreHooks);
+    ui.Image.onCreate = recordCreated;
+    ui.Image.onDispose = recordDisposed;
+    painter.isBroken = true;
+
+    await expectLater(
+      matchesGoldenFile(Swatch.golden).matchAsync(find.byKey(_boundaryKey)),
+      throwsA(_BreakingPainter.failure),
+    );
+    // The capture completes in real time, its disposal in the test's.
+    await tester.runAsync(untilCaptured);
+    await tester.pump();
+    expect(created, hasLength(1));
+    expect(disposed, created);
   });
 
   testWidgets('an image may differ within the tolerance', (tester) async {
@@ -133,6 +205,26 @@ void main() {
       contains(contains('the text tolerance of golden "goldens/swatch.png"')),
     );
   });
+}
+
+const _boundaryKey = ValueKey<String>('boundary');
+
+/// Paints nothing, and fails to paint once [isBroken] (without asking for a
+/// new paint, so only a replay of the last one meets it).
+final class _BreakingPainter extends CustomPainter {
+  /// The error of a broken paint.
+  static final failure = StateError('broken paint');
+
+  /// Whether [paint] fails.
+  bool isBroken = false;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (isBroken) throw failure;
+  }
+
+  @override
+  bool shouldRepaint(_BreakingPainter oldDelegate) => false;
 }
 
 /// A comparator other than Flutter's [LocalFileComparator] that records

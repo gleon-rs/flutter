@@ -1,7 +1,7 @@
 // ignore_for_file: avoid-long-files, it's a long test of many cases.
 
 import 'dart:math' as math;
-import 'dart:ui' show ImageFilter;
+import 'dart:ui' show ImageFilter, Picture, PictureRecorder;
 
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
@@ -267,6 +267,40 @@ void main() {
     expect(await pixels(), before);
   });
 
+  // A render object may keep its leaf layer (a cached picture) and add it on
+  // every paint: the replay leaves it in the layer tree, where it was.
+  testWidgets('finding text leaves a kept layer in place', (tester) async {
+    final kept = LayerHandle<PictureLayer>();
+    addTearDown(() => kept.layer = null);
+    await tester.pumpWidget(
+      _Boundary(
+        Column(
+          crossAxisAlignment: .start,
+          children: [
+            WidgetToRenderBoxAdapter(renderBox: _RenderKeptPicture(kept)),
+            const Text('ab', style: _style),
+          ],
+        ),
+      ),
+    );
+    final element = tester.element(find.byKey(_boundaryKey));
+    final layer = kept.layer;
+    final parent = layer?.parent;
+    Future<List<int>?> pixels() =>
+        tester.runAsync<List<int>?>(() => _pixelsOf(element));
+    final before = await pixels();
+
+    // The 20x10 text below the 10px square, grown by 1.25px.
+    expect(_regions(tester), const [
+      PixelRegion(x: 0, y: 8, width: 22, height: 14),
+    ]);
+    expect(parent, isNotNull);
+    expect(parent?.depthFirstIterateChildren(), contains(layer));
+    expect(await pixels(), before);
+    await tester.pump();
+    expect(await pixels(), before);
+  });
+
   testWidgets('text sent to infinity has no region', (tester) async {
     // A perspective with w = 0 everywhere: no transformed line is finite.
     final degenerate = Matrix4.identity()..setEntry(3, 3, 0);
@@ -440,6 +474,37 @@ void main() {
     ]);
   });
 
+  // A controller may style its text (a mention, a link): runs of several
+  // sizes on one line, whose boxes an editable text gives without the
+  // height of their line.
+  testWidgets('editable text has a region per line', (tester) async {
+    final controller = _BigFirstController(text: 'ab\ncd');
+    final focusNode = FocusNode();
+    addTearDown(controller.dispose);
+    addTearDown(focusNode.dispose);
+    await tester.pumpWidget(
+      _Boundary(
+        EditableText(
+          controller: controller,
+          focusNode: focusNode,
+          style: _style,
+          cursorColor: const Color(0xFF000000),
+          backgroundCursorColor: const Color(0xFF808080),
+          maxLines: null,
+          autofillHints: null,
+        ),
+      ),
+    );
+
+    // Two boxes, `a` 20px wide and `b`, make one 30x10 line: the strut of an
+    // editable text keeps its lines 10px high. `cd` is 20x10 below it. Each
+    // line is grown by 1.25px and clipped to the image.
+    expect(_regions(tester), const [
+      PixelRegion(x: 0, y: 0, width: 32, height: 12),
+      PixelRegion(x: 0, y: 8, width: 22, height: 14),
+    ]);
+  });
+
   testWidgets('the root view captures physical pixels', (tester) async {
     await tester.pumpWidget(
       const Directionality(
@@ -602,4 +667,53 @@ class _Boundary extends StatelessWidget {
       ),
     ),
   );
+}
+
+/// A [TextEditingController] whose first character is twice the size.
+final class _BigFirstController extends TextEditingController {
+  new({super.text});
+
+  @override
+  TextSpan buildTextSpan({
+    required BuildContext context,
+    required bool withComposing,
+    TextStyle? style,
+  }) => .new(
+    style: style,
+    children: [
+      TextSpan(
+        text: text.characters.take(1).string,
+        style: const TextStyle(fontSize: 20),
+      ),
+      TextSpan(text: text.characters.skip(1).string),
+    ],
+  );
+}
+
+/// A 10x10 black square drawn once into a picture layer it keeps in [_kept]
+/// and adds on every paint.
+final class _RenderKeptPicture extends RenderBox {
+  new(this._kept);
+
+  final LayerHandle<PictureLayer> _kept;
+
+  @override
+  bool get alwaysNeedsCompositing => true;
+
+  @override
+  void performLayout() => size = constraints.constrain(const .square(10));
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    final square = offset & size;
+    _kept.layer ??= PictureLayer(square)..picture = _draw(square);
+    if (_kept.layer case final layer?) context.addLayer(layer);
+  }
+
+  static Picture _draw(Rect square) {
+    final recorder = PictureRecorder();
+    Canvas(recorder).drawRect(square, Paint()..color = const Color(0xFF000000));
+
+    return recorder.endRecording();
+  }
 }

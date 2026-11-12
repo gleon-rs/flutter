@@ -99,7 +99,7 @@ dev_dependencies:
   gleon:
     git:
       url: https://github.com/gleon-rs/flutter.git
-      ref: v0.6.0
+      ref: v0.6.1
 ```
 
 On the first `flutter test`, its build hook downloads the library of the test host from the
@@ -120,7 +120,7 @@ package's, or a maintainer's build), then the download.
 hooks:
   user_defines:
     gleon:
-      release_url: https://mirror.example/gleon/v0.6.0/
+      release_url: https://mirror.example/gleon/v0.6.1/
 ```
 
 ## Benchmarks
@@ -180,22 +180,36 @@ git -C ../gleon archive "$(cat native/gleon_ref)" | tar -x -C /tmp/gleon-pin
 fvm dart bin/native_licenses.dart --gleon-repo /tmp/gleon-pin --commit "$(cat native/gleon_ref)"
 ```
 
-Releasing: bump `version` in `pubspec.yaml`, `FlutterSession.packageVersion` and `CHANGELOG.md`,
-update `native/gleon_ref` (and `NATIVE_LICENSES.md`) if the engine changed, and push the tag
-`vX.Y.Z` of a commit on `main`. The release workflow builds and tests all targets on
-their own OS, attaches the libraries, `gleon_ref.txt` (the gleon commit they were built from,
-which the hook of a git checkout compares with its pin) and `SHA256SUMS.txt` to a GitHub Release,
-fails unless that release is immutable (enable it in the repository settings first), and then
-verifies the download path on every OS.
+Releasing: bump `version` in `pubspec.yaml`, `FlutterSession.packageVersion` and `CHANGELOG.md`
+(its first line is `## X.Y.Z`), update `native/gleon_ref` (and `NATIVE_LICENSES.md`) if the engine
+changed, and push the tag `vX.Y.Z` of a commit on `main`. The release workflow builds and tests all
+targets on their own OS, attaches the libraries, `gleon_ref.txt` (the gleon commit they were built
+from, which the hook of a git checkout compares with its pin) and `SHA256SUMS.txt` to a GitHub
+Release, fails unless that release is immutable (enable it in the repository settings first),
+verifies the download path on every OS, and then publishes to pub.dev.
 
-Then publish to pub.dev from a copy that holds the libraries of that release:
-
-```sh
-fvm dart bin/prepare_publish.dart          # clones the tag, adds the 4 libraries, runs --dry-run
-cd <the directory it prints> && fvm flutter pub publish
-```
+The last two jobs follow the official reusable workflow
+(`dart-lang/setup-dart/.github/workflows/publish.yml`), which cannot be called here: its checkout
+of the tag has no libraries of the release. `package` runs `bin/prepare_publish.dart` (a clone of
+the tag with the four libraries of the release, checked by a dry run), packs that copy without
+network (`dart pub publish --to-archive`) and checks that the archive holds the four libraries.
+`publish` runs no code of this repository: it gets the OIDC token, downloads the archive and runs
+`dart pub publish --from-archive --force`. pub.dev trusts it by that token (automated publishing
+on pub.dev: repository `gleon-rs/flutter`, tag pattern `v{{version}}`, environment `pub.dev`), so
+no pub.dev secret is stored. The GitHub environment `pub.dev` can require an approval before the
+upload. pub.dev never takes a version twice: a failed job may be rerun, a published version is
+final. The quality job of every pull request runs the same offline packing on the working tree.
 
 `bin/prepare_publish.dart` verifies each library against the release's `SHA256SUMS.txt` and its
 `gleon_ref.txt` against `native/gleon_ref`, and fails when the archive lacks a library or holds
-`bin/`, `test/` or a pin. Never publish from the working tree: it has no libraries of the release
-and may have a local build of one target.
+`bin/`, `test/` or a pin. To check an archive locally, or to publish by hand when the workflow
+cannot:
+
+```sh
+fvm dart bin/prepare_publish.dart          # clones the tag, adds the 4 libraries, runs --dry-run
+cd <the directory it prints> && fvm dart pub publish
+```
+
+Use `dart pub publish` there: under `fvm flutter pub publish` the y/N question never gets the
+answer. Never publish from the working tree: it has no libraries of the release and may have a
+local build of one target.

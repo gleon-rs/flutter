@@ -24,6 +24,48 @@ void main() {
     expect(brand, isNot(_width('FlutterTest')));
     expect(brand, lessThan(roboto), reason: 'condensed');
   });
+
+  test('Roboto comes from the Flutter SDK of FLUTTER_ROOT', () {
+    final faces = AppFonts.sdkRoboto(Platform.environment);
+
+    expect(
+      faces.map((face) => face.uri.pathSegments.lastOrNull),
+      AppFonts.robotoFaces,
+    );
+    expect(faces.every((face) => face.existsSync()), isTrue);
+  });
+
+  // `flutter test` sets FLUTTER_ROOT; another runner may not, and an SDK may
+  // lack a face.
+  test('an SDK without Roboto says what to do', () {
+    final sdk = Directory.systemTemp.createTempSync('gleon_sdk_');
+    addTearDown(() => sdk.deleteSync(recursive: true));
+    File('${sdk.path}/${AppFonts.sdkFonts}/Roboto-Regular.ttf')
+      ..createSync(recursive: true)
+      ..writeAsBytesSync(const [0]);
+
+    for (final (environment, root) in [
+      (const <String, String>{}, 'not set'),
+      ({'FLUTTER_ROOT': sdk.path}, sdk.path),
+    ]) {
+      expect(
+        () => AppFonts.sdkRoboto(environment),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            allOf(
+              contains('found no Roboto in the Flutter SDK'),
+              contains('FLUTTER_ROOT is $root'),
+              contains('flutter test'),
+              contains('bundle Roboto'),
+            ),
+          ),
+        ),
+        reason: root,
+      );
+    }
+  });
 }
 
 Future<void> _loadBrandFonts() {

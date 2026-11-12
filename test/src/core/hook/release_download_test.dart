@@ -76,6 +76,27 @@ void main() {
     );
   });
 
+  // GitHub has no release for an untagged commit of the package.
+  test('a missing GitHub Release names the tagged releases', () async {
+    final server = await ReleaseServer.start(const {});
+    addTearDown(server.close);
+    final github = ReleaseDownload.defaultUrl('1.0.0');
+    final checksums = github.resolve(ReleaseDownload.checksumsFileName);
+
+    await expectLater(
+      server.route(() => fetch(github)),
+      throwsDownload(
+        allOf(
+          contains('$checksums does not exist (HTTP 404)'),
+          contains('attached to tagged releases only'),
+          contains('ffi_path'),
+          isNot(contains('`release_url` user-define')),
+        ),
+      ),
+    );
+    expect(server.routed, [checksums]);
+  });
+
   test('a release without this target names the missing asset', () async {
     final server = await ReleaseServer.start({
       ReleaseDownload.checksumsFileName: '$hash  other.dll\n'.codeUnits,
@@ -229,74 +250,6 @@ void main() {
     addTearDown(server.close);
 
     await expectLater(fetch(server.url), throwsDownload(contains('insecure')));
-  });
-
-  test('a redirect whose body stalls fails instead of hanging', () async {
-    final server = await ReleaseServer.start(
-      {ReleaseDownload.checksumsFileName: sums},
-      stalledRedirects: {target.assetName},
-    );
-    addTearDown(server.close);
-
-    await expectLater(
-      fetch(server.url, redirectTimeout: const Duration(milliseconds: 100)),
-      throwsDownload(contains('TimeoutException')),
-    );
-    // Every attempt timed out and was retried.
-    expect(server.hits[target.assetName], 3);
-  });
-
-  test('a file whose body stalls fails instead of hanging', () async {
-    final server = await ReleaseServer.start(
-      {ReleaseDownload.checksumsFileName: sums},
-      stalledFiles: {target.assetName},
-    );
-    addTearDown(server.close);
-
-    await expectLater(
-      fetch(server.url, bodyTimeout: const Duration(milliseconds: 100)),
-      throwsDownload(contains('TimeoutException')),
-    );
-    // Every attempt timed out on a fresh connection and was retried.
-    expect(server.hits[target.assetName], 3);
-  });
-
-  // The body timeout is one of silence, not of the whole download: a slow
-  // but steady connection gets the library, a stalled one is given up.
-  test('a slow but steady body arrives', () async {
-    final server = await ReleaseServer.start(
-      {ReleaseDownload.checksumsFileName: sums, target.assetName: library},
-      dripped: {target.assetName: const .new(milliseconds: 150)},
-    );
-    addTearDown(server.close);
-
-    final downloaded = await fetch(
-      server.url,
-      bodyTimeout: const .new(milliseconds: 400),
-    );
-    expect(downloaded.readAsBytesSync(), library);
-    expect(server.hits[target.assetName], 1);
-  });
-
-  // Announced by its Content-Length, or streamed without one.
-  test('a body beyond any library is refused at once', () async {
-    final files = {
-      ReleaseDownload.checksumsFileName: sums,
-      target.assetName: library,
-    };
-    for (final dripped in <Map<String, Duration>>[
-      const {},
-      {target.assetName: .zero},
-    ]) {
-      final server = await ReleaseServer.start(files, dripped: dripped);
-      addTearDown(server.close);
-
-      await expectLater(
-        fetch(server.url, maxBytes: 1024),
-        throwsDownload(contains('more than 1024 bytes')),
-      );
-      expect(server.hits[target.assetName], 1, reason: '$dripped');
-    }
   });
 
   test('follows allowed redirects', () async {

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,7 +17,8 @@ void main() {
   const target = Release.target;
   const releasePin = 'aaaa';
   final library = Release.library;
-  final fetch = DownloadCache().fetch;
+  final cache = DownloadCache();
+  final fetch = cache.fetch;
   final pinFile = utf8.encode('$releasePin\n');
   final pinnedSums = utf8.encode(
     '${Release.hash}  ${target.assetName}\n'
@@ -60,6 +62,35 @@ void main() {
       );
     },
   );
+
+  // A changed file would name any commit: it is never read.
+  test('a gleon_ref.txt that fails its checksum is refused', () async {
+    final server = await ReleaseServer.start({
+      ReleaseDownload.checksumsFileName: pinnedSums,
+      target.assetName: library,
+      ReleaseDownload.pinFileName: utf8.encode('bbbb\n'),
+    });
+    addTearDown(server.close);
+
+    await expectLater(
+      fetch(server.url, pin: 'bbbb'),
+      throwsDownload(
+        allOf(
+          contains(
+            'checksum mismatch for '
+            '${server.url.resolve(ReleaseDownload.pinFileName)}',
+          ),
+          contains(ReleaseDownload.checksumsFileName),
+          contains('`release_url`'),
+        ),
+      ),
+    );
+    final kept = cache.dir.listSync(recursive: true).whereType<File>();
+    expect(
+      kept.map((file) => file.uri.pathSegments.lastOrNull),
+      isNot(contains(ReleaseDownload.pinFileName)),
+    );
+  });
 
   test('without a pin (the pub.dev archive) none is asked', () async {
     final server = await pinnedRelease();

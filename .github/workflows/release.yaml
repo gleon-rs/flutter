@@ -1,8 +1,9 @@
 # Push a tag `vX.Y.Z` equal to `version` in pubspec.yaml to release. Every target is built
 # natively from the gleon commit in native/gleon_ref, tested on its own OS, attested, and attached
 # to an immutable GitHub Release (enable "release immutability" in the repository settings), which
-# the build hook of a git dependency downloads from. The pub.dev archive gets these libraries
-# from `bin/prepare_publish.dart`, run by a maintainer after this workflow (see CONTRIBUTING).
+# the build hook of a git dependency downloads from. Once every OS has verified the download, the
+# last two jobs pack the package with these libraries inside and publish it to pub.dev (see
+# CONTRIBUTING).
 name: Release
 
 on:
@@ -43,6 +44,14 @@ jobs:
           version="$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml | sed 's/#.*//' | tr -d "\"' ")"
           if [ "v$version" != "$GITHUB_REF_NAME" ]; then
             echo "::error::tag $GITHUB_REF_NAME does not match pubspec version $version"
+            exit 1
+          fi
+      # pub.dev shows the CHANGELOG of the archive: its first entry must be this version.
+      - name: CHANGELOG must start with the version
+        run: |
+          first="$(sed -n '1p' CHANGELOG.md)"
+          if [ "$first" != "## ${GITHUB_REF_NAME#v}" ]; then
+            echo "::error::CHANGELOG.md starts with '$first', not '## ${GITHUB_REF_NAME#v}'"
             exit 1
           fi
 
@@ -229,3 +238,79 @@ jobs:
           test ! -e ../native/${{ matrix.target }}
           flutter pub get
           flutter test
+
+  # The pub.dev archive is built and uploaded the way the official reusable workflow does it
+  # (dart-lang/setup-dart/.github/workflows/publish.yml): validated, then packed without network,
+  # then uploaded by a job that runs no code of this repository. That workflow cannot be called
+  # here: its checkout of the tag has no libraries of the release, and it takes no step to add
+  # them. `bin/prepare_publish.dart` adds them (verified against the release checksums and pin)
+  # and fails on any file consumers must not get.
+  package:
+    name: Package for pub.dev
+    needs: verify
+    if: ${{ github.repository == 'gleon-rs/flutter' }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+        working-directory: flutter
+    steps:
+      # The tag is in this checkout, which prepare_publish clones.
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: flutter
+          persist-credentials: false
+      - name: Set up Flutter only
+        uses: ./flutter/.github/actions/setup
+        with:
+          target: linux-x64
+          build: "false"
+      - name: Validate the archive
+        run: |
+          flutter pub get
+          dart bin/prepare_publish.dart --work-dir "$RUNNER_TEMP/publish"
+      # Like the official workflow: no network while packing, so nothing but the validated copy
+      # goes into the archive.
+      - name: Pack the archive offline
+        run: |
+          sudo -E unshare -n sudo -u "$(whoami)" -E env "PATH=$PATH" "HOME=$HOME" \
+            dart pub publish --to-archive="$RUNNER_TEMP/package.tar.gz" --skip-validation \
+            --directory="$RUNNER_TEMP/publish/gleon"
+          libraries=$(tar -tzf "$RUNNER_TEMP/package.tar.gz" | grep -E '^native/[a-z0-9-]+/[^/]+$')
+          echo "$libraries"
+          test "$(echo "$libraries" | wc -l)" -eq 4
+      - name: Upload the archive
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pub-archive
+          path: ${{ runner.temp }}/package.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
+  # pub.dev trusts this job by its OIDC token (automated publishing of gleon-rs/flutter: a push
+  # of the tag v{{version}}, environment pub.dev), so no pub.dev secret is stored anywhere. It
+  # holds the token and runs only the Dart SDK on the packed archive.
+  publish:
+    name: Publish to pub.dev
+    needs: package
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    environment: pub.dev
+    permissions:
+      id-token: write
+    steps:
+      # Requests the OIDC token for https://pub.dev and registers it with pub
+      # (`dart pub token add --env-var PUB_TOKEN`).
+      - name: Set up Dart and the pub.dev token
+        uses: dart-lang/setup-dart@6afc89df92d6eb3834022f73cd65adc8cdfcb92d # v1.8.1
+      - name: Download the archive
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: pub-archive
+          path: ${{ runner.temp }}
+      - name: Publish
+        run: dart pub publish --from-archive="$RUNNER_TEMP/package.tar.gz" --force

@@ -1,3 +1,14 @@
+## 0.6.1
+
+- **Published by CI:** the release workflow publishes each version to pub.dev from its tag, after
+  the libraries of all four hosts are built, tested and verified. Like the official Dart publish
+  workflow, it packs the archive without network, and the job that uploads it runs no code of the
+  repository. pub.dev trusts that job by its GitHub OIDC token (automated publishing), so no
+  pub.dev secret is stored anywhere.
+- A screenshot on pub.dev: the time per golden of `flutter_test` and gleon, and the line coverage
+  of the package.
+- Tests now cover every line of the package (100% line coverage, up from 97.9%).
+
 ## 0.6.0
 
 - **First release on pub.dev:** `flutter pub add dev:gleon`. The package contains the native
