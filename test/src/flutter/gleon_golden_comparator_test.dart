@@ -28,6 +28,14 @@ void main() {
       expect(pubspec, contains('version: ${FlutterSession.packageVersion}'));
     });
 
+    // The release workflow checks it again on the tag; here a pull request
+    // that bumps the version without its entry fails first.
+    test('the CHANGELOG starts with the pubspec version', () {
+      final changelog = File('CHANGELOG.md').readAsLinesSync();
+
+      expect(changelog.firstOrNull, '## ${FlutterSession.packageVersion}');
+    });
+
     test('failure artifacts are named like Flutter names them', () {
       final GleonIntegration(
         :candidateArtifact,

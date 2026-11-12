@@ -372,8 +372,21 @@ jobs:
       - name: Publish dry run
         run: dart pub publish --dry-run
 
+      # The release packs its pub.dev archive with this command (no network, like the official
+      # dart-lang/setup-dart publish workflow): a pull request shows it still works on the runner.
+      # tar fails when the archive lacks the member (no `| grep -q`: under pipefail, tar would die
+      # of SIGPIPE once grep exits at the match).
+      - name: Pack the archive offline
+        run: |
+          sudo -E unshare -n sudo -u "$(whoami)" -E env "PATH=$PATH" "HOME=$HOME" \
+            dart pub publish --to-archive="$RUNNER_TEMP/package.tar.gz" --skip-validation
+          tar -tzf "$RUNNER_TEMP/package.tar.gz" pubspec.yaml
+
+      # pana makes the thumbnails of the pubspec screenshots with the webp tools.
       - name: pana
         run: |
+          sudo apt-get update -qq
+          sudo apt-get install --yes --no-install-recommends webp
           dart pub global activate pana "$PANA_VERSION"
           dart pub global run pana . --no-warning --flutter-sdk "$FLUTTER_ROOT" \
             --exit-code-threshold "$PANA_MAX_LOST_POINTS"

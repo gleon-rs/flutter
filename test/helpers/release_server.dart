@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter_test/flutter_test.dart';
+
 /// A local release mirror: serves [files] (name → bytes), answers [redirects]
 /// (name → location), sends redirects whose body never arrives for [stalled]
 /// and files whose body never arrives for [stalledFiles], sends the files of
 /// [dripped] chunked in four parts with that pause before each, answers
 /// [statuses] (name → bare status code) and counts requests per name in
-/// [hits].
+/// [hits]. Files are sent with their size, like GitHub sends them.
 class ReleaseServer {
   new _(
     this._server, {
@@ -39,6 +41,9 @@ class ReleaseServer {
   /// Requests per name.
   final hits = <String, int>{};
 
+  /// The URLs the clients of [route] asked for, in order.
+  final routed = <Uri>[];
+
   final HttpServer _server;
 
   StreamSubscription<HttpRequest>? _subscription;
@@ -69,6 +74,13 @@ class ReleaseServer {
 
     return release;
   }
+
+  /// Runs [body] with every [HttpClient] it creates sending its requests
+  /// here instead, by file name, whatever their URL (recorded in [routed]):
+  /// this release stands for one anywhere, such as the GitHub Release of
+  /// the package.
+  Future<T> route<T>(Future<T> Function() body) =>
+      HttpOverrides.runWithHttpOverrides(body, _Routing(this));
 
   /// Stops the server.
   Future<void> close() async {
@@ -130,8 +142,57 @@ class ReleaseServer {
       return;
     }
     final body = files[name];
-    response.statusCode = body == null ? HttpStatus.notFound : HttpStatus.ok;
+    response
+      ..statusCode = body == null ? HttpStatus.notFound : HttpStatus.ok
+      ..contentLength = body?.length ?? 0;
     if (body != null) response.add(body);
     await response.close();
   }
+}
+
+/// The [HttpOverrides] of [ReleaseServer.route].
+final class _Routing extends HttpOverrides {
+  new(this._server);
+
+  final ReleaseServer _server;
+
+  @override
+  HttpClient createHttpClient(SecurityContext? context) =>
+      _RoutedClient(super.createHttpClient(context), _server);
+}
+
+/// A [_client] whose GETs go to [_server], by file name, whatever their URL.
+final class _RoutedClient extends Fake implements HttpClient {
+  new(this._client, this._server);
+
+  final HttpClient _client;
+  final ReleaseServer _server;
+
+  @override
+  Duration? get connectionTimeout => _client.connectionTimeout;
+
+  @override
+  set connectionTimeout(Duration? value) => _client.connectionTimeout = value;
+
+  @override
+  String? get userAgent => _client.userAgent;
+
+  @override
+  set userAgent(String? value) => _client.userAgent = value;
+
+  // Asked for the URL of the server, on this machine.
+  @override
+  set findProxy(String Function(Uri url)? value) => _client.findProxy = value;
+
+  @override
+  Future<HttpClientRequest> getUrl(Uri url) {
+    _server.routed.add(url);
+
+    return _client.getUrl(
+      _server.url.resolveUri(Uri(path: url.pathSegments.lastOrNull)),
+    );
+  }
+
+  @override
+  void close({bool force = false}) => _client.close(force: force);
 }

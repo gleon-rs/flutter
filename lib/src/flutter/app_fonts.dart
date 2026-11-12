@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:meta/meta.dart';
 
 import 'shared_load.dart';
 
@@ -108,7 +109,7 @@ abstract final class AppFonts {
     }
     if (!hasRoboto) {
       await _loadFamily('Roboto', [
-        for (final file in _sdkRoboto)
+        for (final file in sdkRoboto(Platform.environment))
           ByteData.sublistView(await file.readAsBytes()),
       ]);
     }
@@ -123,9 +124,13 @@ abstract final class AppFonts {
     await loader.load();
   }
 
-  /// The [robotoFaces] of the Flutter SDK.
-  static List<File> get _sdkRoboto {
-    final root = Platform.environment['FLUTTER_ROOT'];
+  /// The [robotoFaces] of the Flutter SDK that `FLUTTER_ROOT` in
+  /// [environment] (the process's) names.
+  ///
+  /// Throws a [StateError] when that SDK lacks one, or none is named.
+  @visibleForTesting
+  static List<File> sdkRoboto(Map<String, String> environment) {
+    final root = environment['FLUTTER_ROOT'];
     final faces = root == null
         ? const <File>[]
         : [for (final face in robotoFaces) File('$root/$sdkFonts/$face')];

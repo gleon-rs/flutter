@@ -338,6 +338,20 @@ void main() {
       });
     }
 
+    test('without release_url is from the GitHub Release', () async {
+      final server = await mirror();
+
+      final (dependencies: _, library: fetched) = await server.route(
+        () => resolve(package()),
+      );
+      expect(File.fromUri(fetched).readAsBytesSync(), library);
+      final github = ReleaseDownload.defaultUrl('1.0.0');
+      expect(server.routed, [
+        github.resolve(ReleaseDownload.checksumsFileName),
+        github.resolve(assetName),
+      ]);
+    });
+
     test('happens with a pin but no bundled library', () async {
       final server = await mirror();
       write('package/native/gleon_ref', '$pin\n');

@@ -384,6 +384,26 @@ void main() {
       );
     });
 
+    // The dep-info outlives a checkout deleted since the build: nothing in it
+    // is left to track, and its path cannot be resolved any more.
+    test('a checkout that is gone has no inputs left', () async {
+      final root = fakeCheckout();
+      final built = await SourceBuild.run(
+        repoRoot: .file(root),
+        targetDir: .directory('${tempPath()}/cargo'),
+        target: .linuxX64,
+        environment: cargoEnvironment(),
+        runProcess: FakeCargo(compiled: ['$root/gleon-ffi/src/lib.rs']).run,
+      );
+      expect(
+        built.dependencies,
+        contains(Uri.file('$root/gleon-ffi/src/lib.rs')),
+      );
+      Directory(root).deleteSync(recursive: true);
+
+      expect(SourceBuild.dependencies(.file(root), built.library), isEmpty);
+    });
+
     // Names the variables the hook never sees; on Windows also that only
     // the variables carry rustflags (the build sets the target's own).
     for (final (target, hasWindowsHint) in [

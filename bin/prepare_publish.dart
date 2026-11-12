@@ -1,7 +1,9 @@
 /// Prepares the pub.dev archive of a release: a clone of the tag `v<version>`
 /// with the four libraries of its GitHub Release in `native/<target>/`,
-/// checked by `flutter pub publish --dry-run`. It never publishes: it prints
-/// the command that does.
+/// checked by `flutter pub publish --dry-run`. It never publishes: in the
+/// release workflow, the `package` job runs it and packs the copy into an
+/// archive, which the `publish` job uploads (that job runs no code of this
+/// repository).
 ///
 /// ```sh
 /// fvm dart bin/prepare_publish.dart [--version <x.y.z>] [--release-url <url>]
@@ -9,8 +11,9 @@
 /// ```
 ///
 /// Publish only from the copy it prepares: the working tree has no libraries
-/// of the release (and may have a local build of one target). The release
-/// workflow must have published the release of the tag first.
+/// of the release (and may have a local build of one target). The GitHub
+/// Release of the tag must exist first. A maintainer runs it to check an
+/// archive, or to publish by hand when the workflow cannot.
 ///
 /// Only `dart:*`, `crypto`, this package and `src/` may be imported here (see
 /// `build_native.dart`).
@@ -72,9 +75,11 @@ Future<void> main(List<String> args) async {
     isReady = true;
     stdout.writeln('''
 The archive of gleon $version is ready in ${copy.path}:
-the libraries of the four hosts, nothing only maintainers need. Publish it:
+the libraries of the four hosts, nothing only maintainers need. In the
+release workflow, the next steps pack and publish it. Only to publish it by
+hand, on a maintainer's machine:
 
-  cd ${_quoted(copy.path)} && fvm flutter pub publish
+  cd ${_quoted(copy.path)} && fvm dart pub publish
 ''');
   } on CheckFailure catch (error) {
     _cli.report(error.message);
