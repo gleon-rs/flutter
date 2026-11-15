@@ -114,6 +114,20 @@ Map<String, int> _summaryOffsets() {
   };
 }
 
+/// The offset of each field of `GleonSlice` as Dart reads it, by its Rust
+/// name.
+Map<String, int> _sliceOffsets() {
+  int offset(void Function(Uint8List bytes) write) =>
+      _offset(sizeOf<GleonSlice>(), write);
+
+  return {
+    'len': offset((bytes) => Struct.create<GleonSlice>(bytes).len = _address),
+    'ptr': offset(
+      (bytes) => Struct.create<GleonSlice>(bytes).ptr = .fromAddress(_address),
+    ),
+  };
+}
+
 /// A `Uint32` without a zero byte.
 const _word = 0x01010101;
 
@@ -151,6 +165,8 @@ void main() {
       'verdict': 0,
       'warning': 40,
     });
+    expect(sizeOf<GleonSlice>(), 16);
+    expect(_sliceOffsets(), {'len': 8, 'ptr': 0});
   });
 
   // The pinned library itself: its ABI version and the layout it asserts,
@@ -177,6 +193,7 @@ void main() {
       }
       expect(asserted, {
         'GleonCall': _callOffsets(),
+        'GleonSlice': _sliceOffsets(),
         'GleonSummary': _summaryOffsets(),
       });
     },

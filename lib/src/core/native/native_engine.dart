@@ -359,7 +359,7 @@ abstract final class NativeEngine {
 
   /// A UTF-8 slice borrowed from the texts of a summary, copied out as a
   /// string. An empty slice has a dangling pointer that is never touched.
-  static String _text(NativeSlice slice) => slice.len == 0
+  static String _text(GleonSlice slice) => slice.len == 0
       ? _noText
       : utf8.decode(slice.ptr.asTypedList(slice.len), allowMalformed: true);
 
