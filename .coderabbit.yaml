@@ -77,12 +77,12 @@ reviews:
 
     - path: "lib/src/core/native/**"
       instructions: >
-        FFI boundary to `gleon-ffi` (safer-ffi, C ABI 11). The most safety-critical Dart code
-        in the package.
+        FFI boundary to `gleon-ffi` (plain `extern "C"`, C ABI 13). The most safety-critical
+        Dart code in the package.
 
-        - Signatures and the `GleonCall`/`GleonSummary` structs must match the Rust exports
-          exactly (`Size` for `usize`); `test/src/core/native/gleon_ffi_test.dart` checks the
-          layout against the assertions of the pinned `gleon-ffi/src/lib.rs`, and
+        - Signatures and the `GleonCall`/`GleonSummary`/`GleonSlice` structs must match the Rust
+          exports exactly (`Size` for `usize`); `test/src/core/native/gleon_ffi_test.dart` checks
+          the layout against the assertions of the pinned `gleon-ffi/src/lib.rs`, and
           `NativeEngine.expectedAbiVersion` against its `ABI_VERSION`.
         - `gleon_golden` writes its summary into a `Struct.create`d buffer passed by `.address`,
           never returned by value (dart-lang/sdk#64368: such leaf calls return null without
