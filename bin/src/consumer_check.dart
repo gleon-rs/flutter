@@ -100,9 +100,11 @@ final class ConsumerCheck {
     writeNumber(app, '42');
   }
 
-  /// 3. Offline, the hook reuses its verified cache: the release is gone, the
-  /// proxies are dead, and a changed hook input (the package pubspec) makes
-  /// the hooks runner run the hook again.
+  /// 3. Offline, the hook reuses its verified cache: the release is gone, and
+  /// a changed hook input (the package pubspec) makes the hooks runner run the
+  /// hook again. No proxy variables: the hook never sends the release on this
+  /// machine through a proxy, and a dead one only slowed `flutter test` itself
+  /// on the Linux runners (13 minutes per step, from the 2026-11-11 image).
   Future<void> offline() async {
     stdout.writeln('--- 3. offline: the hook reuses its cache');
     await server.close();
@@ -111,7 +113,7 @@ final class ConsumerCheck {
       mode: .append,
     );
     final before = _hookRuns;
-    await _flutter(['test'], environment: _offline);
+    await _flutter(['test']);
     check(
       'the hook ran again offline (its output: ${_hookOutputs.join(', ')})',
       isMet: _hookRuns.isAfter(before),
@@ -153,23 +155,8 @@ final class ConsumerCheck {
     library.copySync(bundled.path);
     final hooksRunner = Directory('${app.path}/.dart_tool/hooks_runner');
     if (hooksRunner.existsSync()) hooksRunner.deleteSync(recursive: true);
-    await _flutter(['test'], environment: _offline);
+    await _flutter(['test']);
   }
-
-  /// Every proxy variable the hook honors, pointing nowhere; the loopback
-  /// stays direct, since `flutter test` itself talks to its test shell over
-  /// a local socket (and the release's address then refuses at once).
-  static Map<String, String> get _offline => {
-    for (final name in const [
-      'HTTPS_PROXY',
-      'HTTP_PROXY',
-      'https_proxy',
-      'http_proxy',
-    ])
-      name: deadProxy,
-    for (final name in const ['NO_PROXY', 'no_proxy'])
-      name: 'localhost,127.0.0.1,::1',
-  };
 
   /// `PATH` without the directories that hold Rust ([pathWithoutRust]).
   static String get _pathWithoutRust => pathWithoutRust(
@@ -196,21 +183,23 @@ final class ConsumerCheck {
   }
 
   /// Runs `flutter` with [arguments] in the app and returns its output;
-  /// fails unless it exits as [shouldFail] says.
+  /// fails unless it exits as [shouldFail] says. Shows how long it took, so a
+  /// slow run names its command.
   Future<String> _flutter(
     List<String> arguments, {
-    Map<String, String> environment = const {},
     bool shouldFail = false,
   }) async {
     final command = 'flutter ${arguments.join(' ')}';
     stdout.writeln('\$ $command');
+    final timer = Stopwatch()..start();
     final result = await Process.run(
       'flutter',
       arguments,
       workingDirectory: app.path,
-      environment: {...environment, 'PATH': _pathWithoutRust},
+      environment: {'PATH': _pathWithoutRust},
       runInShell: Platform.isWindows,
     );
+    stdout.writeln('  (${timer.elapsed.inSeconds} s)');
     final output = '${result.stdout}\n${result.stderr}';
     final hasFailed = result.exitCode != 0;
     if (hasFailed != shouldFail) {

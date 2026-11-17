@@ -171,7 +171,9 @@ jobs:
     # `--update-goldens` and its text compared on this platform.
     if: ${{ github.event_name != 'push' }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    # A minute of checks after the setup (a cold gleon-ffi build included); never the 45 minutes of
+    # a test job.
+    timeout-minutes: 20
     permissions:
       contents: read
     strategy:

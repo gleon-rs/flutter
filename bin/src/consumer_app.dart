@@ -10,9 +10,6 @@ import 'package:gleon/src/core/hook/native_target.dart';
 /// The golden the consumer app records and compares.
 const consumerGolden = 'goldens/number.png';
 
-/// A proxy nothing listens on: every download fails at once.
-const deadProxy = 'http://127.0.0.1:9';
-
 /// [path] (a `PATH` of [separator]-separated directories) without the
 /// directories that hold a Rust toolchain (`cargo`, `rustc`, `rustup`, as
 /// [holds] tells): the hook must never need one. By what a directory holds,
