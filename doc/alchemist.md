@@ -62,5 +62,5 @@ String _goldenPath(String fileName, String environmentName) => 'goldens/$fileNam
   [Recording goldens on any platform](../README.md#recording-goldens-on-any-platform)).
 - The example app runs this setup (`example/test/counter_page_test.dart`, with alchemist's runner
   for obscured text, `diffThreshold` and forced updates). For its passing golden (480x351 pixels,
-  two scenarios, real fonts, text compared exactly) gleon's assertion takes 0.86 ms instead of
-  alchemist's 4.46 ms (macOS arm64, `example/benchmark/`).
+  two scenarios, real fonts, text compared exactly) gleon's assertion takes 1 ms instead of
+  alchemist's 4.91 ms (macOS arm64, `example/benchmark/`).

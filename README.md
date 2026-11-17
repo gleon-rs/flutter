@@ -469,48 +469,49 @@ widget with gleon's `matchesGoldenFile`. alchemist can do that: see
 
 A widget golden from the captured frame to the verdict: Flutter encodes the frame as a PNG, gleon
 compares its raw pixels and encodes a PNG only to keep a failure. Exact, no workspace; Apple M3
-Max, Flutter 3.47.6, gleon 0.3.0, mean latency with
+Max, Flutter 3.50.0, gleon 0.6.2, mean latency with
 [bench_press](https://pub.dev/packages/bench_press):
 
 | Scenario                                      | Golden    | Flutter SDK |   gleon | Speedup |
 | --------------------------------------------- | --------- | ----------: | ------: | ------: |
-| Passing                                       | 400x300   |     9.60 ms | 0.43 ms |     22x |
+| Passing                                       | 400x300   |     9.43 ms | 0.44 ms |     21x |
 |                                               | 390x844   |     15.5 ms | 1.19 ms |     13x |
-|                                               | 1170x2532 |     89.4 ms |  7.3 ms |     12x |
-| Failing (small change, failure files written) | 400x300   |     43.7 ms |  1.9 ms |     23x |
-|                                               | 390x844   |     77.5 ms |  4.2 ms |     18x |
+|                                               | 1170x2532 |     90.3 ms | 7.70 ms |     12x |
+| Failing (small change, failure files written) | 400x300   |     43.7 ms | 1.97 ms |     22x |
+|                                               | 390x844   |     77.7 ms | 4.33 ms |     18x |
 
 <details>
 <summary>Real text, PNG byte inputs and how the numbers were taken</summary>
 
 Encoding the PNG is most of Flutter's cost. gleon's cost is reading the frame's pixels
 (`toByteData`, which Flutter pays too) and decoding the golden; comparing is a `memcmp` per equal
-row. The failing samples varied too much for bench_press to resolve a ratio, so their speedups are
-ratios of means.
+row. The failing 400x300 samples varied too much for bench_press to resolve a ratio, so its
+speedup is a ratio of means.
 
 Finding the painted text of a widget adds time (measured with gleon 0.5.0): 0.6 ms for 50 lines
-of text, 1.9 ms for a 1170x2532 screen of 1000 rows. 0.6 ms of text on top of the 0.43 ms of the
-passing 400x300 golden would bring its 22x to about 9x.
+of text, 1.9 ms for a 1170x2532 screen of 1000 rows. 0.6 ms of text on top of the 0.44 ms of the
+passing 400x300 golden would bring its 21x to about 9x.
 
 One comparison of PNG bytes, Flutter's `LocalFileComparator` against gleon, with the same golden
-and candidate, inside `flutter test` (mean latency; resolved ratios within ±8% at 95%
-confidence):
+and candidate, inside `flutter test` (mean latency; resolved ratios within ±5% at 95% confidence;
+the re-encoded 400x300 and the failing rows are ratios of means, since their samples varied too
+much to resolve one):
 
 | Scenario                                      | Golden    | Flutter SDK | gleon (exact) | Speedup | gleon `ssim` |
 | --------------------------------------------- | --------- | ----------: | ------------: | ------: | -----------: |
-| Passing, identical bytes                      | 400x300   |      190 µs |         40 µs |    4.8x |        40 µs |
-|                                               | 390x844   |      211 µs |         42 µs |    5.0x |        42 µs |
-|                                               | 1170x2532 |      429 µs |         51 µs |    8.4x |        51 µs |
-| Passing, re-encoded (same pixels)             | 400x300   |     2.95 ms |       0.52 ms |    5.6x |      0.52 ms |
-|                                               | 390x844   |     8.29 ms |       1.60 ms |    5.2x |      1.61 ms |
-|                                               | 1170x2532 |     56.1 ms |       8.57 ms |    6.5x |      8.68 ms |
-| Failing (small change, failure files written) | 400x300   |     35.7 ms |       1.76 ms |     20x |      1.79 ms |
-|                                               | 390x844   |     63.0 ms |       3.69 ms |     17x |      3.83 ms |
+| Passing, identical bytes                      | 400x300   |      175 µs |         37 µs |    4.7x |        37 µs |
+|                                               | 390x844   |      208 µs |         44 µs |    4.8x |        44 µs |
+|                                               | 1170x2532 |      460 µs |         53 µs |    8.6x |        52 µs |
+| Passing, re-encoded (same pixels)             | 400x300   |     2.87 ms |       0.52 ms |    5.5x |      0.51 ms |
+|                                               | 390x844   |     7.58 ms |       1.50 ms |    5.0x |      1.51 ms |
+|                                               | 1170x2532 |     61.2 ms |       8.51 ms |    7.2x |      8.65 ms |
+| Failing (small change, failure files written) | 400x300   |     35.1 ms |       1.56 ms |     22x |      1.60 ms |
+|                                               | 390x844   |     62.1 ms |       3.50 ms |     18x |      3.62 ms |
 
-Across the resolved cases gleon is 5.8x faster (geometric mean), and `ssim` costs no more than
-exact. Flutter inverts both images and compares them pixel by pixel in Dart, and a failure renders
-two diff images and encodes four PNGs; gleon decodes and compares in Rust and writes one diff
-image.
+Across the resolved cases gleon is 5.9x faster (geometric mean), and `ssim` costs at most 3% more
+than exact. Flutter inverts both images and compares them pixel by pixel in Dart, and a failure
+renders two diff images and encodes four PNGs; gleon decodes and compares in Rust and writes one
+diff image.
 
 </details>
 

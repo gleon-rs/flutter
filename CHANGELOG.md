@@ -2,8 +2,9 @@
 
 - Bytes that are no complete PNG (no PNG at all, a PNG cut short, or one without image data)
   never pass as identical to a golden of the same bytes: such a golden could never be compared,
-  so the test fails with `gleon could not compare`. `--update-goldens` never writes such bytes as a golden, and says
-  why: `the candidate is not a complete PNG`. Before, a truncated PNG was written as it was.
+  so the test fails with `gleon could not compare`. `--update-goldens` never writes such bytes as
+  a golden, and says why: `the candidate is not a complete PNG`. Before, a truncated PNG was
+  written as it was.
 - A case report or a failure image never writes through a symbolic link at its path in
   `.gleon/runs/`: the link is replaced, the file it names stays as it was.
 - Clearer texts without `.gleon/gleon.yaml`: a failure ends with "Tip: a tolerance for this
@@ -12,6 +13,9 @@
   came without text regions.
 - A checkout of the package (a git dependency) refuses a release that does not name the gleon
   commit of its libraries. Every release since 0.5.0 names it.
+- The pub.dev screenshot is readable as a small thumbnail in search results: one headline and
+  the time of one passing golden. The tables of "Performance" in the README are measured again
+  (Flutter 3.50.0, gleon 0.6.2): 12-22x faster from the captured frame, 4.7-22x for PNG bytes.
 - Contributors: a failed `cargo` build of a `gleon_repo` checkout reports its output once
   (`gleon: failed to build the native library …`), without a second `gleon:` and the name of a
   Dart exception. `bin/consumer_check.dart` and `bin/prepare_publish.dart` take the files of the

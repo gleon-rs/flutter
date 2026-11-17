@@ -45,5 +45,5 @@ dev_dependencies:
 
 # Source: og/pub-dev.html of the site repository (gleon-rs.github.io).
 screenshots:
-  - description: Time per golden, flutter_test and gleon, and the line coverage of the package.
+  - description: "Golden tests 13x faster: a passing 390x844 golden takes 15.5 ms with the Flutter SDK and 1.19 ms with gleon."
     path: doc/screenshot.webp
