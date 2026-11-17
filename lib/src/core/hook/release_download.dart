@@ -189,7 +189,7 @@ final class _Release {
   /// The verified library of [target]; the release must have been built
   /// from [pin] when one is given.
   Future<File> library(NativeTarget target, {String? pin}) async {
-    final (:file, :checksums) = await _library(target);
+    final (:file, :checksums) = await _library(target, hasPin: pin != null);
     if (pin != null) await _checkPin(pin, checksums);
 
     return file;
@@ -238,12 +238,18 @@ final class _Release {
   }
 
   /// The verified library of [target] and the checksum list that verified
-  /// it.
+  /// it. A cached list without the entry of [target], or without the pin file
+  /// when [hasPin], is reloaded once, before the library is verified.
   Future<({_Checksums checksums, File file})> _library(
-    NativeTarget target,
-  ) async {
+    NativeTarget target, {
+    required bool hasPin,
+  }) async {
     _Checksums checksums = await _checksums();
-    if (checksums.hashes[target.assetName] == null && checksums.isCached) {
+    final isEntryMissing = [
+      target.assetName,
+      if (hasPin) ReleaseDownload.pinFileName,
+    ].any((name) => checksums.hashes[name] == null);
+    if (isEntryMissing && checksums.isCached) {
       // A cached list can only be stale for a mirror.
       checksums = await _checksums(isRefresh: true);
     }

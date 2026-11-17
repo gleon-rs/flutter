@@ -116,6 +116,55 @@ void main() {
     );
   });
 
+  // A mirror (same URL and version) may add the pin to its list later: the
+  // cached list is reloaded once, and the library verified against the new
+  // list.
+  test('a cached list without the pin is reloaded once', () async {
+    final unpinned = utf8.encode('${Release.hash}  ${target.assetName}\n');
+    final mirror = await ReleaseServer.start({
+      ReleaseDownload.checksumsFileName: unpinned,
+      target.assetName: library,
+    });
+    addTearDown(mirror.close);
+    final ReleaseServer(:files, :hits, :url) = mirror;
+    await expectLater(
+      fetch(url, pin: releasePin),
+      throwsDownload(contains('names no gleon commit')),
+    );
+
+    final rebuilt = utf8.encode('a library built from the pinned commit');
+    files
+      ..[ReleaseDownload.checksumsFileName] = utf8.encode(
+        '${sha256.convert(rebuilt)}  ${target.assetName}\n'
+        '${sha256.convert(pinFile)}  ${ReleaseDownload.pinFileName}\n',
+      )
+      ..[target.assetName] = rebuilt
+      ..[ReleaseDownload.pinFileName] = pinFile;
+    final downloaded = await fetch(url, pin: releasePin);
+
+    expect(downloaded.readAsBytesSync(), rebuilt);
+    expect(hits[ReleaseDownload.checksumsFileName], 2);
+  });
+
+  test('a list that still names no commit after the reload fails', () async {
+    final mirror = await ReleaseServer.start({
+      ReleaseDownload.checksumsFileName: utf8.encode(
+        '${Release.hash}  ${target.assetName}\n',
+      ),
+      target.assetName: library,
+    });
+    addTearDown(mirror.close);
+    Future<void> isRejected() => expectLater(
+      fetch(mirror.url, pin: releasePin),
+      throwsDownload(contains('names no gleon commit')),
+    );
+    await isRejected();
+    // The cached list is reloaded once, and still names no commit.
+    await isRejected();
+
+    expect(mirror.hits[ReleaseDownload.checksumsFileName], 2);
+  });
+
   test('a pin that matches passes', () async {
     final server = await pinnedRelease();
 

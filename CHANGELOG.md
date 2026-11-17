@@ -12,7 +12,9 @@
   no longer points at the gleon CLI. A text tolerance that cannot apply says that the candidate
   came without text regions.
 - A checkout of the package (a git dependency) refuses a release that does not name the gleon
-  commit of its libraries. Every release since 0.5.0 names it.
+  commit of its libraries. Every release since 0.5.0 names it. A cached checksum list of a
+  `release_url` mirror that does not name it is loaded again once first, as for a missing
+  library, so a mirror that adds `gleon_ref.txt` later needs no cleared cache.
 - The pub.dev screenshot is readable as a small thumbnail in search results: one headline and
   the time of one passing golden. The tables of "Performance" in the README are measured again
   (Flutter 3.50.0, gleon 0.6.2): 12-22x faster from the captured frame, 4.7-22x for PNG bytes.
