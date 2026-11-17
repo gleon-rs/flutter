@@ -89,7 +89,7 @@ final class ConsumerCheck {
     );
     check(
       'the failure points at .gleon/gleon.yaml:\n$failed',
-      isMet: hasPhrase(failed, 'Tip: tolerances per golden'),
+      isMet: hasPhrase(failed, 'Tip: a tolerance for this golden'),
     );
     check(
       'the failure names its diff image:\n$failed',

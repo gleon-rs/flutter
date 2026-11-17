@@ -30,5 +30,4 @@ goldens go into `.gleon/gleon.yaml`.
 ```sh
 flutter test                   # compares the goldens
 flutter test --update-goldens  # records the goldens (stamped with this platform)
-flutter run -d macos           # or linux / windows
 ```

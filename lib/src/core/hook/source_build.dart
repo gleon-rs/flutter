@@ -94,12 +94,9 @@ abstract final class SourceBuild {
           ? '$hookEnvironmentHint $windowsRustflagsHint'
           : hookEnvironmentHint;
 
-      throw ProcessException(
-        cargo,
-        arguments,
+      throw StateError(
         'gleon: failed to build the native library (exit ${result.exitCode}).'
         '\n${result.stdout}\n${result.stderr}\n$hint',
-        result.exitCode,
       );
     }
 

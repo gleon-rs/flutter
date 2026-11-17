@@ -99,7 +99,7 @@ void main() {
     expect(server.hits[ReleaseDownload.pinFileName], isNull);
   });
 
-  test('an older release without a pin is not checked', () async {
+  test('a release that names no commit fails a checkout', () async {
     final server = await ReleaseServer.start({
       ReleaseDownload.checksumsFileName: utf8.encode(
         '${Release.hash}  ${target.assetName}\n',
@@ -108,26 +108,18 @@ void main() {
     });
     addTearDown(server.close);
 
-    final downloaded = await fetch(server.url, pin: 'bbbb');
-    expect(downloaded.readAsBytesSync(), library);
-
-    // Publishing must know the engine of the libraries it ships.
     await expectLater(
-      fetch(server.url, pin: 'bbbb', isPinRequired: true),
+      fetch(server.url, pin: 'bbbb'),
       throwsDownload(
         allOf(contains('names no gleon commit'), contains('bbbb')),
       ),
     );
   });
 
-  test('a required pin that matches passes', () async {
+  test('a pin that matches passes', () async {
     final server = await pinnedRelease();
 
-    final downloaded = await fetch(
-      server.url,
-      pin: releasePin,
-      isPinRequired: true,
-    );
+    final downloaded = await fetch(server.url, pin: releasePin);
     expect(downloaded.readAsBytesSync(), library);
   });
 }

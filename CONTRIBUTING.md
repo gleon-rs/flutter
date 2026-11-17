@@ -26,10 +26,13 @@ lib/src/flutter/          the Flutter layer: matchesGoldenFile, the widget captu
                           (this package as an integration)
 hook/build.dart           thin build hook on top of lib/src/core/hook/
 bin/                      maintainer scripts (dart:*, crypto and this package only), run with
-                          plain `dart`: build_native, native_licenses, check_cases (CI)
+                          plain `dart`: build_native, native_licenses, check_cases (CI),
+                          consumer_check, prepare_publish
   src/                    their logic, tested in test/tooling/ (neither is published):
                           CaseCheck, LicenseCrate and NativeLicenses, NativeBuild (install,
-                          checkout state), and the shared command line (cli.dart)
+                          checkout state) and NativeTargetBuilds (what builds where), PubArchive
+                          (the archive pub packs, its files through tar), and the shared command
+                          line (cli.dart)
 ```
 
 The native engine (`gleon-ffi`) does the whole job of a golden: it finds the workspace, resolves
@@ -76,10 +79,10 @@ local release served by the script (checksums verified), reuses it offline after
 input, then finds it bundled as in the pub.dev archive; `--update-goldens` stamps the app's golden
 and a changed digit fails on this platform. CI runs it on macOS and Linux with
 `--stray-home-config` (an invalid `~/.gleon/gleon.yaml`, which must change nothing). It needs
-`native/<target>/` built first. The app gets the package without what `.pubignore` leaves out
-at its top level (a test keeps the two in sync), `PATH` keeps Flutter but no directory holding
-cargo, rustc or rustup, and the run fails if the hook built the library from source. Ctrl-C
-stops its server and removes its temporary directories.
+`native/<target>/` built first. The app gets the package as pub packs it (`dart pub publish
+--to-archive`, then `tar`), without `native/<target>/` and with the pin; `PATH` keeps Flutter but
+no directory holding cargo, rustc or rustup, and the run fails if the hook built the library from
+source. Ctrl-C stops its server and removes its temporary directories.
 
 Case reports written by the tests are validated against `case.v5.json` of the pinned commit
 (`native/gleon_ref`, read with `git show` whatever the checkout's own state) when a gleon checkout
@@ -99,7 +102,7 @@ dev_dependencies:
   gleon:
     git:
       url: https://github.com/gleon-rs/flutter.git
-      ref: v0.6.1
+      ref: v0.6.2
 ```
 
 On the first `flutter test`, its build hook downloads the library of the test host from the
@@ -120,7 +123,7 @@ package's, or a maintainer's build), then the download.
 hooks:
   user_defines:
     gleon:
-      release_url: https://mirror.example/gleon/v0.6.1/
+      release_url: https://mirror.example/gleon/v0.6.2/
 ```
 
 ## Benchmarks
@@ -201,12 +204,12 @@ upload. pub.dev never takes a version twice: a failed job may be rerun, a publis
 final. The quality job of every pull request runs the same offline packing on the working tree.
 
 `bin/prepare_publish.dart` verifies each library against the release's `SHA256SUMS.txt` and its
-`gleon_ref.txt` against `native/gleon_ref`, and fails when the archive lacks a library or holds
-`bin/`, `test/` or a pin. To check an archive locally, or to publish by hand when the workflow
-cannot:
+`gleon_ref.txt` against `native/gleon_ref`, runs `flutter pub publish --dry-run` (no warning
+allowed), and fails when the archive pub packs lacks a library or holds `bin/`, `test/` or a pin.
+To check an archive locally, or to publish by hand when the workflow cannot:
 
 ```sh
-fvm dart bin/prepare_publish.dart          # clones the tag, adds the 4 libraries, runs --dry-run
+fvm dart bin/prepare_publish.dart          # clones the tag, adds the 4 libraries, checks the archive
 cd <the directory it prints> && fvm dart pub publish
 ```
 

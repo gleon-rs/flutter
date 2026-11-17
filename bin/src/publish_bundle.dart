@@ -1,22 +1,17 @@
 /// The pub.dev archive of this package: the libraries of a release put into
 /// `native/<target>/` of a copy of its tag (`.pubignore` keeps them in the
-/// archive), and the check of what `pub publish --dry-run` lists.
+/// archive), and the check of the files of the archive pub packs.
 ///
 /// Only `dart:*`, `crypto` and this package may be imported here (see
 /// `build_native.dart`).
-
-// The tree of `pub publish --dry-run` is drawn with box characters.
-// ignore_for_file: avoid-non-ascii-symbols
 library;
 
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:gleon/src/core/hook/native_target.dart';
 import 'package:gleon/src/core/hook/release_download.dart';
 
 import 'check_failure.dart';
-import 'consumer_app.dart';
 
 /// Puts the library of every target of the release at [releaseUrl] (of
 /// package [version]) into `native/<target>/` of [package]: each file of the
@@ -81,7 +76,6 @@ final class PublishBundle {
         target: target,
         cacheDir: cacheDir,
         pin: pin,
-        isPinRequired: true,
       );
       // ignore: avoid_catching_errors, the hook's download and verification failures are StateErrors with an actionable message.
     } on StateError catch (error, stackTrace) {
@@ -93,41 +87,8 @@ final class PublishBundle {
   }
 }
 
-/// The files `pub publish --dry-run` lists in its [output], relative to the
-/// package root and `/`-separated.
-///
-/// Its tree draws each entry after `├── ` or `└── `, four characters deeper
-/// per level. pub lists files only, so an entry followed by deeper ones is a
-/// directory and every other one a file, whatever pub prints after a name (a
-/// size in parentheses, stripped when it looks like one).
-List<String> archiveFiles(String output) {
-  final entries = [
-    for (final line in const LineSplitter().convert(output))
-      if (_entry.firstMatch(line.trimRight()) case final match?)
-        (
-          depth: (match.group(1) ?? _none).length ~/ _indent,
-          name: match.group(2) ?? _none,
-        ),
-  ];
-  final dirs = <String>[];
-  final files = <String>[];
-  for (final (index, (:depth, :name)) in entries.indexed) {
-    while (dirs.length > depth) {
-      dirs.removeLast();
-    }
-    final next = entries.elementAtOrNull(index + 1);
-    if (next != null && next.depth > depth) {
-      dirs.add(name);
-    } else {
-      files.add([...dirs, name].join('/'));
-    }
-  }
-
-  return files;
-}
-
-/// What is wrong with an archive of [files] (see [archiveFiles]): a file every
-/// archive has missing (so the list was not read right), the library of a
+/// What is wrong with an archive of [files] (`PubArchive.files`): a file every
+/// archive has missing, the library of a
 /// target missing, anything else in `native/` (a pin, a build stamp), or
 /// anything only maintainers need ([maintainerOnly]). Empty when the archive
 /// is right.
@@ -138,8 +99,7 @@ List<String> archiveProblems(List<String> files) {
 
   return [
     for (final file in alwaysShipped)
-      if (!files.contains(file))
-        'the archive lacks $file (or the file list of pub was not read right)',
+      if (!files.contains(file)) 'the archive lacks $file',
     for (final library in libraries)
       if (!files.contains(library)) 'the archive lacks $library',
     for (final file in files)
@@ -151,8 +111,7 @@ List<String> archiveProblems(List<String> files) {
   ];
 }
 
-/// Files the archive always holds: without them in the list of pub, the list
-/// was not read right ([archiveFiles]), or the archive lacks a notice it must
+/// Files the archive always holds: the package itself, and the notice it must
 /// carry (`NATIVE_LICENSES.md`: the licenses of the crates in the libraries).
 const alwaysShipped = [
   'CHANGELOG.md',
@@ -168,30 +127,25 @@ const alwaysShipped = [
 String _bundled(NativeTarget target) =>
     'native/${target.key}/${target.libFileName}';
 
-/// The paths (relative to the package root) only maintainers need: the top
-/// level a consumer never gets ([notShipped], which a test keeps in sync with
-/// `.pubignore`) but `example/` and `native/`, which ship, the hidden
-/// `.github/` and `.antigravity/`, and what builds, tests and runs leave in
-/// the package and its example (`.pubignore` and the example's
+/// The paths (relative to the package root) only maintainers need: what
+/// `.pubignore` leaves out at the top level (but `native/gleon_ref`), the
+/// hidden `.github/` and `.antigravity/`, and what builds, tests and runs leave
+/// in the package and its example (`.pubignore` and the example's
 /// `.gleon/.gitignore` leave them out; this checks it).
-final maintainerOnly = <String>{
-  ...notShipped.difference(const {'example', 'native'}),
+const maintainerOnly = {
   '.antigravity',
   '.github',
+  'CLAUDE.local.md',
+  'benchmark',
+  'bin',
+  'build',
+  'coverage',
+  'dist',
   'doc/api',
   'example/.gleon/runs',
   'example/benchmark',
   'example/build',
   'example/test/failures',
+  'pubspec.lock',
+  'test',
 };
-
-/// An entry of the tree of `pub publish --dry-run`: its indentation (group
-/// 1) and its name (group 2), without the size of a file.
-final _entry = RegExp(
-  r'^((?:│   |    )*)[├└]── (.+?)(?: \(<?[\d.]+ [KMGT]?B\))?$',
-);
-
-/// The characters of one level of the tree.
-const _indent = 4;
-
-const _none = '';

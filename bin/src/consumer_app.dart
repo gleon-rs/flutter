@@ -13,23 +13,6 @@ const consumerGolden = 'goldens/number.png';
 /// A proxy nothing listens on: every download fails at once.
 const deadProxy = 'http://127.0.0.1:9';
 
-/// The entries of the package root a consumer never gets (top level only:
-/// `lib/src/core/native/` is code), besides hidden ones ([isHidden]):
-/// everything else `.pubignore` leaves out there (a test keeps them in sync),
-/// and what the hook needs not (`example/`, `test/`, `native/` but its pin).
-const notShipped = {
-  'CLAUDE.local.md',
-  'benchmark',
-  'bin',
-  'build',
-  'coverage',
-  'dist',
-  'example',
-  'native',
-  'pubspec.lock',
-  'test',
-};
-
 /// [path] (a `PATH` of [separator]-separated directories) without the
 /// directories that hold a Rust toolchain (`cargo`, `rustc`, `rustup`, as
 /// [holds] tells): the hook must never need one. By what a directory holds,
@@ -62,49 +45,17 @@ String _resolvedPath(Directory dir) {
   return Platform.isWindows ? path.toLowerCase() : path;
 }
 
-/// Whether [name] is hidden: pub leaves such entries out of the archive at
-/// every level (`.dart_tool`, `.git`, `.fvm`, `.DS_Store`).
-bool isHidden(String name) => name.startsWith('.');
-
-/// Whether [copyPackage] copies the entry [name] ([isRoot]: of the package
-/// root, where [notShipped] applies).
-bool _isShipped(String name, {required bool isRoot}) =>
-    !isHidden(name) && (!isRoot || !notShipped.contains(name));
-
-/// Copies this package [from] its root into [into] without the directories a
-/// consumer never gets: of `native/` only the pin, as in a git checkout of
-/// the package (no library, so the hook has to download it). Hidden entries
-/// and symbolic links are left out at every level: a link may lead anywhere
-/// (FVM's `.fvm/flutter_sdk` is a whole Flutter SDK).
-void copyPackage(Directory from, Directory into) {
-  final pin = File.fromUri(NativeTarget.pinFile(from.uri));
+/// [package], extracted from the archive of the checkout at [packageRoot],
+/// as a git dependency gets it: no library under `native/` (the hook has to
+/// download it), and the pin of the checkout (`native/gleon_ref`).
+void asGitDependency(Directory package, Uri packageRoot) {
+  final native = Directory('${package.path}/native');
+  if (native.existsSync()) native.deleteSync(recursive: true);
+  final pin = File.fromUri(NativeTarget.pinFile(packageRoot));
   if (pin.existsSync()) {
-    File.fromUri(NativeTarget.pinFile(into.uri))
+    File.fromUri(NativeTarget.pinFile(package.uri))
       ..parent.createSync(recursive: true)
       ..writeAsBytesSync(pin.readAsBytesSync());
-  }
-  final pending = [(from, into)];
-  while (pending.isNotEmpty) {
-    final (source, destination) = pending.removeLast();
-    destination.createSync(recursive: true);
-    final isRoot = source.path == from.path;
-    // Not following links: a link is listed as a Link, and skipped below.
-    final shipped = source
-        .listSync(followLinks: false)
-        .where((entry) => _isShipped(nameOf(entry), isRoot: isRoot));
-    for (final entry in shipped) {
-      final target = '${destination.path}/${nameOf(entry)}';
-      switch (entry) {
-        case final Directory dir:
-          pending.add((dir, Directory(target)));
-
-        case final File file:
-          file.copySync(target);
-
-        case _:
-          break;
-      }
-    }
   }
 }
 

@@ -25,6 +25,7 @@ import 'package:gleon/src/core/hook/release_download.dart';
 
 import 'src/check_failure.dart';
 import 'src/cli.dart';
+import 'src/pub_archive.dart';
 import 'src/publish_bundle.dart';
 
 const _cli = Cli('prepare_publish', '''
@@ -115,7 +116,7 @@ Future<void> _prepare(
     version: version,
     cacheDir: cache,
   );
-  await _checkArchive(copy);
+  await _checkArchive(copy, cache);
 }
 
 /// A URL without its user and password ([Uri.replace]).
@@ -183,11 +184,13 @@ Future<void> _clone(
   }
 }
 
-/// Runs `flutter pub publish --dry-run` in [copy].
+/// Runs `flutter pub publish --dry-run` in [copy], then lists the files of
+/// the archive pub packs of it ([PubArchive]) into [cache], which this run
+/// removes in every case, also after Ctrl+C.
 ///
 /// Throws a [CheckFailure] unless pub accepts the archive without a warning
 /// and [archiveProblems] finds none.
-Future<void> _checkArchive(Directory copy) async {
+Future<void> _checkArchive(Directory copy, Directory cache) async {
   stdout.writeln('Checking the archive with flutter pub publish --dry-run ...');
   final dryRun = await Process.run(
     'flutter',
@@ -195,14 +198,14 @@ Future<void> _checkArchive(Directory copy) async {
     workingDirectory: copy.path,
     runInShell: Platform.isWindows,
   );
-  final output = '${dryRun.stdout}\n${dryRun.stderr}';
   if (dryRun.exitCode != 0) {
     throw CheckFailure(
       'flutter pub publish --dry-run failed with exit code '
-      '${dryRun.exitCode}:\n$output',
+      '${dryRun.exitCode}:\n${dryRun.stdout}\n${dryRun.stderr}',
     );
   }
-  final problems = archiveProblems(archiveFiles(output));
+  final archive = await PubArchive.pack(copy, cache);
+  final problems = archiveProblems(await archive.files());
   if (problems.isNotEmpty) throw CheckFailure(problems.join('\n'));
 }
 

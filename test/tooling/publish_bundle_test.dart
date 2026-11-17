@@ -1,6 +1,3 @@
-// The tree of `pub publish --dry-run` is drawn with box characters.
-// ignore_for_file: avoid-non-ascii-symbols
-
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -138,84 +135,6 @@ void main() {
     });
   });
 
-  group('archiveFiles', () {
-    test('reads the paths of the files of the tree', () {
-      const output = '''
-Resolving dependencies...
-Publishing gleon 1.0.0 to https://pub.dev:
-├── CHANGELOG.md (18 KB)
-├── example
-│   ├── .gleon
-│   │   └── gleon.yaml (<1 KB)
-│   └── README.md (<1 KB)
-├── lib
-│   └── gleon.dart (1 KB)
-├── native
-│   ├── linux-arm64
-│   │   └── libgleon_ffi.so (1 MB)
-│   └── macos-arm64
-│       └── libgleon_ffi.dylib (1007 KB)
-└── pubspec.yaml (1 KB)
-
-Total compressed archive size: 881 KB.
-''';
-
-      expect(archiveFiles(output), [
-        'CHANGELOG.md',
-        'example/.gleon/gleon.yaml',
-        'example/README.md',
-        'lib/gleon.dart',
-        'native/linux-arm64/libgleon_ffi.so',
-        'native/macos-arm64/libgleon_ffi.dylib',
-        'pubspec.yaml',
-      ]);
-    });
-
-    // A file is told from a directory by what follows it, not by its size: a
-    // size pub prints in another way stays part of the name (and then fails
-    // the check of the archive) instead of hiding the file.
-    test('reads a file without a size as a file', () {
-      const output = '''
-├── lib
-│   └── gleon.dart
-├── NOTICE (12 bytes)
-└── pubspec.yaml (1 KB)
-''';
-
-      expect(archiveFiles(output), [
-        'lib/gleon.dart',
-        'NOTICE (12 bytes)',
-        'pubspec.yaml',
-      ]);
-    });
-
-    // The tree of a real `flutter pub publish --dry-run` of this package
-    // (Flutter 3.50, with a local build of one library).
-    test('reads the tree of a real dry run', () {
-      final files = archiveFiles(
-        File('test/tooling/fixtures/pub_publish_dry_run.txt')
-            .readAsStringSync(),
-      );
-
-      expect(files, containsAll(alwaysShipped));
-      expect(
-        files,
-        containsAll([
-          'example/.gleon/gleon.yaml',
-          'example/linux/runner/main.cc',
-          'lib/src/flutter/text_regions.dart',
-          'native/macos-arm64/libgleon_ffi.dylib',
-        ]),
-      );
-      expect(files.where((file) => file.contains(' (')), isEmpty);
-      expect(archiveProblems(files), [
-        for (final target in NativeTarget.values)
-          if (target != .macosArm64)
-            'the archive lacks native/${target.key}/${target.libFileName}',
-      ]);
-    });
-  });
-
   group('archiveProblems', () {
     final libraries = [
       for (final target in NativeTarget.values)
@@ -293,5 +212,4 @@ Total compressed archive size: 881 KB.
 }
 
 /// The problem of an archive without [file], a file every archive holds.
-String _lacks(String file) =>
-    'the archive lacks $file (or the file list of pub was not read right)';
+String _lacks(String file) => 'the archive lacks $file';

@@ -416,18 +416,15 @@ void main() {
           final windowsHint = contains(SourceBuild.windowsRustflagsHint);
           await expectLater(
             build(FakeCargo(exitCode: 101), target: target),
-            throwsA(
-              isA<ProcessException>()
-                  .having((error) => error.errorCode, 'exit code', 101)
-                  .having(
-                    (error) => error.message,
-                    'message',
-                    allOf(
-                      contains('out\nerr'),
-                      contains(SourceBuild.hookEnvironmentHint),
-                      hasWindowsHint ? windowsHint : isNot(windowsHint),
-                    ),
-                  ),
+            throwsState(
+              allOf(
+                startsWith(
+                  'gleon: failed to build the native library (exit 101)',
+                ),
+                contains('out\nerr'),
+                contains(SourceBuild.hookEnvironmentHint),
+                hasWindowsHint ? windowsHint : isNot(windowsHint),
+              ),
             ),
           );
         },

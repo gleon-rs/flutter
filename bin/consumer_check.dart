@@ -28,6 +28,7 @@ import 'src/check_failure.dart';
 import 'src/cli.dart';
 import 'src/consumer_app.dart';
 import 'src/consumer_check.dart';
+import 'src/pub_archive.dart';
 import 'src/release_server.dart';
 import 'src/run_resources.dart';
 import 'src/stray_home_config.dart';
@@ -68,8 +69,9 @@ Future<void> main(List<String> args) async {
     if (!Platform.isWindows) ProcessSignal.sigterm,
   ].map((signal) => signal.watch().listen(resources.interrupt)).toList();
   try {
-    final package = Directory('${work.path}/package');
-    copyPackage(Directory.fromUri(packageRoot), package);
+    final archive = await PubArchive.pack(Directory.fromUri(packageRoot), work);
+    final package = await archive.extractInto('package');
+    asGitDependency(package, packageRoot);
     final server = await _release(packageRoot, target, library);
     resources
       ..server = server

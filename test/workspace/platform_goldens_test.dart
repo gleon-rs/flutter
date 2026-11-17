@@ -75,7 +75,7 @@ void main() {
     final digit = await _compare(sandbox);
 
     expect(digit, contains('text ≤ 5.00% per tile).'), reason: 'recorded here');
-    expect(digit, contains('Tip: tolerances per golden'));
+    expect(digit, contains('Tip: a tolerance for this golden'));
 
     _restamp(sandbox, foreignPlatform);
     final elsewhere = await _compare(sandbox);
