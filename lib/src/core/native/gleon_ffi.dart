@@ -28,8 +28,8 @@ library;
 
 import 'dart:ffi';
 
-/// `gleon-ffi` C ABI (safer-ffi). The strings of a call are packed into one
-/// UTF-8 buffer plus a `Uint32List` of their byte lengths (see
+/// `gleon-ffi` C ABI (plain `extern "C"`). The strings of a call are packed
+/// into one UTF-8 buffer plus a `Uint32List` of their byte lengths (see
 /// `NativeEngine`); an empty string stands for an absent optional one.
 abstract final class GleonFfi {
   /// `gleon_ffi_abi_version`: the C contract version of the library.
@@ -119,9 +119,9 @@ final class GleonTexts extends Opaque;
 /// `gleon_session_new`, released only by `gleon_session_free`.
 final class GleonSessionHandle extends Opaque;
 
-/// The safer-ffi `c_slice::Ref<u8>` fields of a `GleonSummary`: a borrowed
-/// view into its texts, valid until they are freed (empty for "none").
-final class NativeSlice extends Struct {
+/// A UTF-8 text of a `GleonSummary`, borrowed from its `texts`: valid until
+/// they are freed (empty for "none").
+final class GleonSlice extends Struct {
   /// First byte (dangling when [len] is 0).
   external Pointer<Uint8> ptr;
 
@@ -196,13 +196,13 @@ final class GleonSummary extends Struct {
   external int errorKind;
 
   /// The test failure message; empty for a pass.
-  external NativeSlice message;
+  external GleonSlice message;
 
   /// The console line to print; usually empty.
-  external NativeSlice console;
+  external GleonSlice console;
 
   /// Warnings to print, one per line; usually empty.
-  external NativeSlice warning;
+  external GleonSlice warning;
 
   /// Owns the texts until `gleon_texts_free`; null when all are empty.
   external Pointer<GleonTexts> texts;
