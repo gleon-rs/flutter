@@ -1,6 +1,6 @@
 name: gleon
 description: Drop-in matchesGoldenFile for Flutter golden tests, 5-20x faster, with pixel and SSIM tolerance, ignore regions and real fonts, powered by a Rust engine.
-version: 0.6.1
+version: 0.6.2
 homepage: https://gleon.rs
 repository: https://github.com/gleon-rs/flutter
 issue_tracker: https://github.com/gleon-rs/flutter/issues
@@ -45,5 +45,5 @@ dev_dependencies:
 
 # Source: og/pub-dev.html of the site repository (gleon-rs.github.io).
 screenshots:
-  - description: Time per golden, flutter_test and gleon, and the line coverage of the package.
+  - description: "Golden tests 13x faster: a passing 390x844 golden takes 15.5 ms with the Flutter SDK and 1.19 ms with gleon."
     path: doc/screenshot.webp

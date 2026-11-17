@@ -438,7 +438,7 @@ void main() {
       final lines = await run(session);
 
       expect(lines, hasLength(1));
-      expect(lines.singleOrNull, contains('gleon init'));
+      expect(lines.singleOrNull, contains('.gleon/gleon.yaml: create it'));
       expect(await run(session), isEmpty, reason: 'once per session');
       for (final value in ['0', 'false', ' ', _unset]) {
         expect(

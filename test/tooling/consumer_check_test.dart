@@ -1,10 +1,12 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gleon/src/core/hook/native_target.dart';
 
 import '../../bin/src/check_failure.dart';
 import '../../bin/src/consumer_app.dart';
 import '../../bin/src/consumer_check.dart';
+import '../../bin/src/pub_archive.dart';
 import '../../bin/src/release_server.dart';
 import '../../bin/src/run_resources.dart';
 import '../../bin/src/stray_home_config.dart';
@@ -17,23 +19,6 @@ void main() {
     return dir;
   }
 
-  // The copy is what a consumer gets: whatever `.pubignore` leaves out at the
-  // top level of the archive is not copied either (a file the package needs
-  // but pub drops would pass here and fail on pub.dev otherwise).
-  test('copies nothing the archive leaves out', () {
-    final topLevel = RegExp(r'^/?([^/*!#\s][^/*\s]*)/?$');
-    final ignored = [
-      for (final line in File('.pubignore').readAsLinesSync())
-        ?topLevel.firstMatch(line.trim())?.group(1),
-    ];
-
-    expect(ignored, containsAll(['bin', 'benchmark', '.dart_tool']));
-    // Hidden entries are never copied (pub drops them too).
-    expect(notShipped, containsAll(ignored.where((name) => !isHidden(name))));
-  });
-
-  // `.pubignore` replaces `.gitignore` for pub: what git ignores, pub ignores
-  // too, but the native libraries (they ship in the archive).
   test('.pubignore ignores whatever .gitignore does', () {
     List<String> patterns(String file) => [
       for (final line in File(file).readAsLinesSync())
@@ -130,62 +115,82 @@ void main() {
     await first;
   });
 
-  test('copies the package without what consumers never get', () {
-    final from = temp('gleon_consumer_from_');
-    for (final file in [
-      'pubspec.yaml',
-      'lib/gleon.dart',
-      'lib/src/core/native/gleon_ffi.dart',
-      'hook/build.dart',
-      'native/macos-arm64/libgleon_ffi.dylib',
-      'native/gleon_ref',
-      'test/a_test.dart',
-      'example/pubspec.yaml',
-      '.git/HEAD',
-      '.dart_tool/package_config.json',
-      '.fvmrc',
-      'lib/.DS_Store',
-    ]) {
-      File('${from.path}/$file')
-        ..parent.createSync(recursive: true)
-        ..writeAsStringSync(file);
-    }
-    // FVM links its SDK into the package: a link is never followed.
-    final sdk = temp('gleon_consumer_sdk_');
-    File('${sdk.path}/bin/flutter').createSync(recursive: true);
-    // Creating symbolic links needs a privilege on Windows.
-    if (!Platform.isWindows) {
-      Link('${from.path}/lib/flutter_sdk').createSync(sdk.path);
-    }
-    final into = temp('gleon_consumer_into_');
+  // The package as consumers get it comes from pub (`--to-archive`), the
+  // archive the release workflow publishes: nothing here mirrors `.pubignore`.
+  test('packs the package as pub does and extracts it', () async {
+    final dir = temp('gleon_consumer_archive_');
 
-    copyPackage(from, into);
+    final archive = await PubArchive.pack(.current, dir);
+    final files = await archive.files();
 
-    final copied =
-        into
-            .listSync(recursive: true)
-            .whereType<File>()
-            // Relative by URI segments: Windows lists paths with `\`.
-            .map(
-              (file) => file.uri.pathSegments
-                  .skip(into.uri.pathSegments.length - 1)
-                  .join('/'),
-            )
-            .toList()
-          ..sort();
-    expect(copied, [
-      'hook/build.dart',
-      'lib/gleon.dart',
-      'lib/src/core/native/gleon_ffi.dart',
-      'native/gleon_ref',
-      'pubspec.yaml',
-    ]);
     expect(
-      File('${into.path}/pubspec.yaml').readAsStringSync(),
-      'pubspec.yaml',
+      files,
+      containsAll(['pubspec.yaml', 'lib/gleon.dart', 'hook/build.dart']),
     );
-    expect(nameOf(File('${from.path}/lib/gleon.dart')), 'gleon.dart');
-    expect(nameOf(Directory('${from.path}/lib')), 'lib');
+    expect(files, isNot(contains('lib')), reason: 'no directory entries');
+    for (final file in files) {
+      expect(file, isNot(startsWith('test/')));
+      expect(file, isNot(startsWith('bin/')));
+      expect(file, isNot(startsWith('.')));
+      expect(file, isNot('native/gleon_ref'));
+    }
+
+    final package = await archive.extractInto('package');
+    File('${package.path}/native/macos-arm64/libgleon_ffi.dylib')
+      ..parent.createSync(recursive: true)
+      ..writeAsStringSync('a local build');
+    asGitDependency(package, Directory.current.uri);
+    expect(File('${package.path}/pubspec.yaml').existsSync(), isTrue);
+    expect(
+      File.fromUri(NativeTarget.pinFile(package.uri)).readAsStringSync(),
+      File.fromUri(NativeTarget.pinFile(Directory.current.uri))
+          .readAsStringSync(),
+    );
+    expect(
+      Directory('${package.path}/native/macos-arm64').existsSync(),
+      isFalse,
+      reason: 'the hook has to download the library',
+    );
+  });
+
+  // A `tar` other than that of the system may list `./` and a trailing `/`.
+  test('reads the files of a listing of any tar', () {
+    expect(
+      PubArchive.filesOf(
+        './lib/\n./lib/gleon.dart\nnative\nnative/macos-arm64/\n'
+        'native/macos-arm64/libgleon_ffi.dylib\n\npubspec.yaml\n',
+      ),
+      [
+        'lib/gleon.dart',
+        'native/macos-arm64/libgleon_ffi.dylib',
+        'pubspec.yaml',
+      ],
+    );
+  });
+
+  test('a failed pack names the command and its output', () async {
+    final dir = temp('gleon_consumer_archive_');
+
+    await expectLater(
+      PubArchive.pack(temp('gleon_consumer_empty_'), dir),
+      throwsA(
+        isA<CheckFailure>().having(
+          (failure) => failure.message,
+          'message',
+          allOf(
+            startsWith('dart pub publish'),
+            contains('--to-archive='),
+            contains('failed with exit code'),
+          ),
+        ),
+      ),
+    );
+  });
+
+  test('names an entry by its last segment on every OS', () {
+    final dir = temp('gleon_consumer_names_');
+    expect(nameOf(File('${dir.path}/lib/gleon.dart')), 'gleon.dart');
+    expect(nameOf(Directory('${dir.path}/lib')), 'lib');
   });
 
   test('writes a consumer app of the package without any gleon config', () {

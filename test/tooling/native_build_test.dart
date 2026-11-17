@@ -7,6 +7,7 @@ import 'package:gleon/src/core/hook/native_target.dart';
 import 'package:gleon/src/core/hook/source_build.dart';
 
 import '../../bin/src/native_build.dart';
+import '../../bin/src/native_target_builds.dart';
 
 void main() {
   const target = NativeTarget.linuxX64;
@@ -119,6 +120,99 @@ void main() {
           runProcess: _Git(isInstalled: false).run,
         ),
         isNull,
+      );
+    });
+  });
+
+  group('build_native targets', () {
+    List<String> keys(
+      List<String> requested, {
+      required String hostOs,
+      required NativeTarget? host,
+    }) => [
+      for (final resolved in NativeTargetBuilds.resolveKeys(
+        requested,
+        hostOs: hostOs,
+        host: host,
+      ))
+        resolved.key,
+    ];
+
+    Map<String, List<String>?> subcommands(String hostOs, NativeTarget host) =>
+        {
+          for (final each in NativeTarget.values)
+            each.key: each.cargoSubcommand(hostOs: hostOs, host: host),
+        };
+
+    test('macOS builds everything, Linux and Windows through wrappers', () {
+      expect(subcommands('macos', .macosArm64), {
+        'linux-arm64': ['zigbuild'],
+        'linux-x64': ['zigbuild'],
+        'macos-arm64': ['build'],
+        'windows-x64': ['xwin', 'build'],
+      });
+      expect(keys(['all'], hostOs: 'macos', host: .macosArm64), [
+        'linux-arm64',
+        'linux-x64',
+        'macos-arm64',
+        'windows-x64',
+      ]);
+    });
+
+    test('Linux builds the other architecture with zigbuild', () {
+      expect(subcommands('linux', .linuxX64), {
+        'linux-arm64': ['zigbuild'],
+        'linux-x64': ['build'],
+        'macos-arm64': null,
+        'windows-x64': ['xwin', 'build'],
+      });
+      expect(subcommands('linux', .linuxArm64)['linux-arm64'], ['build']);
+      expect(keys(['all'], hostOs: 'linux', host: .linuxArm64), [
+        'linux-arm64',
+        'linux-x64',
+        'windows-x64',
+      ]);
+    });
+
+    test('Windows builds itself with cargo and Linux with zigbuild', () {
+      expect(subcommands('windows', .windowsX64), {
+        'linux-arm64': ['zigbuild'],
+        'linux-x64': ['zigbuild'],
+        'macos-arm64': null,
+        'windows-x64': ['build'],
+      });
+    });
+
+    test('keys keep their order once each', () {
+      expect(
+        keys(['host', 'linux-arm64', 'all'], hostOs: 'linux', host: .linuxX64),
+        ['linux-x64', 'linux-arm64', 'windows-x64'],
+      );
+    });
+
+    test('every target is checked before anything is built', () {
+      Matcher throwsFormat(String message) => throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          contains(message),
+        ),
+      );
+      expect(
+        () => keys(
+          ['linux-x64', 'macos-arm64'],
+          hostOs: 'linux',
+          host: .linuxX64,
+        ),
+        throwsFormat('macos-arm64 can only be built on macos'),
+      );
+      expect(
+        () => keys(['host'], hostOs: 'macos', host: null),
+        throwsFormat('this host is not a supported target'),
+      );
+      expect(
+        () => keys(['macos-x64'], hostOs: 'macos', host: .macosArm64),
+        throwsFormat('unknown target macos-x64'),
       );
     });
   });

@@ -26,7 +26,7 @@ abstract final class ReleaseDownload {
 
   /// Name of the file of a release that names the gleon commit its libraries
   /// were built from (`native/gleon_ref` of its tag), listed in its
-  /// [checksumsFileName]; releases before 0.5.0 have none.
+  /// [checksumsFileName].
   static const pinFileName = 'gleon_ref.txt';
 
   /// Where the release assets of package [version] live.
@@ -75,10 +75,8 @@ abstract final class ReleaseDownload {
   /// (an entry missing, or a library with another hash) is reloaded once.
   ///
   /// A checkout of the package (a git dependency) passes its [pin]
-  /// (`native/gleon_ref`): a release whose libraries were built from another
-  /// commit fails, since its engine is not the one the checkout expects. A
-  /// release that names no commit (before 0.5.0) is accepted unless
-  /// [isPinRequired] (publishing its libraries needs to know their engine).
+  /// (`native/gleon_ref`): a release that names another commit, or none,
+  /// fails, since its engine is not the one the checkout expects.
   ///
   /// [redirectTimeout] bounds reading the body of a redirect response,
   /// [bodyTimeout] a pause in a downloaded file (a slow but steady download
@@ -89,7 +87,6 @@ abstract final class ReleaseDownload {
     required NativeTarget target,
     required Directory cacheDir,
     String? pin,
-    bool isPinRequired = false,
     Duration redirectTimeout = const Duration(seconds: 30),
     Duration bodyTimeout = const Duration(minutes: 1),
     int maxBytes = 64 << 20,
@@ -111,11 +108,7 @@ abstract final class ReleaseDownload {
       maxBytes: maxBytes,
     );
     try {
-      return await fetch.library(
-        target,
-        pin: pin,
-        isPinRequired: isPinRequired,
-      );
+      return await fetch.library(target, pin: pin);
     } finally {
       fetch.close();
     }
@@ -194,33 +187,19 @@ final class _Release {
   void close() => _client.close(force: true);
 
   /// The verified library of [target]; the release must have been built
-  /// from [pin] when one is given and the release names its own (or
-  /// [isPinRequired]).
-  Future<File> library(
-    NativeTarget target, {
-    String? pin,
-    bool isPinRequired = false,
-  }) async {
-    final (:file, :checksums) = await _library(target);
-    if (pin != null) {
-      await _checkPin(pin, checksums, isPinRequired: isPinRequired);
-    }
+  /// from [pin] when one is given.
+  Future<File> library(NativeTarget target, {String? pin}) async {
+    final (:file, :checksums) = await _library(target, hasPin: pin != null);
+    if (pin != null) await _checkPin(pin, checksums);
 
     return file;
   }
 
-  /// Fails unless the release names [pin], or names none and the pin is not
-  /// [isPinRequired]: its libraries were built from another gleon commit
-  /// than the checkout's.
-  Future<void> _checkPin(
-    String pin,
-    _Checksums checksums, {
-    required bool isPinRequired,
-  }) async {
+  /// Fails unless the release names [pin]: its libraries were built from
+  /// another gleon commit than the checkout's, or it does not say which.
+  Future<void> _checkPin(String pin, _Checksums checksums) async {
     final expected = checksums.hashes[ReleaseDownload.pinFileName];
     if (expected == null) {
-      if (!isPinRequired) return;
-
       throw failure(
         'the release v$packageVersion at $url names no gleon commit (no '
         '${ReleaseDownload.pinFileName} in its '
@@ -259,12 +238,18 @@ final class _Release {
   }
 
   /// The verified library of [target] and the checksum list that verified
-  /// it.
+  /// it. A cached list without the entry of [target], or without the pin file
+  /// when [hasPin], is reloaded once, before the library is verified.
   Future<({_Checksums checksums, File file})> _library(
-    NativeTarget target,
-  ) async {
+    NativeTarget target, {
+    required bool hasPin,
+  }) async {
     _Checksums checksums = await _checksums();
-    if (checksums.hashes[target.assetName] == null && checksums.isCached) {
+    final isEntryMissing = [
+      target.assetName,
+      if (hasPin) ReleaseDownload.pinFileName,
+    ].any((name) => checksums.hashes[name] == null);
+    if (isEntryMissing && checksums.isCached) {
       // A cached list can only be stale for a mirror.
       checksums = await _checksums(isRefresh: true);
     }

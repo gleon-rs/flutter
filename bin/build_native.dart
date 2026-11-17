@@ -34,6 +34,7 @@ import 'package:gleon/src/core/hook/source_build.dart';
 
 import 'src/cli.dart';
 import 'src/native_build.dart';
+import 'src/native_target_builds.dart';
 
 typedef _Options = ({
   String? dist,
@@ -62,7 +63,7 @@ Future<void> main(List<String> args) async {
   final hostOs = Platform.operatingSystem;
   final List<NativeTarget> targets;
   try {
-    targets = NativeTarget.resolveKeys(
+    targets = NativeTargetBuilds.resolveKeys(
       options.keys,
       hostOs: hostOs,
       host: host,

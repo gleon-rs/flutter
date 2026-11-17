@@ -303,12 +303,18 @@ void main() {
 
   group('the release download', () {
     final library = List<int>.generate(512, (i) => i % 7);
-    final sums = '${sha256.convert(library)}  $assetName\n'.codeUnits;
+    // The release names the commit of its libraries, the pin of the package.
+    final pinned = '$pin\n'.codeUnits;
+    final sums =
+        '${sha256.convert(library)}  $assetName\n'
+                '${sha256.convert(pinned)}  ${ReleaseDownload.pinFileName}\n'
+            .codeUnits;
 
     Future<ReleaseServer> mirror() async {
       final server = await ReleaseServer.start({
         ReleaseDownload.checksumsFileName: sums,
         assetName: library,
+        ReleaseDownload.pinFileName: pinned,
       });
       addTearDown(server.close);
 
